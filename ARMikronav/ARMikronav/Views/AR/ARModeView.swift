@@ -158,6 +158,22 @@ struct ARModeView: View {
             VStack(spacing: 10) {
                 poiFilterRow
 
+                // Automatische Neuberechnung, wenn der User der Route nicht
+                // folgt – dezenter Hinweis, dass sich die AR-Route anpasst.
+                if viewModel.isRerouting {
+                    HStack(spacing: 8) {
+                        ProgressView()
+                            .tint(.white)
+                        Text("Route wird angepasst…")
+                            .font(.footnote.weight(.medium))
+                            .foregroundStyle(.white)
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+                    .background(.ultraThinMaterial, in: Capsule())
+                    .transition(.opacity)
+                }
+
                 // Fallback-Banner nur ohne Mitteilungs-Berechtigung; sonst
                 // kommt die Warnung als System-Mitteilung (UserNotifications).
                 if notificationStore.settings.warningsEnabled,
@@ -187,6 +203,7 @@ struct ARModeView: View {
         .onAppear { locationService.startUpdatingHeading() }
         .animation(.spring(duration: 0.35), value: warningService.activeWarning?.barrier.id)
         .animation(.spring(duration: 0.35), value: viewModel.activeRoute?.id)
+        .animation(.easeInOut(duration: 0.25), value: viewModel.isRerouting)
         .onReceive(locationService.$currentLocation) { _ in
             evaluateProximity()
         }

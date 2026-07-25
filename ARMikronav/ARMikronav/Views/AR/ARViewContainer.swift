@@ -81,6 +81,17 @@ struct ARViewContainer: UIViewRepresentable {
         private var routeAnchor: AnchorEntity?
         private var renderedRouteID: UUID?
 
+        /// Geglätteter Yaw-Korrekturwinkel (signierte Grad) der AR-Welt gegen
+        /// echt-Nord und die daraus gebaute Drehung um +Y. Sie wird laufend an
+        /// den Kompassfehler herangeführt und auf Route UND POIs angewendet.
+        private var smoothedCorrectionDeg: Double?
+        private var correctionQuat = simd_quatf(angle: 0, axis: SIMD3<Float>(0, 1, 0))
+
+        /// Von ARKit gemessene Boden-Y (Weltrahmen), sobald eine horizontale
+        /// Ebene gefunden wurde – ersetzt die reine Höhenschätzung aus dem
+        /// Profil. `nil`, solange noch keine Ebene erkannt ist.
+        private var detectedGroundY: Float?
+
         init(projector: ARPOIProjector) {
             self.projector = projector
         }
@@ -100,12 +111,78 @@ struct ARViewContainer: UIViewRepresentable {
         }
 
         private func tick() {
+            updateHeadingCorrection()
+            updateGroundDetection()
             syncRouteEntities()
             projectPOIs()
         }
 
+        /// Vergleicht die AR-Blickrichtung der Kamera mit der echten
+        /// (magnetkompass-unabhängigen) Kamera-Blickrichtung aus der Gerätelage
+        /// und führt den Korrekturwinkel geglättet nach. Nur bei normalem
+        /// Tracking und vorliegender echt-Nord-Richtung – so bleibt die
+        /// Korrektur stabil (der Fehler der Sessionausrichtung ist konstant).
+        private func updateHeadingCorrection() {
+            guard let arView,
+                  let frame = arView.session.currentFrame,
+                  case .normal = frame.camera.trackingState,
+                  let trueBearing = LocationService.shared.lookDirection
+            else { return }
+
+            let forward = ARHeadingCorrection.cameraForward(from: frame.camera.transform)
+            guard let arYaw = ARHeadingCorrection.arYawDegrees(
+                forwardEast: forward.x,
+                forwardNorth: -forward.z
+            ) else { return }
+
+            let raw = ARHeadingCorrection.normalizedSignedDegrees(trueBearing - arYaw)
+            let smoothed = ARHeadingCorrection.smooth(
+                previous: smoothedCorrectionDeg,
+                new: raw,
+                factor: 0.1
+            )
+            smoothedCorrectionDeg = smoothed
+            correctionQuat = simd_quatf(
+                angle: Float(smoothed * .pi / 180),
+                axis: SIMD3<Float>(0, 1, 0)
+            )
+            // Bestehenden Routen-Anker sofort mitkorrigieren (er ist am
+            // Weltursprung verankert, die Drehung um +Y dreht ihn um denselben
+            // Punkt, um den die POIs projiziert werden).
+            routeAnchor?.orientation = correctionQuat
+        }
+
+        /// Sucht einmalig die reale Bodenhöhe per Raycast auf eine erkannte
+        /// horizontale Ebene. Gefunden → gemerkt und Route mit der echten
+        /// Bodenhöhe neu aufbauen (statt der Höhenschätzung aus dem Profil).
+        private func updateGroundDetection() {
+            guard detectedGroundY == nil,
+                  let arView,
+                  arView.bounds.width > 0, arView.bounds.height > 0
+            else { return }
+
+            let center = CGPoint(x: arView.bounds.midX, y: arView.bounds.midY)
+            guard let hit = arView.raycast(
+                from: center,
+                allowing: .estimatedPlane,
+                alignment: .horizontal
+            ).first else { return }
+
+            // Der Session-Ursprung (y = 0) liegt auf Gerätehöhe; ein plausibler
+            // Boden liegt 0,3–2,5 m darunter. Ausreisser (fälschlich erkannte
+            // Tisch-/Wandebene) verwerfen und später erneut versuchen.
+            let candidate = hit.worldTransform.columns.3.y
+            guard candidate < -0.3, candidate > -2.5 else { return }
+
+            detectedGroundY = candidate
+            // Route mit der gemessenen Bodenhöhe neu aufbauen.
+            renderedRouteID = nil
+        }
+
         /// Baut die Route-Entities neu auf, sobald sich die aktive Route
-        /// ändert (Start, Ziel-Wechsel oder Stop).
+        /// ändert (Start, Ziel-Wechsel oder Stop) oder die reale Bodenhöhe
+        /// erstmals bekannt ist. Der frische Anker übernimmt sofort die
+        /// aktuelle Kompasskorrektur.
         private func syncRouteEntities() {
             guard let arView, let origin else { return }
             guard route?.id != renderedRouteID else { return }
@@ -120,8 +197,10 @@ struct ARViewContainer: UIViewRepresentable {
             let anchor = ARRouteRenderer.makeRouteAnchor(
                 for: route,
                 origin: origin,
-                deviceHeight: deviceHeight
+                deviceHeight: deviceHeight,
+                groundHeight: detectedGroundY
             )
+            anchor.orientation = correctionQuat
             arView.scene.addAnchor(anchor)
             routeAnchor = anchor
         }
@@ -160,8 +239,12 @@ struct ARViewContainer: UIViewRepresentable {
                     relativeTo: origin,
                     height: 0
                 )
+                // Gleiche Kompasskorrektur wie für die Route: Die POIs sind am
+                // Weltursprung verankert, deshalb die Position um +Y drehen,
+                // bevor sie in den Bildschirmraum projiziert wird.
+                let corrected = correctionQuat.act(worldPosition)
                 // project() liefert nil für Punkte hinter der Kamera.
-                guard let screenPoint = arView.project(worldPosition) else { continue }
+                guard let screenPoint = arView.project(corrected) else { continue }
                 guard visibleBounds.contains(screenPoint) else { continue }
                 result.append(ProjectedPOI(poi: poi, point: screenPoint))
             }

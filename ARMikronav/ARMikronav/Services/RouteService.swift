@@ -66,6 +66,15 @@ struct RouteProgress: Equatable {
     var hasArrived: Bool { remainingDistanceM < 10 }
 }
 
+/// Fusspunkt des Standorts auf der Route: die Position auf der Polyline
+/// (violette Linie) plus der seitliche Abstand des Rohstandorts zu ihr.
+struct RouteSnap {
+    /// Auf die Route projizierter Punkt (auf der Linie).
+    let coordinate: CLLocationCoordinate2D
+    /// Seitlicher Abstand des Rohstandorts zur Route in Metern.
+    let offsetM: CLLocationDistance
+}
+
 /// Richtung des nächsten Manövers entlang der Route (aus der Polyline-
 /// Geometrie abgeleitet). Positiver Winkel = Linkskurve.
 enum ManeuverDirection: Equatable {
@@ -295,6 +304,82 @@ enum RouteService {
             remainingDistanceM: bestRemaining,
             remainingTimeS: remainingTime(for: bestRemaining, on: route)
         )
+    }
+
+    /// Projiziert den Standort auf das nächstgelegene Routensegment und gibt
+    /// den Fusspunkt (auf der violetten Linie) samt seitlichem Abstand zurück.
+    /// Damit lässt sich der Standortpunkt auf der Karte auf die Route
+    /// "einrasten", solange man nah genug an ihr ist – so springt er nicht mehr
+    /// neben der Linie herum (GPS-Rauschen und Mehrwegempfang in den engen,
+    /// hohen Altstadt-Gassen). Der Aufrufer entscheidet über `offsetM`, ob
+    /// eingerastet oder der Rohstandort gezeigt wird.
+    static func snappedLocation(on route: ActiveRoute, at location: CLLocation) -> RouteSnap {
+        let coords = route.coordinates
+        let origin = location.coordinate
+        guard coords.count >= 2 else {
+            return RouteSnap(coordinate: origin, offsetM: 0)
+        }
+
+        // Lokales Ost/Nord-Meter-Koordinatensystem um den Standort (0,0).
+        let points = coords.map { metersEastNorth(of: $0, relativeTo: origin) }
+
+        var bestOffset = Double.greatestFiniteMagnitude
+        var bestProjection = points[0]
+        for i in 0..<(points.count - 1) {
+            let a = points[i]
+            let b = points[i + 1]
+            let ab = b - a
+            let lengthSquared = simd_length_squared(ab)
+            let t = lengthSquared > 0 ? min(1, max(0, simd_dot(-a, ab) / lengthSquared)) : 0
+            let projected = a + t * ab
+            let offset = simd_length(projected)
+            if offset < bestOffset {
+                bestOffset = offset
+                bestProjection = projected
+            }
+        }
+
+        // Fusspunkt (Meter Ost/Nord relativ zum Standort) zurück in Koordinaten.
+        return RouteSnap(
+            coordinate: coordinate(from: origin, east: bestProjection.x, north: bestProjection.y),
+            offsetM: bestOffset
+        )
+    }
+
+    /// Fügt Zwischen-Wegpunkte ein, sodass zwei aufeinanderfolgende Punkte
+    /// höchstens `maxSpacingM` auseinanderliegen. ORS/MapKit liefern die Route
+    /// nur an Knick- und Kreuzungspunkten; für den AR-Bodenpfad (Teppich +
+    /// Richtungs-Chevrons) braucht es dichtere, aus GPS abgeleitete
+    /// Stützpunkte, damit der Pfad der Gasse folgt und die Chevrons in
+    /// gleichmässigem Abstand entlang der ganzen Strecke sitzen, statt lange
+    /// gerade Segmente zu überspringen. Über kurze Distanzen genügt die
+    /// lineare Interpolation in Breiten-/Längengrad.
+    static func densify(
+        _ coordinates: [CLLocationCoordinate2D],
+        maxSpacingM: CLLocationDistance
+    ) -> [CLLocationCoordinate2D] {
+        guard coordinates.count >= 2, maxSpacingM > 0 else { return coordinates }
+
+        var result: [CLLocationCoordinate2D] = [coordinates[0]]
+        for i in 1..<coordinates.count {
+            let a = coordinates[i - 1]
+            let b = coordinates[i]
+            let length = simd_length(metersEastNorth(of: b, relativeTo: a))
+            if length > maxSpacingM {
+                let steps = Int((length / maxSpacingM).rounded(.up))
+                for s in 1..<steps {
+                    let t = Double(s) / Double(steps)
+                    result.append(
+                        CLLocationCoordinate2D(
+                            latitude: a.latitude + (b.latitude - a.latitude) * t,
+                            longitude: a.longitude + (b.longitude - a.longitude) * t
+                        )
+                    )
+                }
+            }
+            result.append(b)
+        }
+        return result
     }
 
     /// Winkel (Grad), ab dem ein Knick als "leicht links/rechts" gilt.
@@ -560,6 +645,21 @@ enum RouteService {
         return SIMD2(
             (target.longitude - origin.longitude) * metersPerDegreeLongitude,
             (target.latitude - origin.latitude) * metersPerDegreeLatitude
+        )
+    }
+
+    /// Umkehrung von `metersEastNorth`: Koordinate aus Ost-/Nord-Metern
+    /// relativ zu `origin` (Flach-Erde-Näherung).
+    private static func coordinate(
+        from origin: CLLocationCoordinate2D,
+        east: Double,
+        north: Double
+    ) -> CLLocationCoordinate2D {
+        let metersPerDegreeLatitude = 111_320.0
+        let metersPerDegreeLongitude = metersPerDegreeLatitude * cos(origin.latitude * .pi / 180)
+        return CLLocationCoordinate2D(
+            latitude: origin.latitude + north / metersPerDegreeLatitude,
+            longitude: origin.longitude + east / metersPerDegreeLongitude
         )
     }
 }

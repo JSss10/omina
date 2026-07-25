@@ -69,9 +69,11 @@ struct ARRoutePanel: View {
                 )
             // Standortpunkt mit Blickrichtungs-Kegel; die Minikarte ist
             // nordausgerichtet, daher zeigt die Kamera-Blickrichtung direkt
-            // (funktioniert auch bei aufrecht gehaltenem iPhone).
+            // (funktioniert auch bei aufrecht gehaltenem iPhone). Der Punkt
+            // rastet auf die Route ein, solange man nah genug an ihr ist, damit
+            // er nicht neben der Linie springt.
             if let userLocation = locationService.currentLocation {
-                Annotation("", coordinate: userLocation.coordinate, anchor: .center) {
+                Annotation("", coordinate: snappedCoordinate(for: userLocation), anchor: .center) {
                     UserLocationMarker(headingDegrees: locationService.viewingDirection)
                 }
             }
@@ -101,6 +103,17 @@ struct ARRoutePanel: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Zur Karte wechseln")
         .accessibilityAddTraits(.isButton)
+    }
+
+    /// Maximaler seitlicher Abstand (Meter), bis zu dem der Standortpunkt auf
+    /// die Route eingerastet wird.
+    private static let snapToRouteMaxOffsetM: CLLocationDistance = 12
+
+    /// Standortkoordinate für den Marker: auf die Route eingerastet, solange
+    /// man nah genug an ihr ist – sonst die Rohposition.
+    private func snappedCoordinate(for location: CLLocation) -> CLLocationCoordinate2D {
+        let snap = RouteService.snappedLocation(on: route, at: location)
+        return snap.offsetM <= Self.snapToRouteMaxOffsetM ? snap.coordinate : location.coordinate
     }
 
     /// Start-Kamera eng am Routenanfang (= Standort bei Routenberechnung);

@@ -42,11 +42,30 @@ final class MapViewModel: ObservableObject {
     /// Nächstes Abbiege-Manöver (Pfeil-Anweisung) auf der aktiven Route.
     @Published private(set) var nextManeuver: RouteManeuver?
     @Published private(set) var isCalculatingRoute = false
+    /// Läuft gerade eine automatische Neuberechnung, weil der User von der
+    /// Route abgewichen ist? (Für einen dezenten Hinweis in der UI.)
+    @Published private(set) var isRerouting = false
     /// Ziel-POI der aktiven Navigation (nil, wenn keine Route läuft).
     @Published private(set) var navigationTarget: POI?
     /// Barrieren, die der User für heute als "nicht machbar" markiert hat
     /// (Tagesform, z. B. Hitze) – die Route wird um sie herum berechnet.
     @Published private(set) var avoidedBarrierIds: Set<UUID> = []
+
+    /// Profil der aktiven Navigation – für die automatische Neuberechnung
+    /// (Rollstuhl-Limits) gemerkt, solange eine Route läuft.
+    private var navigationProfile: UserProfile?
+    /// Aufeinanderfolgende Standort-Updates, in denen der User zu weit neben
+    /// der Route lag (Entprellung gegen GPS-Ausreisser).
+    private var offRouteUpdates = 0
+    /// Zeitpunkt der letzten automatischen Neuberechnung (Sperrzeit dazwischen).
+    private var lastRerouteAt: Date?
+
+    /// Seitlicher Abstand zur Route, ab dem als "nicht auf der Route" gilt.
+    private let offRouteThresholdM: CLLocationDistance = 25
+    /// So viele Updates in Folge über der Schwelle lösen die Neuberechnung aus.
+    private let offRouteConfirmations = 3
+    /// Mindestabstand zwischen zwei automatischen Neuberechnungen.
+    private let minRerouteInterval: TimeInterval = 12
 
     private let locationService: LocationService
     private let repository: BarrierRepository
@@ -226,6 +245,92 @@ final class MapViewModel: ObservableObject {
         if let route = activeRoute {
             routeProgress = RouteService.progress(of: route, at: location)
             nextManeuver = RouteService.nextManeuver(of: route, at: location)
+            considerReroute(from: location)
+        }
+    }
+
+    /// Prüft bei jedem Standort-Update, ob der User zu weit neben der Route
+    /// liegt, und stösst – entprellt und mit Sperrzeit – eine automatische
+    /// Neuberechnung an. So passt sich die (AR-)Route an, wenn jemand der
+    /// vorgeschlagenen Strecke nicht folgt (Feldtest-Rückmeldung Tag 1).
+    private func considerReroute(from location: CLLocation) {
+        guard let route = activeRoute,
+              let profile = navigationProfile,
+              !isRerouting,
+              !isCalculatingRoute,
+              ConnectivityMonitor.shared.isOnline
+        else { return }
+
+        // Am Ziel nicht mehr umleiten.
+        if routeProgress?.hasArrived == true {
+            offRouteUpdates = 0
+            return
+        }
+
+        let offBy = RouteService.distance(from: location.coordinate, to: route)
+        guard offBy > offRouteThresholdM else {
+            offRouteUpdates = 0
+            return
+        }
+
+        offRouteUpdates += 1
+        guard offRouteUpdates >= offRouteConfirmations else { return }
+        if let last = lastRerouteAt, Date().timeIntervalSince(last) < minRerouteInterval {
+            return
+        }
+
+        offRouteUpdates = 0
+        lastRerouteAt = Date()
+        Task { await reroute(from: location, profile: profile) }
+    }
+
+    /// Berechnet die Route vom aktuellen Standort zum unveränderten Ziel neu,
+    /// unter Beibehaltung der für heute umgangenen Barrieren. Bei Misserfolg
+    /// (Funkloch) bleibt die bestehende Route erhalten.
+    private func reroute(from location: CLLocation, profile: UserProfile) async {
+        guard let route = activeRoute else { return }
+        let destination = route.destinationCoordinate
+        let destinationName = route.destinationName
+
+        isRerouting = true
+        defer { isRerouting = false }
+
+        let avoidCoordinates = barriers
+            .filter { avoidedBarrierIds.contains($0.id) }
+            .map { CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude) }
+
+        do {
+            let newRoute: ActiveRoute
+            if avoidCoordinates.isEmpty {
+                newRoute = try await RouteService.route(
+                    from: location.coordinate,
+                    to: destination,
+                    destinationName: destinationName,
+                    profile: profile
+                )
+            } else {
+                newRoute = try await RouteService.wheelchairRoute(
+                    from: location.coordinate,
+                    to: destination,
+                    destinationName: destinationName,
+                    profile: profile,
+                    avoiding: avoidCoordinates
+                )
+            }
+
+            // Während der Neuberechnung gestoppt oder Ziel gewechselt? Verwerfen.
+            guard let current = activeRoute,
+                  current.destinationCoordinate.latitude == destination.latitude,
+                  current.destinationCoordinate.longitude == destination.longitude
+            else { return }
+
+            activeRoute = newRoute
+            if let latest = locationService.currentLocation {
+                routeProgress = RouteService.progress(of: newRoute, at: latest)
+                nextManeuver = RouteService.nextManeuver(of: newRoute, at: latest)
+            }
+        } catch {
+            // Neuberechnung fehlgeschlagen – bestehende Route beibehalten.
         }
     }
 
@@ -288,6 +393,9 @@ final class MapViewModel: ObservableObject {
             )
             activeRoute = route
             navigationTarget = poi
+            navigationProfile = profile
+            offRouteUpdates = 0
+            lastRerouteAt = nil
             routeProgress = RouteProgress(
                 remainingDistanceM: route.totalDistanceM,
                 remainingTimeS: route.expectedTravelTimeS
@@ -311,9 +419,12 @@ final class MapViewModel: ObservableObject {
     func stopNavigation() {
         activeRoute = nil
         navigationTarget = nil
+        navigationProfile = nil
         routeProgress = nil
         nextManeuver = nil
         avoidedBarrierIds = []
+        offRouteUpdates = 0
+        lastRerouteAt = nil
     }
 
     /// Markiert die Barriere für heute als "nicht machbar" (Tagesform,

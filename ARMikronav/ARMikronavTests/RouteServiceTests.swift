@@ -324,6 +324,78 @@ struct RouteServiceTests {
         }
     }
 
+    // MARK: - Einrasten auf die Route (Standortpunkt)
+
+    /// Punkt neben der Route rastet seitlich auf die Linie ein: der Fusspunkt
+    /// liegt auf der Route, der Abstand entspricht dem seitlichen Versatz.
+    @Test func snappedLocationProjectsOntoRoute() {
+        let route = straightRoute
+        // ~20 m östlich des Streckenmittelpunkts.
+        let location = CLLocation(latitude: 47.370899, longitude: 8.540265)
+
+        let snap = RouteService.snappedLocation(on: route, at: location)
+
+        #expect(abs(snap.offsetM - 20) < 3)
+        // Eingerastet: Länge zurück auf die Linie (8.5400), Breite ~unverändert.
+        #expect(abs(snap.coordinate.longitude - 8.5400) < 0.00005)
+        #expect(abs(snap.coordinate.latitude - 47.370899) < 0.0002)
+    }
+
+    /// Punkt direkt auf der Route: Versatz ~0, Fusspunkt ~identisch.
+    @Test func snappedLocationOnRouteKeepsPosition() {
+        let route = straightRoute
+        let location = CLLocation(latitude: 47.370899, longitude: 8.5400)
+
+        let snap = RouteService.snappedLocation(on: route, at: location)
+
+        #expect(snap.offsetM < 2)
+        #expect(abs(snap.coordinate.latitude - 47.370899) < 0.0002)
+        #expect(abs(snap.coordinate.longitude - 8.5400) < 0.00005)
+    }
+
+    // MARK: - Wegpunkt-Verdichtung (AR-Bodenpfad)
+
+    /// Gerade 200-m-Route auf 2-m-Raster verdichtet: Start und Ziel bleiben,
+    /// kein Teilstück ist mehr als ~2 m lang.
+    @Test func densifyInsertsPointsWithinSpacing() {
+        let coordinates = straightRoute.coordinates
+        let dense = RouteService.densify(coordinates, maxSpacingM: 2)
+
+        #expect(dense.count > 90)
+        #expect(abs(dense.first!.latitude - coordinates.first!.latitude) < 1e-9)
+        #expect(abs(dense.last!.latitude - coordinates.last!.latitude) < 1e-9)
+
+        var maxGap = 0.0
+        for i in 1..<dense.count {
+            let gap = CLLocation(latitude: dense[i - 1].latitude, longitude: dense[i - 1].longitude)
+                .distance(from: CLLocation(latitude: dense[i].latitude, longitude: dense[i].longitude))
+            maxGap = max(maxGap, gap)
+        }
+        #expect(maxGap < 2.5)
+    }
+
+    /// Bereits kurze Segmente (unter dem Raster) bleiben unverändert.
+    @Test func densifyKeepsShortSegments() {
+        let coordinates = [
+            CLLocationCoordinate2D(latitude: 47.3700, longitude: 8.5400),
+            CLLocationCoordinate2D(latitude: 47.370009, longitude: 8.5400), // ~1 m
+        ]
+        let dense = RouteService.densify(coordinates, maxSpacingM: 2)
+        #expect(dense.count == 2)
+    }
+
+    /// Knick-Route: die originalen Stützpunkte (Start, Knick, Ziel) bleiben
+    /// erhalten, dazwischen wird verdichtet.
+    @Test func densifyPreservesOriginalVertices() {
+        let dense = RouteService.densify(cornerRoute.coordinates, maxSpacingM: 5)
+        let corner = CLLocationCoordinate2D(latitude: 47.370899, longitude: 8.5400)
+        let containsCorner = dense.contains {
+            abs($0.latitude - corner.latitude) < 1e-9 && abs($0.longitude - corner.longitude) < 1e-9
+        }
+        #expect(containsCorner)
+        #expect(dense.count > cornerRoute.coordinates.count)
+    }
+
     /// Route ~100 m Norden, dann 90° nach Osten (~100 m).
     private var cornerRoute: ActiveRoute {
         let corner = CLLocationCoordinate2D(latitude: 47.370899, longitude: 8.5400)

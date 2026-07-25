@@ -66,7 +66,7 @@ struct MapView: View {
             // auch bei gedrehter Karte (Navigation) korrekt dorthin zeigt,
             // wohin man schaut.
             if let userLocation = locationService.currentLocation {
-                Annotation("", coordinate: userLocation.coordinate, anchor: .center) {
+                Annotation("", coordinate: snappedUserCoordinate(for: userLocation), anchor: .center) {
                     UserLocationMarker(headingDegrees: userConeHeading)
                 }
             }
@@ -203,10 +203,10 @@ struct MapView: View {
                         .padding(8)
                         .background(.thinMaterial, in: Capsule())
                 }
-                if viewModel.isCalculatingRoute {
+                if viewModel.isCalculatingRoute || viewModel.isRerouting {
                     HStack(spacing: 8) {
                         ProgressView()
-                        Text("Route wird berechnet…")
+                        Text(viewModel.isRerouting ? "Route wird angepasst…" : "Route wird berechnet…")
                             .font(.footnote)
                     }
                     .padding(.horizontal, 12)
@@ -495,6 +495,22 @@ struct MapView: View {
         locationService.viewingDirection.map { $0 - mapHeading }
     }
 
+    /// Maximaler seitlicher Abstand (Meter), bis zu dem der Standortpunkt
+    /// während der Navigation auf die Route eingerastet wird. Darüber hinaus
+    /// (der User folgt der Route offenbar nicht) zeigt der Punkt die echte
+    /// Position – dann greift ohnehin die automatische Neuberechnung.
+    private static let snapToRouteMaxOffsetM: CLLocationDistance = 12
+
+    /// Standortkoordinate für den Karten-Marker: während der Navigation auf die
+    /// Route (violette Linie) eingerastet, solange man nah genug an ihr ist –
+    /// so springt der Punkt nicht mehr neben der Linie herum (GPS-Rauschen in
+    /// den engen Gassen). Ohne aktive Route die Rohposition.
+    private func snappedUserCoordinate(for location: CLLocation) -> CLLocationCoordinate2D {
+        guard let route = viewModel.activeRoute else { return location.coordinate }
+        let snap = RouteService.snappedLocation(on: route, at: location)
+        return snap.offsetM <= Self.snapToRouteMaxOffsetM ? snap.coordinate : location.coordinate
+    }
+
     /// "Route anzeigen" aus dem POI-Detail: Route in-App berechnen und
     /// die Karte auf den gesamten Routenverlauf zoomen.
     private func showRoute(to poi: POI) {
@@ -509,7 +525,9 @@ struct MapView: View {
     /// Fahrtrichtung nach oben zeigt – man sieht sofort, wohin man fahren
     /// muss. Die Kamera zentriert auf die Mitte der Route; der Abstand ergibt
     /// sich aus der Ausdehnung (Diagonale), damit die Route auch nach der
-    /// Drehung vollständig und mit Rand sichtbar bleibt.
+    /// Drehung vollständig und mit Rand sichtbar bleibt. Zusätzlich wird die
+    /// Route etwas nach oben geschoben, damit sie frei zwischen der Suchleiste
+    /// (oben) und dem Routen-Panel (unten, höher) liegt und nicht verdeckt wird.
     private func fitCamera(to route: ActiveRoute) {
         let coordinates = route.coordinates
         guard let first = coordinates.first else { return }
@@ -523,7 +541,7 @@ struct MapView: View {
             maxLng = max(maxLng, coordinate.longitude)
         }
 
-        let center = CLLocationCoordinate2D(
+        let boundingBoxCenter = CLLocationCoordinate2D(
             latitude: (minLat + maxLat) / 2,
             longitude: (minLng + maxLng) / 2
         )
@@ -531,21 +549,36 @@ struct MapView: View {
         // Ausdehnung der Route in Metern (Diagonale der Bounding-Box), damit
         // der gewählte Abstand die Route in jeder Drehlage abdeckt.
         let metersPerDegreeLatitude = 111_320.0
-        let metersPerDegreeLongitude = metersPerDegreeLatitude * cos(center.latitude * .pi / 180)
+        let metersPerDegreeLongitude = metersPerDegreeLatitude * cos(boundingBoxCenter.latitude * .pi / 180)
         let widthM = (maxLng - minLng) * metersPerDegreeLongitude
         let heightM = (maxLat - minLat) * metersPerDegreeLatitude
         let diagonalM = (widthM * widthM + heightM * heightM).squareRoot()
 
-        // Kameraabstand ~ Diagonale mit Rand; Untergrenze, damit sehr kurze
-        // Routen nicht übermässig herangezoomt werden.
-        let distance = max(diagonalM * 2.2, 220)
+        // Kameraabstand ~ Diagonale mit grosszügigem Rand, damit die ganze
+        // Route auch neben der Suchleiste und dem Routen-Panel Platz hat;
+        // Untergrenze, damit sehr kurze Routen nicht übermässig herangezoomt
+        // werden.
+        let distance = max(diagonalM * 2.8, 320)
+
+        // Das untere Panel ist deutlich höher als die Suchleiste – der freie
+        // Bereich liegt also oberhalb der geometrischen Bildmitte. Die Route
+        // deshalb entgegen der Fahrtrichtung (nach unten auf dem Schirm =
+        // zurück) verschieben, damit sie in den freien Bereich nach oben
+        // rückt. Verschiebung proportional zur Routenlänge, aber gedeckelt.
+        let bearing = RouteService.initialBearingDegrees(of: route)
+        let backwardOffsetM = min(diagonalM * 0.22, 70)
+        let center = Self.coordinate(
+            from: boundingBoxCenter,
+            distanceM: backwardOffsetM,
+            bearingDeg: (bearing + 180).truncatingRemainder(dividingBy: 360)
+        )
 
         withAnimation(.easeInOut) {
             cameraPosition = .camera(
                 MapCamera(
                     centerCoordinate: center,
                     distance: distance,
-                    heading: RouteService.initialBearingDegrees(of: route),
+                    heading: bearing,
                     pitch: 0
                 )
             )
