@@ -54,7 +54,4 @@ enum AppConfig {
 
     // MARK: - Feldtest
     static let fieldTestModeEnabled = true
-    static let fieldTestSurveyURL = "https://docs.google.com/forms/d/e/1FAIpQLSfqUaSbVZUignM6xjY4NhPtxaKBANLNqPMaOnp23Rj7nHWL0A/viewform"
-    static let fieldTestSurveyNameEntryID = "entry.274175680"
-    static let fieldTestSurveyKeyEntryID = "entry.2040937465"
 }

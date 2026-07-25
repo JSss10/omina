@@ -19,8 +19,8 @@ struct HomeDashboardView: View {
     @StateObject private var avatarStore = AvatarStore.shared
 
     // Feldtest: Nur während eines aktiven Testlaufs erscheint oben rechts der
-    // "Test beenden"-Button. Er lädt offene Tracking-Events hoch, setzt das
-    // Gerät für die nächste Testperson zurück und öffnet die Abschluss-Umfrage.
+    // "Test beenden"-Button. Er lädt offene Tracking-Events hoch und setzt das
+    // Gerät für die nächste Testperson zurück.
     @ObservedObject private var fieldTest = FieldTestService.shared
     @State private var showEndTestConfirmation = false
     @State private var isEndingTest = false
@@ -39,7 +39,7 @@ struct HomeDashboardView: View {
                         Button("Test beenden", role: .destructive) { endTest() }
                         Button("Abbrechen", role: .cancel) {}
                     } message: {
-                        Text("Deine Antworten werden hochgeladen und die Abschluss-Umfrage wird geöffnet. Das Gerät wird danach für die nächste Testperson zurückgesetzt.")
+                        Text("Deine Antworten werden hochgeladen und das Gerät wird danach für die nächste Testperson zurückgesetzt.")
                     }
                     .overlay { endTestProgressOverlay }
             }
@@ -83,13 +83,12 @@ struct HomeDashboardView: View {
                     .font(AppTypography.headline)
             }
             .disabled(isEndingTest)
-            .accessibilityLabel("Test beenden und Abschluss-Umfrage öffnen")
+            .accessibilityLabel("Test beenden")
         }
     }
 
     /// Blendet während des Beendens einen Fortschritts-Overlay ein, damit die
-    /// Testperson sieht, dass Daten hochgeladen werden und sich gleich die
-    /// Umfrage öffnet.
+    /// Testperson sieht, dass Daten hochgeladen werden.
     @ViewBuilder
     private var endTestProgressOverlay: some View {
         if isEndingTest {
@@ -113,9 +112,9 @@ struct HomeDashboardView: View {
         }
     }
 
-    /// Lädt offene Events hoch, setzt das Gerät zurück und öffnet die
-    /// Abschluss-Umfrage. Danach wechselt die App über den Auth-State
-    /// automatisch zurück zum Welcome-Screen für die nächste Testperson.
+    /// Lädt offene Events hoch und setzt das Gerät zurück. Danach wechselt die
+    /// App über den Auth-State automatisch zurück zum Welcome-Screen für die
+    /// nächste Testperson.
     private func endTest() {
         guard !isEndingTest else { return }
         isEndingTest = true

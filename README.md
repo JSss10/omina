@@ -130,14 +130,12 @@ Angaben (inkl. Nachname).
 
 **Ablauf pro Testperson:** Profil antippen → Consent → Onboarding ausfüllen →
 App testen. Danach oben rechts **„Test beenden"**: lädt offene Tracking-Events
-hoch, setzt das Gerät für die nächste Testperson zurück und öffnet automatisch
-die Abschluss-Umfrage (Google Forms) mit dem Namen (und optional dem stabilen
-Profil-Schlüssel `tp01`–`tp06`) als vorausgefülltem Feld — Formular-URL und
-Feld-IDs in `AppConfig.fieldTestSurveyURL` / `fieldTestSurveyNameEntryID` /
-`fieldTestSurveyKeyEntryID` eintragen (Anleitung im Code-Kommentar dort).
-Bleibt die URL leer, wird der Umfrage-Schritt übersprungen. So lassen sich
-Umfrage-Antworten, Klickdaten (`test_events`) und Onboarding-Profil
-(`test_participants`) pro Testperson zusammenführen.
+hoch und setzt das Gerät für die nächste Testperson zurück. Die
+Abschluss-Umfrage wird nicht mehr in der App geöffnet — der Umfrage-Link wird
+den Testpersonen separat zugestellt, damit sie ihn auf einem Tablet oder
+Computer (grösser, bessere Bedienbarkeit) ausfüllen können. So lassen sich
+Klickdaten (`test_events`) und Onboarding-Profil (`test_participants`) pro
+Testperson zusammenführen.
 
 **Auswertung:** im Supabase SQL-Editor, z. B.
 
