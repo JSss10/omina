@@ -29,6 +29,10 @@ struct MapView: View {
     @State private var cameraPosition: MapCameraPosition = .region(MapView.defaultRegion)
     @State private var selectedBarrier: Barrier?
     @State private var selectedPOI: POI?
+    /// Auf der Karte hervorgehobener, zuletzt gewählter POI (z. B. aus der
+    /// Suche) – bleibt als Marker sichtbar, auch wenn er nicht unter den
+    /// angezeigten POIs in der Nähe ist.
+    @State private var focusedPOI: POI?
     @State private var showingFilter = false
     @State private var showingSearch = false
     @State private var showingSavedPlaces = false
@@ -62,7 +66,7 @@ struct MapView: View {
     )
 
     var body: some View {
-        Map(position: $cameraPosition) {
+        mapContainer {
             // Standortpunkt mit Blickrichtungs-Kegel. Die Geräteausrichtung
             // wird um die aktuelle Kartendrehung bereinigt, damit der Kegel
             // auch bei gedrehter Karte (Navigation) korrekt dorthin zeigt,
@@ -114,6 +118,27 @@ struct MapView: View {
                     )
                 ) {
                     POIMarker(poi: poi)
+                        .onTapGesture { selectedPOI = poi }
+                }
+            }
+
+            // Gewählter POI (Suche oder Apple-Karten-POI): immer als (leicht
+            // hervorgehobener) Marker sichtbar, auch wenn er nicht unter den
+            // POIs in der Nähe ist. Während einer aktiven Navigation übernimmt
+            // der Ziel-Marker, deshalb hier nur ohne Route.
+            if viewModel.activeRoute == nil,
+               let poi = focusedPOI,
+               !viewModel.displayedPOIs.contains(where: { $0.id == poi.id }) {
+                Annotation(
+                    poi.name,
+                    coordinate: CLLocationCoordinate2D(
+                        latitude: poi.latitude,
+                        longitude: poi.longitude
+                    )
+                ) {
+                    POIMarker(poi: poi)
+                        .scaleEffect(1.2)
+                        .shadow(color: AppColor.accentPrimary.opacity(0.5), radius: 6)
                         .onTapGesture { selectedPOI = poi }
                 }
             }
@@ -758,7 +783,58 @@ struct MapView: View {
                 )
             )
         }
+        focusedPOI = poi
         selectedPOI = poi
+    }
+
+    /// Apple-Karten-POI (MapFeature) übernehmen: in einen leichten POI wandeln
+    /// (Distanz zum Standort ergänzt), als Marker hervorheben und das
+    /// Detail-Sheet öffnen.
+    private func selectAppleFeature(_ feature: MapFeature) {
+        let distance = locationService.currentLocation.map {
+            CLLocation(latitude: feature.coordinate.latitude, longitude: feature.coordinate.longitude)
+                .distance(from: $0)
+        } ?? 0
+        let poi = POI(appleFeature: feature, distanceM: distance)
+        focusedPOI = poi
+        selectedPOI = poi
+    }
+
+    /// Karte samt Inhalt. Ab iOS 18 mit Auswahl der built-in Apple-POIs
+    /// (MapFeature); auf iOS 17 ohne diese (die API `MapSelection` gibt es erst
+    /// ab iOS 18) – der Rest der Karte bleibt identisch. Der Kartinhalt wird an
+    /// beide Zweige übergeben, damit er nur einmal beschrieben ist.
+    @ViewBuilder
+    private func mapContainer<C: MapContent>(
+        @MapContentBuilder content: () -> C
+    ) -> some View {
+        if #available(iOS 18.0, *) {
+            Map(position: $cameraPosition, selection: appleSelectionBinding) {
+                content()
+            }
+            // Nur Apples Points of Interest sind auswählbar (keine Regionen).
+            .mapFeatureSelectionDisabled { $0.kind != .pointOfInterest }
+        } else {
+            Map(position: $cameraPosition) {
+                content()
+            }
+        }
+    }
+
+    /// Auswahl-Binding für Apple-Karten-POIs (nur iOS 18+). Die Auswahl wird
+    /// nicht gehalten: Beim Tippen auf ein POI-Feature wird es direkt in einen
+    /// POI gewandelt und das Detail-Sheet geöffnet (getter bleibt `nil`, damit
+    /// kein System-Callout stehen bleibt und ein erneuter Tap wieder auslöst).
+    @available(iOS 18.0, *)
+    private var appleSelectionBinding: Binding<MapSelection<MKMapItem>?> {
+        Binding(
+            get: { nil },
+            set: { newValue in
+                if let feature = newValue?.feature {
+                    selectAppleFeature(feature)
+                }
+            }
+        )
     }
 
     private func evaluateProximity() {

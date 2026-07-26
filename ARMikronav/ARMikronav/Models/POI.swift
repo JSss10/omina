@@ -6,6 +6,7 @@
 
 import Foundation
 import SwiftUI
+import MapKit
 import Supabase
 
 // Codable (nicht nur Decodable): erlaubt das Zwischenspeichern der
@@ -131,6 +132,28 @@ struct POI: Codable, Identifiable {
     /// im POI-Detail angezeigt, nicht alle Profile.
     func gintoRating(for wheelchairType: WheelchairType) -> GintoRating? {
         gintoRatings.first { $0.profileKey == wheelchairType.gintoRatingProfileKey }
+    }
+}
+
+// MARK: - Apple-Karten-Feature
+
+extension POI {
+    /// Leichter POI aus einem Apple-Karten-Feature (built-in Point of Interest).
+    /// Ohne ginto-/OSM-Zugänglichkeitsdaten – der Status bleibt «unbekannt».
+    /// Erlaubt, auch für Apples eigene POIs eine Route zu berechnen und das
+    /// gewohnte Detail-Sheet zu öffnen. Als Extension-Initializer, damit der
+    /// synthetisierte memberwise-Initializer (SeedData) erhalten bleibt.
+    init(appleFeature feature: MapFeature, distanceM: Double = 0) {
+        self.id = UUID()
+        self.name = feature.title ?? "Ausgewählter Ort"
+        self.category = feature.pointOfInterestCategory?.rawValue
+        self.latitude = feature.coordinate.latitude
+        self.longitude = feature.coordinate.longitude
+        self.address = nil
+        self.wheelchairAccessible = nil
+        self.accessibilityDetails = nil
+        self.source = "apple"
+        self.distanceM = distanceM
     }
 }
 
