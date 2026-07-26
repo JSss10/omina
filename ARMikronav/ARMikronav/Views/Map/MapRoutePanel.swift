@@ -1,14 +1,15 @@
 // MapRoutePanel.swift
 // ARMikronav
 //
-// Bottom-Panel während der Navigation in der Kartenansicht: Zielname,
-// Restzeit/-distanz und Stop-Button. Darunter eine Zeile mit der Anzahl
-// Barrieren auf der Route – Tippen öffnet die Listenansicht
-// (RouteBarrierListSheet), damit man vorab weiss, was auf einen zukommt.
-// Die Route selbst liegt als Polyline direkt auf der Hauptkarte (MapView).
-// Bei Ankunft (< 10 m Restweg) wechselt die Zeile in den "Ziel erreicht"-
-// Zustand mit Fertig-Button. Die RouteInfoBar wird auch vom ARRoutePanel
-// verwendet, damit Karte und AR-Modus dieselbe Fortschrittsdarstellung zeigen.
+// Bottom-Panel während der Navigation in der Kartenansicht. Kopfzeile: das
+// nächste Manöver (Icon + Anweisung), die aktuelle Strasse ("wo durch") und
+// zwei Icon-Buttons – Wegbeschreibung als Liste (RouteStepsListSheet) und
+// Stopp/Fertig (bewusst nur Icon, kein Text). Darunter die Zeitangabe
+// (Restzeit + Ankunftszeit), die Restdistanz und der Ziel-POI, danach die
+// Zeile mit der Anzahl Barrieren auf der Route (RouteBarrierListSheet). Bei
+// Ankunft (< 10 m Restweg) bleibt nur die "Ziel erreicht"-Kopfzeile mit
+// Fertig-Button. Die RouteInfoBar (unten in dieser Datei) wird weiterhin vom
+// ARRoutePanel verwendet.
 
 import SwiftUI
 
@@ -16,6 +17,11 @@ struct MapRoutePanel: View {
     let route: ActiveRoute
     let progress: RouteProgress?
     var maneuver: RouteManeuver? = nil
+    /// Aktueller Schritt der Route – liefert die Strasse ("wo durch") für die
+    /// Kopfzeile. nil, wenn keine Schrittdaten vorliegen.
+    var currentStep: RouteStep? = nil
+    /// Öffnet die Turn-by-turn-Listenansicht; nil blendet den Listen-Button aus.
+    var onShowSteps: (() -> Void)? = nil
     /// Barrieren im Korridor der aktiven Route (für die Zähler-Zeile).
     var barrierCount: Int = 0
     /// Davon fürs eigene Profil kritisch (shouldWarn).
@@ -24,20 +30,187 @@ struct MapRoutePanel: View {
     var onShowBarriers: (() -> Void)? = nil
     let onStop: () -> Void
 
+    private var hasArrived: Bool { progress?.hasArrived ?? false }
+
     var body: some View {
         VStack(spacing: 0) {
-            RouteInfoBar(route: route, progress: progress, maneuver: maneuver, onStop: onStop)
+            header
 
-            if let onShowBarriers {
+            if !hasArrived {
                 Divider()
                     .padding(.vertical, 10)
-                barrierRow(action: onShowBarriers)
+                infoSection
+
+                if let onShowBarriers {
+                    Divider()
+                        .padding(.vertical, 10)
+                    barrierRow(action: onShowBarriers)
+                }
             }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 20))
         .shadow(radius: 6)
+    }
+
+    // MARK: - Kopfzeile (nächstes Manöver + Aktionen)
+
+    /// Kopfzeile: Manöver-Icon, Anweisung, aktuelle Strasse ("wo durch") sowie
+    /// die Icon-Buttons für die Listenansicht und den Stopp/Fertig-Knopf –
+    /// bewusst nur Icons, kein Text (Feldtest-Rückmeldung).
+    private var header: some View {
+        HStack(spacing: 14) {
+            maneuverIcon
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(headlineText)
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(AppColor.textPrimary)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.85)
+                if let subtitle = headerSubtitle {
+                    Text(subtitle)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                if !hasArrived, route.kind == .walkingFallback {
+                    Label(
+                        "Fussgängerroute – Barrieren nicht berücksichtigt",
+                        systemImage: "exclamationmark.triangle"
+                    )
+                    .font(.caption)
+                    .foregroundStyle(AppColor.Status.limitedText)
+                }
+            }
+
+            Spacer(minLength: 8)
+
+            if let onShowSteps, !hasArrived {
+                iconButton(
+                    systemImage: "list.bullet",
+                    tint: AppColor.accentPrimary,
+                    accessibilityLabel: "Wegbeschreibung als Liste",
+                    action: onShowSteps
+                )
+            }
+            stopButton
+        }
+        .accessibilityElement(children: .contain)
+    }
+
+    private var maneuverIcon: some View {
+        ZStack {
+            Circle()
+                .fill(hasArrived ? AppColor.Status.openFill : AppColor.accentPrimary)
+                .frame(width: 48, height: 48)
+            Image(systemName: routeIcon)
+                .font(.title2.weight(.bold))
+                .foregroundStyle(hasArrived ? AppColor.Status.openIcon : AppColor.onAccent)
+        }
+        .accessibilityHidden(true)
+    }
+
+    /// Stopp (läuft) bzw. Fertig (am Ziel) – reiner Icon-Button. Am Ziel
+    /// prominent grün gefüllt, sonst neutral, damit er nicht mit dem
+    /// Akzent-Manöver-Icon konkurriert.
+    private var stopButton: some View {
+        Button(action: onStop) {
+            Image(systemName: hasArrived ? "checkmark" : "xmark")
+                .font(.headline.weight(.bold))
+                .foregroundStyle(hasArrived ? AppColor.onAccent : AppColor.textPrimary)
+                .frame(width: AppMetrics.Touch.minimum, height: AppMetrics.Touch.minimum)
+                .background(
+                    hasArrived
+                        ? AnyShapeStyle(AppColor.Status.openIcon)
+                        : AnyShapeStyle(Color(.secondarySystemFill)),
+                    in: Circle()
+                )
+        }
+        .accessibilityLabel(hasArrived ? "Navigation abschliessen" : "Navigation beenden")
+    }
+
+    private func iconButton(
+        systemImage: String,
+        tint: Color,
+        accessibilityLabel: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.headline.weight(.semibold))
+                .foregroundStyle(tint)
+                .frame(width: AppMetrics.Touch.minimum, height: AppMetrics.Touch.minimum)
+                .background(Color(.secondarySystemFill), in: Circle())
+        }
+        .accessibilityLabel(accessibilityLabel)
+    }
+
+    private var routeIcon: String {
+        if hasArrived { return "checkmark" }
+        if let maneuver { return maneuver.direction.symbolName }
+        return route.kind == .wheelchair ? "figure.roll" : "figure.walk"
+    }
+
+    private var headlineText: String {
+        if hasArrived { return "Ziel erreicht" }
+        return maneuver?.instruction ?? route.destinationName
+    }
+
+    /// Kopf-Untertitel: am Ziel der Zielname, sonst die Strasse, auf der man
+    /// gerade unterwegs ist ("wo durch").
+    private var headerSubtitle: String? {
+        if hasArrived { return route.destinationName }
+        return currentStep?.streetName
+    }
+
+    // MARK: - Info (Zeit, Distanz, Ankunft, Ziel-POI)
+
+    /// Zeitangabe (Restzeit + Ankunftszeit), Restdistanz und Ziel-POI – so ist
+    /// «wann» und «wohin» auf einen Blick ersichtlich.
+    private var infoSection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Image(systemName: "clock")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(AppColor.accentPrimary)
+                Text(remainingTimeText)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(AppColor.accentPrimary)
+                Text("· \(remainingDistanceText)")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                Spacer(minLength: 8)
+                Text("Ankunft \(arrivalText)")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            .monospacedDigit()
+
+            Label(route.destinationName, systemImage: "mappin.circle.fill")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Noch \(remainingTimeText), \(remainingDistanceText), Ankunft \(arrivalText), Ziel \(route.destinationName)")
+    }
+
+    private var remainingTimeText: String {
+        let seconds = progress?.remainingTimeS ?? route.expectedTravelTimeS
+        let minutes = max(1, Int((seconds / 60).rounded(.up)))
+        return "\(minutes) min"
+    }
+
+    private var remainingDistanceText: String {
+        DistanceFormatter.string(fromMeters: progress?.remainingDistanceM ?? route.totalDistanceM)
+    }
+
+    private var arrivalText: String {
+        let seconds = progress?.remainingTimeS ?? route.expectedTravelTimeS
+        return Date().addingTimeInterval(seconds)
+            .formatted(.dateTime.locale(.appGerman).hour().minute())
     }
 
     /// Zeile "X Barrieren auf der Route" mit Warnfarbe, sobald mindestens

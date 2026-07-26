@@ -33,6 +33,10 @@ struct ActiveRoute: Identifiable, Equatable {
     let totalDistanceM: CLLocationDistance
     let expectedTravelTimeS: TimeInterval
     let kind: RouteKind
+    /// Turn-by-turn-Schritte der Route (Manöver + Strasse/Weg) für die
+    /// Listenansicht während der Navigation. Leer, wenn der Routing-Dienst
+    /// keine Schrittdaten liefert.
+    let steps: [RouteStep]
 
     init(
         id: UUID = UUID(),
@@ -41,7 +45,8 @@ struct ActiveRoute: Identifiable, Equatable {
         coordinates: [CLLocationCoordinate2D],
         totalDistanceM: CLLocationDistance,
         expectedTravelTimeS: TimeInterval,
-        kind: RouteKind = .wheelchair
+        kind: RouteKind = .wheelchair,
+        steps: [RouteStep] = []
     ) {
         self.id = id
         self.destinationName = destinationName
@@ -50,6 +55,7 @@ struct ActiveRoute: Identifiable, Equatable {
         self.totalDistanceM = totalDistanceM
         self.expectedTravelTimeS = expectedTravelTimeS
         self.kind = kind
+        self.steps = steps
     }
 
     static func == (lhs: ActiveRoute, rhs: ActiveRoute) -> Bool {
@@ -122,6 +128,167 @@ struct RouteManeuver: Equatable {
             return "Jetzt \(direction.phrase)"
         }
         return "In \(DistanceFormatter.string(fromMeters: distanceM)) \(direction.phrase)"
+    }
+}
+
+/// Manöver-Typ eines Routenschritts (aus den OpenRouteService-Instruktions-
+/// typen bzw. aus dem Text der MapKit-Fallback-Route abgeleitet). Liefert
+/// Icon und deutsche Kurzanweisung für die Turn-by-turn-Liste.
+enum StepManeuver: Equatable {
+    case depart
+    case arrive
+    case straight
+    case slightLeft
+    case slightRight
+    case left
+    case right
+    case sharpLeft
+    case sharpRight
+    case keepLeft
+    case keepRight
+    case uTurn
+    case roundabout
+
+    /// SF-Symbol des Manövers (bewusst nur breit verfügbare Symbolnamen).
+    var symbolName: String {
+        switch self {
+        case .depart:      return "figure.roll"
+        case .arrive:      return "mappin.circle.fill"
+        case .straight:    return "arrow.up"
+        case .slightLeft:  return "arrow.up.left"
+        case .slightRight: return "arrow.up.right"
+        case .left:        return "arrow.turn.up.left"
+        case .right:       return "arrow.turn.up.right"
+        case .sharpLeft:   return "arrow.uturn.left"
+        case .sharpRight:  return "arrow.uturn.right"
+        case .keepLeft:    return "arrow.up.left"
+        case .keepRight:   return "arrow.up.right"
+        case .uTurn:       return "arrow.uturn.down"
+        case .roundabout:  return "arrow.clockwise"
+        }
+    }
+
+    /// Kurzanweisung ("Links abbiegen", "Geradeaus weiter", …).
+    var phrase: String {
+        switch self {
+        case .depart:      return "Start"
+        case .arrive:      return "Ziel erreicht"
+        case .straight:    return "Geradeaus weiter"
+        case .slightLeft:  return "Leicht links halten"
+        case .slightRight: return "Leicht rechts halten"
+        case .left:        return "Links abbiegen"
+        case .right:       return "Rechts abbiegen"
+        case .sharpLeft:   return "Scharf links abbiegen"
+        case .sharpRight:  return "Scharf rechts abbiegen"
+        case .keepLeft:    return "Links halten"
+        case .keepRight:   return "Rechts halten"
+        case .uTurn:       return "Wenden"
+        case .roundabout:  return "Kreisverkehr"
+        }
+    }
+
+    /// Abbildung der OpenRouteService-Instruktionstypen (0–13).
+    /// https://openrouteservice.org/dev/#/api-docs/v2/directions
+    static func fromORSType(_ type: Int) -> StepManeuver {
+        switch type {
+        case 0:      return .left
+        case 1:      return .right
+        case 2:      return .sharpLeft
+        case 3:      return .sharpRight
+        case 4:      return .slightLeft
+        case 5:      return .slightRight
+        case 6:      return .straight
+        case 7, 8:   return .roundabout
+        case 9:      return .uTurn
+        case 10:     return .arrive
+        case 11:     return .depart
+        case 12:     return .keepLeft
+        case 13:     return .keepRight
+        default:     return .straight
+        }
+    }
+
+    /// Best-effort-Ableitung aus dem Anweisungstext der MapKit-Fallback-Route
+    /// (die keine strukturierten Manöverdaten liefert).
+    static func fromText(_ text: String, isFirst: Bool) -> StepManeuver {
+        let lower = text.lowercased()
+        if isFirst, lower.isEmpty { return .depart }
+        if lower.contains("ziel") || lower.contains("angekommen") || lower.contains("erreicht") {
+            return .arrive
+        }
+        if lower.contains("wenden") { return .uTurn }
+        if lower.contains("links") {
+            return lower.contains("leicht") ? .slightLeft : .left
+        }
+        if lower.contains("rechts") {
+            return lower.contains("leicht") ? .slightRight : .right
+        }
+        return .straight
+    }
+}
+
+/// Ein Schritt der Turn-by-turn-Liste: das Manöver plus die Strasse/der Weg,
+/// dem man bis zum nächsten Manöver folgt ("wo durch"). Über `way_points`
+/// (ORS) an die Routengeometrie gekoppelt, damit sich der aktuelle Schritt
+/// aus der Position bestimmen lässt.
+struct RouteStep: Identifiable, Equatable {
+    /// Reihenfolge-Index in der Route (0 = Start).
+    let id: Int
+    /// Manöver-Richtung (liefert Icon und Kurzanweisung).
+    let maneuver: StepManeuver
+    /// Strassen-/Wegname des Schritts – nil, wenn unbenannt.
+    let streetName: String?
+    /// Vollständige Anweisung, falls der Routing-Dienst nur Text liefert
+    /// (MapKit-Fallback). Ersetzt dann die aus Manöver + Strasse gebildete.
+    let providedText: String?
+    /// Länge dieses Schritts (Meter).
+    let distanceM: CLLocationDistance
+    /// Dauer dieses Schritts (Sekunden).
+    let durationS: TimeInterval
+    /// Startkoordinate des Schritts (dort wird das Manöver ausgeführt).
+    let coordinate: CLLocationCoordinate2D
+
+    init(
+        id: Int,
+        maneuver: StepManeuver,
+        streetName: String? = nil,
+        providedText: String? = nil,
+        distanceM: CLLocationDistance,
+        durationS: TimeInterval = 0,
+        coordinate: CLLocationCoordinate2D
+    ) {
+        self.id = id
+        self.maneuver = maneuver
+        self.streetName = streetName
+        self.providedText = providedText
+        self.distanceM = distanceM
+        self.durationS = durationS
+        self.coordinate = coordinate
+    }
+
+    /// Primäre Anweisung der Zeile ("Links abbiegen").
+    var instruction: String {
+        if let providedText, !providedText.isEmpty { return providedText }
+        return maneuver.phrase
+    }
+
+    /// "Wo durch" – Strasse/Weg unter der Anweisung (nil = keine Angabe).
+    /// Bei Text-Schritten (Fallback) steckt die Strasse schon in `instruction`.
+    var wayText: String? {
+        if providedText != nil { return nil }
+        guard let streetName else { return nil }
+        switch maneuver {
+        case .arrive, .depart, .straight: return streetName
+        default: return "auf \(streetName)"
+        }
+    }
+
+    static func == (lhs: RouteStep, rhs: RouteStep) -> Bool {
+        lhs.id == rhs.id
+            && lhs.maneuver == rhs.maneuver
+            && lhs.streetName == rhs.streetName
+            && lhs.providedText == rhs.providedText
+            && lhs.distanceM == rhs.distanceM
     }
 }
 
@@ -219,16 +386,56 @@ enum RouteService {
             throw RouteError.noRoute
         }
 
+        let coordinates = feature.geometry.coordinates.map {
+            CLLocationCoordinate2D(latitude: $0[1], longitude: $0[0])
+        }
+
         return ActiveRoute(
             destinationName: destinationName,
             destinationCoordinate: destination,
-            coordinates: feature.geometry.coordinates.map {
-                CLLocationCoordinate2D(latitude: $0[1], longitude: $0[0])
-            },
+            coordinates: coordinates,
             totalDistanceM: feature.properties.summary.distance,
             expectedTravelTimeS: feature.properties.summary.duration,
-            kind: .wheelchair
+            kind: .wheelchair,
+            steps: orsSteps(from: feature.properties.segments, coordinates: coordinates)
         )
+    }
+
+    /// Baut die Turn-by-turn-Schritte aus den ORS-Segmenten. Jeder Schritt
+    /// referenziert über `way_points` seinen Startpunkt in der Routengeometrie.
+    private static func orsSteps(
+        from segments: [ORSDirectionsResponse.Segment]?,
+        coordinates: [CLLocationCoordinate2D]
+    ) -> [RouteStep] {
+        guard let segments else { return [] }
+        var steps: [RouteStep] = []
+        for segment in segments {
+            for step in segment.steps {
+                let startIndex = step.wayPoints.first ?? 0
+                let coordinate = coordinates.indices.contains(startIndex)
+                    ? coordinates[startIndex]
+                    : (coordinates.first ?? kCLLocationCoordinate2DInvalid)
+                steps.append(
+                    RouteStep(
+                        id: steps.count,
+                        maneuver: StepManeuver.fromORSType(step.type),
+                        streetName: cleanedStreetName(step.name),
+                        distanceM: step.distance,
+                        durationS: step.duration,
+                        coordinate: coordinate
+                    )
+                )
+            }
+        }
+        return steps
+    }
+
+    /// ORS liefert "-" für unbenannte Wege – zu nil normalisieren.
+    private static func cleanedStreetName(_ raw: String?) -> String? {
+        guard let raw else { return nil }
+        let trimmed = raw.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty, trimmed != "-" else { return nil }
+        return trimmed
     }
 
     /// Berechnet eine Fussgänger-Route via MapKit (Fallback ohne
@@ -252,8 +459,35 @@ enum RouteService {
             coordinates: route.polyline.coordinateList(),
             totalDistanceM: route.distance,
             expectedTravelTimeS: route.expectedTravelTime,
-            kind: .walkingFallback
+            kind: .walkingFallback,
+            steps: walkingSteps(from: route)
         )
+    }
+
+    /// Baut die Turn-by-turn-Schritte aus einer MapKit-Route. MKRoute liefert
+    /// nur Anweisungstext (keine strukturierten Manöver) – das Manöver-Icon
+    /// wird best-effort aus dem Text abgeleitet, der Text selbst angezeigt.
+    /// Schritte ohne Anweisung (ausser dem Start) werden übersprungen.
+    private static func walkingSteps(from route: MKRoute) -> [RouteStep] {
+        var steps: [RouteStep] = []
+        for (index, step) in route.steps.enumerated() {
+            let text = step.instructions.trimmingCharacters(in: .whitespaces)
+            let isFirst = index == 0
+            guard isFirst || !text.isEmpty else { continue }
+            let coordinate = step.polyline.coordinateList().first
+                ?? route.polyline.coordinateList().first
+                ?? kCLLocationCoordinate2DInvalid
+            steps.append(
+                RouteStep(
+                    id: steps.count,
+                    maneuver: StepManeuver.fromText(text, isFirst: isFirst),
+                    providedText: isFirst && text.isEmpty ? "Start" : text,
+                    distanceM: step.distance,
+                    coordinate: coordinate
+                )
+            )
+        }
+        return steps
     }
 
     /// Projiziert den Standort auf das nächstgelegene Routensegment und
@@ -840,6 +1074,10 @@ private struct ORSDirectionsResponse: Decodable {
 
     struct Properties: Decodable {
         let summary: Summary
+        /// Abschnitte mit Turn-by-turn-Schritten (ORS liefert sie standardmässig,
+        /// `instructions=true`). Optional, damit das Fehlen nicht die ganze
+        /// Route-Dekodierung scheitern lässt.
+        let segments: [Segment]?
     }
 
     struct Summary: Decodable {
@@ -847,5 +1085,29 @@ private struct ORSDirectionsResponse: Decodable {
         let distance: Double
         /// Erwartete Dauer in Sekunden.
         let duration: Double
+    }
+
+    /// Ein Routenabschnitt (Start → Zwischenziel/Ziel) mit seinen Schritten.
+    struct Segment: Decodable {
+        let steps: [Step]
+    }
+
+    /// Ein einzelner Turn-by-turn-Schritt (Manöver + Weg).
+    struct Step: Decodable {
+        /// Länge des Schritts in Metern.
+        let distance: Double
+        /// Dauer des Schritts in Sekunden.
+        let duration: Double
+        /// ORS-Instruktionstyp (0–13), siehe StepManeuver.fromORSType.
+        let type: Int
+        /// Strassen-/Wegname ("-" für unbenannte Wege).
+        let name: String?
+        /// Start-/Endindex des Schritts in der Routengeometrie.
+        let wayPoints: [Int]
+
+        enum CodingKeys: String, CodingKey {
+            case distance, duration, type, name
+            case wayPoints = "way_points"
+        }
     }
 }

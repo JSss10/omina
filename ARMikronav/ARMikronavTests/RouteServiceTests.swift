@@ -494,4 +494,66 @@ struct RouteServiceTests {
             expectedTravelTimeS: 180
         )
     }
+
+    // MARK: - Turn-by-turn-Schritte (StepManeuver / RouteStep)
+
+    /// Die ORS-Instruktionstypen werden korrekt auf Manöver abgebildet.
+    @Test func stepManeuverMapsORSTypes() {
+        #expect(StepManeuver.fromORSType(0) == .left)
+        #expect(StepManeuver.fromORSType(1) == .right)
+        #expect(StepManeuver.fromORSType(4) == .slightLeft)
+        #expect(StepManeuver.fromORSType(5) == .slightRight)
+        #expect(StepManeuver.fromORSType(6) == .straight)
+        #expect(StepManeuver.fromORSType(10) == .arrive)
+        #expect(StepManeuver.fromORSType(11) == .depart)
+        // Unbekannter Typ fällt auf "geradeaus" zurück.
+        #expect(StepManeuver.fromORSType(99) == .straight)
+    }
+
+    /// Ein Abbiege-Schritt mit Strasse zeigt "auf <Strasse>" als Wegangabe.
+    @Test func routeStepBuildsInstructionFromManeuver() {
+        let step = RouteStep(
+            id: 0,
+            maneuver: .left,
+            streetName: "Marktgasse",
+            distanceM: 40,
+            coordinate: CLLocationCoordinate2D(latitude: 47.37, longitude: 8.54)
+        )
+        #expect(step.instruction == "Links abbiegen")
+        #expect(step.wayText == "auf Marktgasse")
+    }
+
+    /// Ein Fallback-Schritt (nur Text) zeigt den Text und keine separate
+    /// Wegangabe (die Strasse steckt bereits im Text).
+    @Test func routeStepUsesProvidedTextForFallback() {
+        let step = RouteStep(
+            id: 1,
+            maneuver: .right,
+            providedText: "Nach rechts auf die Limmatgasse",
+            distanceM: 25,
+            coordinate: CLLocationCoordinate2D(latitude: 47.37, longitude: 8.54)
+        )
+        #expect(step.instruction == "Nach rechts auf die Limmatgasse")
+        #expect(step.wayText == nil)
+    }
+
+    /// Ohne Strassenname bleibt die Wegangabe leer.
+    @Test func routeStepWithoutStreetHasNoWayText() {
+        let step = RouteStep(
+            id: 2,
+            maneuver: .straight,
+            distanceM: 60,
+            coordinate: CLLocationCoordinate2D(latitude: 47.37, longitude: 8.54)
+        )
+        #expect(step.instruction == "Geradeaus weiter")
+        #expect(step.wayText == nil)
+    }
+
+    /// Best-effort-Ableitung des Manövers aus dem MapKit-Anweisungstext.
+    @Test func stepManeuverFromTextDetectsDirection() {
+        #expect(StepManeuver.fromText("Nach links abbiegen", isFirst: false) == .left)
+        #expect(StepManeuver.fromText("Leicht rechts halten", isFirst: false) == .slightRight)
+        #expect(StepManeuver.fromText("", isFirst: true) == .depart)
+        #expect(StepManeuver.fromText("Sie haben Ihr Ziel erreicht", isFirst: false) == .arrive)
+    }
 }

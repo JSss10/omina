@@ -34,6 +34,8 @@ struct MapView: View {
     @State private var showingSavedPlaces = false
     /// Listenansicht der Barrieren entlang der aktiven Route.
     @State private var showingRouteBarriers = false
+    /// Turn-by-turn-Listenansicht der aktiven Route.
+    @State private var showingRouteSteps = false
     /// In der Barrieren-Liste angetippte Barriere: wird nach dem Schliessen
     /// der Liste als Detail-Sheet geöffnet (zwei Sheets nicht gleichzeitig).
     @State private var pendingListBarrier: Barrier?
@@ -183,7 +185,7 @@ struct MapView: View {
             VStack(spacing: 8) {
                 searchBar
                     .padding(.leading)
-                    .padding(.trailing, 68) // Platz für den Home-Button (HomeView)
+                    .padding(.trailing, 60) // Platz für den Kompass (rechts oben)
 
                 // Fallback-Banner nur ohne Mitteilungs-Berechtigung; sonst
                 // kommt die Warnung als System-Mitteilung (UserNotifications).
@@ -228,12 +230,13 @@ struct MapView: View {
             .animation(.spring(duration: 0.35), value: proximityService.activeWarning?.barrier.id)
             .animation(.spring(duration: 0.35), value: viewModel.isOffRoute)
         }
-        // Persistenter Kompass (Blickrichtung des Geräts), unterhalb des
-        // Home-Buttons (HomeView, rechts oben).
+        // Persistenter Kompass (Blickrichtung des Geräts), rechts oben auf
+        // Höhe der Suchleiste – dort, wo früher der Home-Button sass (jetzt
+        // ersetzt durch die sichtbare Tab-Leiste, HomeView).
         .overlay(alignment: .topTrailing) {
             CompassView(heading: locationService.heading)
                 .padding(.trailing, 16)
-                .padding(.top, 72)
+                .padding(.top, 16)
         }
         .overlay(alignment: .bottomLeading) {
             // Während der Navigation ersetzt das Routen-Panel Filter und Chips.
@@ -255,6 +258,8 @@ struct MapView: View {
                     route: route,
                     progress: viewModel.routeProgress,
                     maneuver: viewModel.nextManeuver,
+                    currentStep: currentRouteStep,
+                    onShowSteps: route.steps.isEmpty ? nil : { showingRouteSteps = true },
                     barrierCount: routeBarrierCount,
                     criticalCount: criticalRouteBarrierCount,
                     onShowBarriers: { showingRouteBarriers = true },
@@ -311,6 +316,17 @@ struct MapView: View {
             }
             .trackScreen("route_barrier_list")
         }
+        // Turn-by-turn-Listenansicht der aktiven Route (wo/wann/wo durch).
+        .sheet(isPresented: $showingRouteSteps) {
+            if let route = viewModel.activeRoute {
+                RouteStepsListSheet(
+                    route: route,
+                    progress: viewModel.routeProgress,
+                    currentStepIndex: viewModel.currentStepIndex
+                )
+                .trackScreen("route_steps_list")
+            }
+        }
         .sheet(item: $selectedPOI) { poi in
             POIDetailSheet(
                 poi: poi,
@@ -356,7 +372,7 @@ struct MapView: View {
         } label: {
             HStack {
                 Image(systemName: "magnifyingglass")
-                Text("Café suchen…")
+                Text("Ort suchen…")
                 Spacer()
             }
             // Kräftigere Textfarbe: der Platzhalter war auf der hellen Karte
@@ -678,6 +694,14 @@ struct MapView: View {
             latitude: origin.latitude + cos(radians) * distanceM / metersPerDegreeLatitude,
             longitude: origin.longitude + sin(radians) * distanceM / metersPerDegreeLongitude
         )
+    }
+
+    /// Aktueller Schritt der aktiven Route (Strasse "wo durch" fürs Panel).
+    private var currentRouteStep: RouteStep? {
+        guard let route = viewModel.activeRoute,
+              let index = viewModel.currentStepIndex,
+              route.steps.indices.contains(index) else { return nil }
+        return route.steps[index]
     }
 
     /// Barrieren im Korridor der aktiven Route (für die Zähler-Zeile im

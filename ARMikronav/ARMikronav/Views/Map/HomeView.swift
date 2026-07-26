@@ -61,7 +61,6 @@ struct HomeView: View {
             .tag(Tab.home)
 
             mapContent
-                .toolbar(.hidden, for: .tabBar)
                 .tabItem {
                     Label("Karte", systemImage: "map.fill")
                 }
@@ -92,9 +91,10 @@ struct HomeView: View {
     }
 
     private var mapContent: some View {
+        // Die Tab-Leiste (Navbar) bleibt auf der Karte sichtbar – der frühere
+        // Home-Button ist damit überflüssig und entfällt. Die Karte respektiert
+        // unten die Safe Area, damit Bedienelemente über der Tab-Leiste liegen.
         MapView(profile: profile, viewModel: viewModel, onStartARRoute: startARRoute)
-            .ignoresSafeArea(edges: .bottom)
-            .overlay(alignment: .topTrailing) { homeButton }
             // Der AR-FAB verschwindet während der aktiven Navigation: Das
             // Routen-Panel (Abbiege-Anweisung) darf die volle Breite nutzen.
             .overlay(alignment: .bottomTrailing) {
@@ -130,22 +130,6 @@ struct HomeView: View {
                 selectedTab = .ar
             }
         }
-    }
-
-    // Zurück zum Start – die Tab-Leiste ist auf der Vollbild-Karte ausgeblendet,
-    // dieser Button ist der Weg zurück zur Navigation.
-    private var homeButton: some View {
-        Button {
-            selectedTab = .home
-        } label: {
-            Image(systemName: "house.fill")
-                .font(.title3)
-                // Gleiche Höhe wie die Suchleiste (MapView).
-                .frame(width: 44, height: 44)
-                .background(.thinMaterial, in: Circle())
-        }
-        .padding()
-        .accessibilityLabel("Zurück zum Start")
     }
 
     private var arFAB: some View {

@@ -193,6 +193,56 @@ final class MapViewModel: ObservableObject {
             .sorted { $0.distanceFromStartM < $1.distanceFromStartM }
     }
 
+    /// Index des Schritts, den der User gerade zurücklegt (für die Hervorhebung
+    /// in der Turn-by-turn-Liste). Schritte davor gelten als erledigt, danach
+    /// als bevorstehend. nil, wenn keine Route mit Schritten aktiv ist; ohne
+    /// Standort-Fix der erste Schritt.
+    var currentStepIndex: Int? {
+        guard let route = activeRoute, !route.steps.isEmpty else { return nil }
+        guard let location = locationService.currentLocation else { return 0 }
+        let userAlongM = RouteService.distanceAlongRoute(to: location.coordinate, on: route)
+        var cumulativeM = 0.0
+        for (index, step) in route.steps.enumerated() {
+            cumulativeM += step.distanceM
+            if userAlongM < cumulativeM { return index }
+        }
+        return route.steps.count - 1
+    }
+
+    /// POIs nach Luftlinien-Distanz zum aktuellen Standort sortiert – die
+    /// Datenbasis der "In der Nähe"-Liste in der Suche. Ohne Standort-Fix nach
+    /// der importierten Distanz sortiert.
+    func nearbyPOIs(limit: Int = 12) -> [POI] {
+        guard let user = locationService.currentLocation else {
+            return Array(altstadtPOIs.sorted { $0.distanceM < $1.distanceM }.prefix(limit))
+        }
+        return altstadtPOIs
+            .sorted {
+                user.distance(from: CLLocation(latitude: $0.latitude, longitude: $0.longitude))
+                    < user.distance(from: CLLocation(latitude: $1.latitude, longitude: $1.longitude))
+            }
+            .prefix(limit)
+            .map { $0 }
+    }
+
+    /// Luftlinien-Distanz eines POI zum aktuellen Standort als String; ohne
+    /// Standort-Fix die importierte Distanz (relativ zum Altstadt-Zentrum).
+    func userDistanceText(to poi: POI) -> String {
+        if let user = locationService.currentLocation {
+            let meters = user.distance(from: CLLocation(latitude: poi.latitude, longitude: poi.longitude))
+            return DistanceFormatter.string(fromMeters: meters)
+        }
+        return DistanceFormatter.string(fromMeters: poi.distanceM)
+    }
+
+    /// Findet den geladenen Altstadt-POI zu einem Namen (case-insensitiv) –
+    /// löst einen Eintrag der "Letzte Orte"-Liste zurück auf einen echten POI
+    /// auf, damit die Auswahl im gewohnten POI-Detail landet.
+    func poi(named name: String) -> POI? {
+        let trimmed = name.trimmingCharacters(in: .whitespaces)
+        return altstadtPOIs.first { $0.name.caseInsensitiveCompare(trimmed) == .orderedSame }
+    }
+
     /// POIs, die auf der Karte/AR angezeigt werden:
     /// – aktive Navigation → nur noch das Ziel (auch bei ausgeblendeten POIs,
     ///   damit das Navigationsziel immer sichtbar bleibt)
