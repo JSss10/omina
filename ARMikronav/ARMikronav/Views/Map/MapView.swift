@@ -194,6 +194,14 @@ struct MapView: View {
                         .transition(.move(edge: .top).combined(with: .opacity))
                 }
 
+                // Hinweis, dass man von der Route abgekommen ist (mit
+                // Status der automatischen Neuberechnung).
+                if viewModel.isOffRoute {
+                    offRouteBanner
+                        .padding(.horizontal)
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                }
+
                 if !connectivity.isOnline {
                     OfflineOverlay()
                         .transition(.move(edge: .top).combined(with: .opacity))
@@ -203,10 +211,10 @@ struct MapView: View {
                         .padding(8)
                         .background(.thinMaterial, in: Capsule())
                 }
-                if viewModel.isCalculatingRoute || viewModel.isRerouting {
+                if viewModel.isCalculatingRoute {
                     HStack(spacing: 8) {
                         ProgressView()
-                        Text(viewModel.isRerouting ? "Route wird angepasst…" : "Route wird berechnet…")
+                        Text("Route wird berechnet…")
                             .font(.footnote)
                     }
                     .padding(.horizontal, 12)
@@ -218,6 +226,7 @@ struct MapView: View {
             .padding(.top, 16)
             .animation(.easeInOut(duration: 0.25), value: connectivity.isOnline)
             .animation(.spring(duration: 0.35), value: proximityService.activeWarning?.barrier.id)
+            .animation(.spring(duration: 0.35), value: viewModel.isOffRoute)
         }
         // Persistenter Kompass (Blickrichtung des Geräts), unterhalb des
         // Home-Buttons (HomeView, rechts oben).
@@ -442,7 +451,9 @@ struct MapView: View {
     }
 
     // Banner ~30 m vor profilrelevanter Barriere.
-    // Tap → Detail-Sheet, X → dismiss, auto-dismiss nach 10 s.
+    // Tap → Detail-Sheet, X oder Wegswipen → dismiss. Bleibt bewusst stehen,
+    // bis es weggewischt wird (kein automatisches Ausblenden) – so verpasst
+    // man die Warnung nicht (Feldtest-Rückmeldung Tag 1).
     private func approachBanner(_ warning: BarrierWarning) -> some View {
         Button {
             selectedBarrier = warning.barrier
@@ -457,7 +468,7 @@ struct MapView: View {
                     Text("\(warning.barrierValue) in \(Int(warning.distance)) m voraus")
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(.primary)
-                    Text("Tippen für Details")
+                    Text("Tippen für Details · Wegwischen zum Ausblenden")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -479,10 +490,44 @@ struct MapView: View {
             .shadow(radius: 4)
         }
         .buttonStyle(.plain)
-        .task(id: warning.barrier.id) {
-            try? await Task.sleep(for: .seconds(10))
-            proximityService.dismissCurrent()
+        .swipeToDismiss { proximityService.dismissCurrent() }
+    }
+
+    /// Hinweis, dass man von der Route abgekommen ist. Der Untertitel zeigt,
+    /// was gerade passiert (Neuberechnung läuft / geplant / offline nicht
+    /// möglich). Blendet sich automatisch aus, sobald man wieder auf Kurs ist.
+    private var offRouteBanner: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(.orange)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Du bist von der Route abgekommen")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.primary)
+                Text(offRouteSubtitle)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            if viewModel.isRerouting {
+                ProgressView()
+            }
         }
+        .padding(12)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
+        .shadow(radius: 4)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Du bist von der Route abgekommen. \(offRouteSubtitle)")
+    }
+
+    private var offRouteSubtitle: String {
+        if viewModel.isRerouting { return "Route wird angepasst…" }
+        if !connectivity.isOnline { return "Kein Netz – bisherige Route bleibt" }
+        return "Route wird neu berechnet"
     }
 
     // MARK: - Helpers

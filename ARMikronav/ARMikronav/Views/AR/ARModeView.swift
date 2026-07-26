@@ -158,13 +158,20 @@ struct ARModeView: View {
             VStack(spacing: 10) {
                 poiFilterRow
 
-                // Automatische Neuberechnung, wenn der User der Route nicht
-                // folgt – dezenter Hinweis, dass sich die AR-Route anpasst.
-                if viewModel.isRerouting {
+                // Hinweis, wenn man von der Route abkommt – mit Status der
+                // automatischen Neuberechnung (die AR-Route passt sich an).
+                if viewModel.isOffRoute {
                     HStack(spacing: 8) {
-                        ProgressView()
-                            .tint(.white)
-                        Text("Route wird angepasst…")
+                        if viewModel.isRerouting {
+                            ProgressView()
+                                .tint(.white)
+                        } else {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundStyle(.orange)
+                        }
+                        Text(viewModel.isRerouting
+                            ? "Route wird angepasst…"
+                            : "Du bist von der Route abgekommen")
                             .font(.footnote.weight(.medium))
                             .foregroundStyle(.white)
                     }
@@ -203,6 +210,7 @@ struct ARModeView: View {
         .onAppear { locationService.startUpdatingHeading() }
         .animation(.spring(duration: 0.35), value: warningService.activeWarning?.barrier.id)
         .animation(.spring(duration: 0.35), value: viewModel.activeRoute?.id)
+        .animation(.easeInOut(duration: 0.25), value: viewModel.isOffRoute)
         .animation(.easeInOut(duration: 0.25), value: viewModel.isRerouting)
         .onReceive(locationService.$currentLocation) { _ in
             evaluateProximity()

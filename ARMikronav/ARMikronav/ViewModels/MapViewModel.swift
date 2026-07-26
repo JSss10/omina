@@ -45,6 +45,10 @@ final class MapViewModel: ObservableObject {
     /// Läuft gerade eine automatische Neuberechnung, weil der User von der
     /// Route abgewichen ist? (Für einen dezenten Hinweis in der UI.)
     @Published private(set) var isRerouting = false
+    /// True, sobald der User bestätigt neben der Route fährt – für den
+    /// Hinweis "Du bist von der Route abgekommen" (auch offline, wenn keine
+    /// Neuberechnung möglich ist).
+    @Published private(set) var isOffRoute = false
     /// Ziel-POI der aktiven Navigation (nil, wenn keine Route läuft).
     @Published private(set) var navigationTarget: POI?
     /// Barrieren, die der User für heute als "nicht machbar" markiert hat
@@ -91,7 +95,8 @@ final class MapViewModel: ObservableObject {
     /// – Barrieren per Toggle ausgeblendet → keine
     /// – aktive Route → nur Barrieren im Korridor direkt entlang der Route,
     ///   co-lokalisierte zu EINER Stelle zusammengefasst (siehe unten)
-    /// – sonst → alle profilrelevanten Barrieren der Altstadt (neben den POIs)
+    /// – sonst → nur profilrelevante Barrieren im Umkreis des Standorts
+    ///   (defaultBarrierRadius), co-lokalisierte zusammengefasst
     var displayedBarriers: [Barrier] {
         guard barriersVisible else { return [] }
         if let route = activeRoute {
@@ -106,7 +111,23 @@ final class MapViewModel: ObservableObject {
             }
             return collapseColocated(onRoute)
         }
-        return filteredBarriers
+        // Ohne Route nur die Barrieren im Umkreis des aktuellen Standorts
+        // anzeigen (Überlastung vermeiden); passt sich beim Weiterfahren an.
+        return collapseColocated(barriersNearCurrentLocation(filteredBarriers))
+    }
+
+    /// Radius um den aktuellen Standort, innerhalb dessen Barrieren auf der
+    /// Karte erscheinen. Bewusst begrenzt, damit in der dichten Altstadt nicht
+    /// alle Barrieren gleichzeitig die Karte überladen (Feldtest-Rückmeldung
+    /// Tag 1). Ohne Standort-Fix (kurz nach dem Start) werden übergangsweise
+    /// alle geladenen Barrieren gezeigt.
+    private func barriersNearCurrentLocation(_ barriers: [Barrier]) -> [Barrier] {
+        guard let location = locationService.currentLocation else { return barriers }
+        return barriers.filter { barrier in
+            location.distance(
+                from: CLLocation(latitude: barrier.latitude, longitude: barrier.longitude)
+            ) <= AppConfig.defaultBarrierRadius
+        }
     }
 
     /// Fasst Barrieren am exakt selben Punkt zu EINER Stelle zusammen –
@@ -254,32 +275,36 @@ final class MapViewModel: ObservableObject {
     /// Neuberechnung an. So passt sich die (AR-)Route an, wenn jemand der
     /// vorgeschlagenen Strecke nicht folgt (Feldtest-Rückmeldung Tag 1).
     private func considerReroute(from location: CLLocation) {
-        guard let route = activeRoute,
-              let profile = navigationProfile,
-              !isRerouting,
-              !isCalculatingRoute,
-              ConnectivityMonitor.shared.isOnline
-        else { return }
+        guard let route = activeRoute, let profile = navigationProfile else { return }
 
-        // Am Ziel nicht mehr umleiten.
+        // Am Ziel weder warnen noch umleiten.
         if routeProgress?.hasArrived == true {
             offRouteUpdates = 0
+            isOffRoute = false
             return
         }
 
         let offBy = RouteService.distance(from: location.coordinate, to: route)
         guard offBy > offRouteThresholdM else {
             offRouteUpdates = 0
+            isOffRoute = false
             return
         }
 
         offRouteUpdates += 1
         guard offRouteUpdates >= offRouteConfirmations else { return }
+
+        // Bestätigt neben der Route: den Hinweis zeigen (auch offline, wenn
+        // keine Neuberechnung möglich ist – dann bleibt die bisherige Route).
+        isOffRoute = true
+
+        // Neuberechnung nur online, nicht während einer laufenden Berechnung,
+        // und höchstens einmal pro Sperrzeit.
+        guard !isRerouting, !isCalculatingRoute, ConnectivityMonitor.shared.isOnline else { return }
         if let last = lastRerouteAt, Date().timeIntervalSince(last) < minRerouteInterval {
             return
         }
 
-        offRouteUpdates = 0
         lastRerouteAt = Date()
         Task { await reroute(from: location, profile: profile) }
     }
@@ -325,6 +350,9 @@ final class MapViewModel: ObservableObject {
             else { return }
 
             activeRoute = newRoute
+            // Jetzt startet die Route am aktuellen Standort → wieder auf Kurs.
+            isOffRoute = false
+            offRouteUpdates = 0
             if let latest = locationService.currentLocation {
                 routeProgress = RouteService.progress(of: newRoute, at: latest)
                 nextManeuver = RouteService.nextManeuver(of: newRoute, at: latest)
@@ -395,6 +423,7 @@ final class MapViewModel: ObservableObject {
             navigationTarget = poi
             navigationProfile = profile
             offRouteUpdates = 0
+            isOffRoute = false
             lastRerouteAt = nil
             routeProgress = RouteProgress(
                 remainingDistanceM: route.totalDistanceM,
@@ -424,6 +453,7 @@ final class MapViewModel: ObservableObject {
         nextManeuver = nil
         avoidedBarrierIds = []
         offRouteUpdates = 0
+        isOffRoute = false
         lastRerouteAt = nil
     }
 

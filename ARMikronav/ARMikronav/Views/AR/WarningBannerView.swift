@@ -39,6 +39,9 @@ struct WarningBannerView: View {
         .padding(12)
         .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 14))
         .shadow(radius: 6)
+        // Bleibt stehen, bis es per X oder Wegswipen ausgeblendet wird
+        // (kein automatisches Verschwinden).
+        .swipeToDismiss(perform: onDismiss)
     }
 
     private var icon: some View {
