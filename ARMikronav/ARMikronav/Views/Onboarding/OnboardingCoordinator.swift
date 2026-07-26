@@ -29,6 +29,8 @@ struct OnboardingCoordinator: View {
                         )
                     case .measurements:
                         Screen13_Measurements(draft: $viewModel.draft)
+                    case .phoneSetup:
+                        PhoneOrientationScreen()
                     case .abilities:
                         Screen14_Abilities(draft: $viewModel.draft)
                     case .support:

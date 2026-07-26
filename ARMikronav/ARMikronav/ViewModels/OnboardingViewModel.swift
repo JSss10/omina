@@ -76,7 +76,7 @@ final class OnboardingViewModel: ObservableObject {
             return draft.mobilityCategory == .wheelchair
         case .wheelchairType:
             return draft.wheelchairSubtype != nil
-        case .measurements, .abilities, .support:
+        case .measurements, .phoneSetup, .abilities, .support:
             return true
         case .summary:
             return draft.isComplete
@@ -142,9 +142,10 @@ enum OnboardingStep: Int, CaseIterable {
     case mobilityCategory = 2
     case wheelchairType   = 3
     case measurements     = 4
-    case abilities        = 5
-    case support          = 6
-    case summary          = 7
+    case phoneSetup       = 5
+    case abilities        = 6
+    case support          = 7
+    case summary          = 8
 
     var progress: Double {
         Double(rawValue) / Double(Self.allCases.count)
@@ -156,6 +157,7 @@ enum OnboardingStep: Int, CaseIterable {
         case .mobilityCategory: return "Wie bist du unterwegs?"
         case .wheelchairType:   return "Dein Rollstuhl"
         case .measurements:     return "Masse"
+        case .phoneSetup:       return "Handy-Ausrichtung"
         case .abilities:        return "Deine Fähigkeiten"
         case .support:          return "Unterstützung"
         case .summary:          return "Zusammenfassung"
@@ -168,6 +170,7 @@ enum OnboardingStep: Int, CaseIterable {
         case .mobilityCategory: return "Wähle deine Mobilitätssituation"
         case .wheelchairType:   return "Welchen Rollstuhl nutzt du?"
         case .measurements:     return "Für genauere Barrierenwarnungen"
+        case .phoneSetup:       return "So richtest du dein iPhone für AR aus"
         case .abilities:        return "Was traust du dir im Alltag zu?"
         case .support:          return "Bist du meist allein unterwegs?"
         case .summary:          return "Überprüfe dein Profil"

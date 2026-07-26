@@ -35,7 +35,7 @@ struct Screen13_Measurements: View {
                 value: intBinding(\.seatHeightCm),
                 sliderMax: 120,
                 unit: "cm",
-                hint: "Oberkante Sitzfläche inkl. Kissen ab Boden – damit der AR-Pfad aus deiner Perspektive exakt auf dem Boden liegt"
+                hint: "Oberkante Sitzfläche inkl. Kissen ab Boden – bestimmt deine Augenhöhe für den AR-Pfad"
             )
 
             MeasurementSlider(
