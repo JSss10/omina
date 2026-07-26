@@ -272,6 +272,15 @@ final class MapViewModel: ObservableObject {
                 self?.handleLocationUpdate(location)
             }
             .store(in: &cancellables)
+
+        // Blickrichtungs-Updates: die Abbiege-Anweisung ist egozentrisch
+        // (relativ zur Blickrichtung), muss sich also auch beim Drehen auf der
+        // Stelle aktualisieren – nicht erst beim nächsten Standort-Update.
+        Publishers.Merge(locationService.$heading, locationService.$lookDirection)
+            .sink { [weak self] _ in
+                self?.refreshManeuver()
+            }
+            .store(in: &cancellables)
     }
 
     private func handleLocationUpdate(_ location: CLLocation) {
@@ -279,8 +288,33 @@ final class MapViewModel: ObservableObject {
         // geladen – hier nur den Routenfortschritt aktualisieren.
         if let route = activeRoute {
             routeProgress = RouteService.progress(of: route, at: location)
-            nextManeuver = RouteService.nextManeuver(of: route, at: location)
+            nextManeuver = RouteService.nextManeuver(of: route, at: location, heading: locationService.viewingDirection)
+            lastManeuverRefresh = Date()
             considerReroute(from: location)
+        }
+    }
+
+    /// Zeitpunkt der letzten Manöver-Neuberechnung (leichte Drosselung, weil
+    /// die Blickrichtung mit ~20 Hz kommt).
+    private var lastManeuverRefresh: Date?
+
+    /// Berechnet nur die Abbiege-Anweisung neu (bei Blickrichtungsänderung).
+    /// Gedrosselt auf ~4×/s und nur veröffentlicht, wenn sie sich ändert –
+    /// so bleibt die Anzeige ruhig.
+    private func refreshManeuver() {
+        guard let route = activeRoute,
+              let location = locationService.currentLocation else { return }
+        let now = Date()
+        if let last = lastManeuverRefresh, now.timeIntervalSince(last) < 0.25 { return }
+        lastManeuverRefresh = now
+
+        let maneuver = RouteService.nextManeuver(
+            of: route,
+            at: location,
+            heading: locationService.viewingDirection
+        )
+        if maneuver != nextManeuver {
+            nextManeuver = maneuver
         }
     }
 
@@ -369,7 +403,7 @@ final class MapViewModel: ObservableObject {
             offRouteUpdates = 0
             if let latest = locationService.currentLocation {
                 routeProgress = RouteService.progress(of: newRoute, at: latest)
-                nextManeuver = RouteService.nextManeuver(of: newRoute, at: latest)
+                nextManeuver = RouteService.nextManeuver(of: newRoute, at: latest, heading: locationService.viewingDirection)
             }
         } catch {
             // Neuberechnung fehlgeschlagen – bestehende Route beibehalten.
@@ -444,7 +478,7 @@ final class MapViewModel: ObservableObject {
                 remainingTimeS: route.expectedTravelTimeS
             )
             if let location = locationService.currentLocation {
-                nextManeuver = RouteService.nextManeuver(of: route, at: location)
+                nextManeuver = RouteService.nextManeuver(of: route, at: location, heading: locationService.viewingDirection)
             }
             // Ziel für die "Letzte Ziele"-Liste auf dem Homescreen merken.
             RecentDestinationsStore.shared.record(
@@ -507,7 +541,7 @@ final class MapViewModel: ObservableObject {
                 remainingTimeS: newRoute.expectedTravelTimeS
             )
             if let location = locationService.currentLocation {
-                nextManeuver = RouteService.nextManeuver(of: newRoute, at: location)
+                nextManeuver = RouteService.nextManeuver(of: newRoute, at: location, heading: locationService.viewingDirection)
             }
             return true
         } catch {

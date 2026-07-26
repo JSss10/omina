@@ -172,6 +172,76 @@ struct RouteServiceTests {
         #expect(maneuver?.direction == .left)
     }
 
+    // MARK: - Egozentrische Ausrichtung (Blickrichtung)
+
+    /// Route ~120 m nach Osten.
+    private var eastRoute: ActiveRoute {
+        let start = CLLocationCoordinate2D(latitude: 47.3700, longitude: 8.5400)
+        let end = CLLocationCoordinate2D(latitude: 47.3700, longitude: 8.541593) // ~120 m östlich
+        return ActiveRoute(
+            destinationName: "Test-Ost",
+            destinationCoordinate: end,
+            coordinates: [start, end],
+            totalDistanceM: 120,
+            expectedTravelTimeS: 110
+        )
+    }
+
+    /// Szenario aus dem Feldtest: Route führt nach Osten, man schaut aber nach
+    /// Süden – aus Sicht des Users muss man nach LINKS (nicht rechts), und die
+    /// Anweisung soll das "jetzt" ansagen.
+    @Test func maneuverReorientsLeftWhenFacingSouthOnEastRoute() {
+        let route = eastRoute
+        let start = CLLocation(latitude: 47.3700, longitude: 8.5400)
+
+        let maneuver = RouteService.nextManeuver(of: route, at: start, heading: 180)
+
+        #expect(maneuver?.direction == .left)
+        #expect(maneuver?.distanceM == 0)
+    }
+
+    /// Spiegelbild: Route nach Norden, Blick nach Osten ⇒ links.
+    @Test func maneuverReorientsLeftWhenFacingEastOnNorthRoute() {
+        let route = straightRoute
+        let start = CLLocation(latitude: 47.3700, longitude: 8.5400)
+
+        let maneuver = RouteService.nextManeuver(of: route, at: start, heading: 90)
+
+        #expect(maneuver?.direction == .left)
+    }
+
+    /// Route nach Norden, Blick nach Westen ⇒ rechts.
+    @Test func maneuverReorientsRightWhenFacingWestOnNorthRoute() {
+        let route = straightRoute
+        let start = CLLocation(latitude: 47.3700, longitude: 8.5400)
+
+        let maneuver = RouteService.nextManeuver(of: route, at: start, heading: 270)
+
+        #expect(maneuver?.direction == .right)
+    }
+
+    /// Grob zur Route ausgerichtet: die egozentrische Korrektur greift nicht,
+    /// die Anweisung folgt wieder der Routengeometrie (Knick nach rechts).
+    @Test func maneuverKeepsGeometryTurnWhenAligned() {
+        let route = cornerRoute
+        let start = CLLocation(latitude: 47.3700, longitude: 8.5400)
+
+        // Blickrichtung ~Nord = Richtung des ersten Segments → keine Korrektur.
+        let maneuver = RouteService.nextManeuver(of: route, at: start, heading: 0)
+
+        #expect(maneuver?.direction == .right)
+    }
+
+    /// Ausgerichtet auf gerader Route: geradeaus (keine Fehlausrichtung).
+    @Test func maneuverStraightWhenAlignedOnStraightRoute() {
+        let route = straightRoute
+        let start = CLLocation(latitude: 47.3700, longitude: 8.5400)
+
+        let maneuver = RouteService.nextManeuver(of: route, at: start, heading: 0)
+
+        #expect(maneuver?.direction == .straight)
+    }
+
     // MARK: - Distanz entlang der Route (Barrieren-Liste)
 
     /// Punkt auf halber Strecke: ~100 m ab Start entlang der Route.

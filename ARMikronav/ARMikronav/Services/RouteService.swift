@@ -388,14 +388,45 @@ enum RouteService {
     private static let turnThresholdDeg = 50.0
     /// Segmente kürzer als das gelten als GPS-/Geometrie-Rauschen.
     private static let minSegmentLengthM = 0.5
+    /// Winkel (Grad), ab dem die Blickrichtung als "quer zur Route" gilt und
+    /// zuerst eine Ausrichtung zur Route angesagt wird (statt des nächsten
+    /// Routenknicks). Bewusst grösser als der Slight-Turn-Schwellwert, damit
+    /// nur klare Fehlausrichtungen (quer/rückwärts) die Knick-Ansage überschreiben.
+    private static let reorientThresholdDeg = 45.0
 
-    /// Bestimmt das nächste Manöver auf der Route: projiziert den Standort
-    /// auf das nächstgelegene Segment und läuft die Polyline vorwärts bis
-    /// zum ersten signifikanten Richtungsknick. Kein Knick mehr → geradeaus
-    /// bis zum Ziel (distanceM = Restweg).
-    static func nextManeuver(of route: ActiveRoute, at location: CLLocation) -> RouteManeuver? {
+    /// Bestimmt das nächste Manöver auf der Route.
+    ///
+    /// Ist `heading` (aktuelle Blickrichtung) bekannt und weicht sie stark von
+    /// der Routenrichtung ab, wird zuerst eine EGOZENTRISCHE Ausrichtung zur
+    /// Route angesagt ("Jetzt links/rechts") – relativ dazu, wohin man gerade
+    /// schaut. Ohne diese Korrektur käme die Anweisung nur aus der Routen-
+    /// Geometrie und stimmte nicht mit der Blickrichtung überein (z. B. Route
+    /// nach Osten, Blick nach Süden ⇒ Osten ist links, nicht rechts).
+    ///
+    /// Ist man grob zur Route ausgerichtet (oder `heading` unbekannt),
+    /// projiziert die Funktion den Standort auf das nächstgelegene Segment und
+    /// läuft die Polyline vorwärts bis zum ersten signifikanten Richtungsknick.
+    /// Kein Knick mehr → geradeaus bis zum Ziel (distanceM = Restweg).
+    static func nextManeuver(
+        of route: ActiveRoute,
+        at location: CLLocation,
+        heading: CLLocationDirection? = nil
+    ) -> RouteManeuver? {
         let coords = route.coordinates
         guard coords.count >= 2 else { return nil }
+
+        // Blickrichtung quer zur Route → zuerst zur Route hin ausrichten.
+        if let heading, let routeBearing = travelBearingDegrees(of: route, at: location) {
+            let reorient = normalizedSignedDegrees(routeBearing - heading)
+            if abs(reorient) >= reorientThresholdDeg {
+                // Kompasskurs im Uhrzeigersinn: positiv = Route rechts der
+                // Blickrichtung ⇒ nach rechts drehen, negativ ⇒ nach links.
+                return RouteManeuver(
+                    direction: reorient > 0 ? .right : .left,
+                    distanceM: 0
+                )
+            }
+        }
 
         // Lokales Ost/Nord-Meter-Koordinatensystem um den Standort (0,0).
         let points = coords.map { metersEastNorth(of: $0, relativeTo: location.coordinate) }
@@ -633,6 +664,15 @@ enum RouteService {
         let cross = a.x * b.y - a.y * b.x
         let dot = simd_dot(a, b)
         return atan2(cross, dot) * 180 / .pi
+    }
+
+    /// Normiert einen Winkel (Grad) auf (−180, 180]. Für die egozentrische
+    /// Ausrichtung: positiv = im Uhrzeigersinn (rechts), negativ = links.
+    private static func normalizedSignedDegrees(_ degrees: Double) -> Double {
+        var value = degrees.truncatingRemainder(dividingBy: 360)
+        if value <= -180 { value += 360 }
+        if value > 180 { value -= 360 }
+        return value
     }
 
     /// Flach-Erde-Näherung wie in ARGeoMapper: x = Ost-Meter, y = Nord-Meter.
