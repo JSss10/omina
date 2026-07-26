@@ -221,15 +221,38 @@ struct RouteServiceTests {
         #expect(maneuver?.direction == .slightRight)
     }
 
-    /// Erst bei annähernder Kehrtwende (hier ~170° neben der Route) wird die
-    /// Ausrichtung als volles Abbiegen angesagt.
-    @Test func maneuverReorientsFullTurnWhenFacingBackwards() {
+    /// Deutliche, aber noch nicht entgegengesetzte Fehlausrichtung (hier ~130°
+    /// neben der Route) wird als volles seitliches Abbiegen angesagt.
+    @Test func maneuverReorientsFullTurnWhenStronglyMisaligned() {
+        let route = straightRoute // nach Norden
+        let start = CLLocation(latitude: 47.3700, longitude: 8.5400)
+
+        let maneuver = RouteService.nextManeuver(of: route, at: start, heading: 130)
+
+        #expect(maneuver?.direction == .left)
+    }
+
+    /// Blickt man (annähernd) entgegengesetzt zur Route – hier ~170° daneben –,
+    /// wird ein "Umdrehen" angesagt (die Seite links/rechts ist dann uneindeutig).
+    @Test func maneuverReorientsTurnAroundWhenFacingBackwards() {
         let route = straightRoute // nach Norden
         let start = CLLocation(latitude: 47.3700, longitude: 8.5400)
 
         let maneuver = RouteService.nextManeuver(of: route, at: start, heading: 170)
 
-        #expect(maneuver?.direction == .left)
+        #expect(maneuver?.direction == .turnAround)
+        #expect(maneuver?.distanceM == 0)
+        #expect(maneuver?.instruction == "Bitte umdrehen")
+    }
+
+    /// Genau entgegengesetzte Blickrichtung (180° neben der Route) ⇒ umdrehen.
+    @Test func maneuverReorientsTurnAroundWhenFacingExactlyBackwards() {
+        let route = straightRoute // nach Norden
+        let start = CLLocation(latitude: 47.3700, longitude: 8.5400)
+
+        let maneuver = RouteService.nextManeuver(of: route, at: start, heading: 180)
+
+        #expect(maneuver?.direction == .turnAround)
     }
 
     /// Grob zur Route ausgerichtet: die egozentrische Korrektur greift nicht,

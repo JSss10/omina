@@ -89,6 +89,10 @@ enum ManeuverDirection: Equatable {
     case slightRight
     case left
     case right
+    /// Blickrichtung zeigt (annähernd) entgegengesetzt zur Route – man muss
+    /// sich umdrehen. Entsteht nur aus der egozentrischen Ausrichtung, nicht
+    /// aus der Routengeometrie.
+    case turnAround
 
     var symbolName: String {
         switch self {
@@ -97,6 +101,7 @@ enum ManeuverDirection: Equatable {
         case .slightRight: return "arrow.up.right"
         case .left:        return "arrow.turn.up.left"
         case .right:       return "arrow.turn.up.right"
+        case .turnAround:  return "arrow.uturn.down"
         }
     }
 
@@ -108,6 +113,7 @@ enum ManeuverDirection: Equatable {
         case .slightRight: return "leicht rechts halten"
         case .left:        return "links abbiegen"
         case .right:       return "rechts abbiegen"
+        case .turnAround:  return "umdrehen"
         }
     }
 }
@@ -123,6 +129,11 @@ struct RouteManeuver: Equatable {
     var instruction: String {
         if direction == .straight {
             return "Geradeaus weiter"
+        }
+        // Blickt man entgegengesetzt zur Route, ist die klare Ansage "umdrehen"
+        // (kein "jetzt links/rechts" – die Richtung liegt hinter einem).
+        if direction == .turnAround {
+            return "Bitte umdrehen"
         }
         if distanceM < 15 {
             return "Jetzt \(direction.phrase)"
@@ -632,6 +643,11 @@ enum RouteService {
     /// Route ist eine sanfte "halten"-Ansage; erst eine annähernde Kehrtwende
     /// wird zum "abbiegen".
     private static let reorientTurnThresholdDeg = 120.0
+    /// Winkel (Grad), ab dem die Blickrichtung als (annähernd) entgegengesetzt
+    /// zur Route gilt und ein "Umdrehen" statt eines seitlichen Abbiegens
+    /// angesagt wird. Nahe 180° liegt das Ziel klar hinter einem, dann ist die
+    /// Seite (links/rechts) uneindeutig – die eindeutige Ansage ist "umdrehen".
+    private static let reorientUTurnThresholdDeg = 150.0
 
     /// Bestimmt das nächste Manöver auf der Route.
     ///
@@ -657,14 +673,19 @@ enum RouteService {
         // Blickrichtung quer zur Route → zuerst zur Route hin ausrichten.
         // Bewusst als sanfte "leicht … halten"-Ansage (die Route knickt ja nur
         // ab, es ist kein echtes Abbiegen); erst eine annähernde Kehrtwende
-        // wird zum "abbiegen".
+        // wird zum "abbiegen", und bei (annähernd) entgegengesetzter
+        // Blickrichtung zum "umdrehen".
         if let heading, let routeBearing = travelBearingDegrees(of: route, at: location) {
             let reorient = normalizedSignedDegrees(routeBearing - heading)
             if abs(reorient) >= reorientThresholdDeg {
                 // Kompasskurs im Uhrzeigersinn: positiv = Route rechts der
                 // Blickrichtung ⇒ nach rechts halten, negativ ⇒ nach links.
+                // Nahe 180° liegt die Route hinter einem ⇒ umdrehen (die Seite
+                // ist dann uneindeutig).
                 let direction: ManeuverDirection
-                if abs(reorient) >= reorientTurnThresholdDeg {
+                if abs(reorient) >= reorientUTurnThresholdDeg {
+                    direction = .turnAround
+                } else if abs(reorient) >= reorientTurnThresholdDeg {
                     direction = reorient > 0 ? .right : .left
                 } else {
                     direction = reorient > 0 ? .slightRight : .slightLeft
