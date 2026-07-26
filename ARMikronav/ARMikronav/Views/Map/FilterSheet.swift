@@ -37,15 +37,25 @@ struct FilterSheet: View {
             .navigationTitle("Filter")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                // Abbrechen/Fertig als Icons (X bzw. Häkchen) statt Text –
+                // konsistent mit der schlankeren Karten-Bedienung.
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Abbrechen") { dismiss() }
+                    Button {
+                        dismiss()
+                    } label: {
+                        Image(systemName: "xmark")
+                    }
+                    .accessibilityLabel("Abbrechen")
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Fertig") {
+                    Button {
                         onApply(draft)
                         dismiss()
+                    } label: {
+                        Image(systemName: "checkmark")
+                            .fontWeight(.semibold)
                     }
-                    .bold()
+                    .accessibilityLabel("Fertig")
                 }
             }
         }

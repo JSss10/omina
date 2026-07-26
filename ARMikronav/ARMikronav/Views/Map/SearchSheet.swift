@@ -21,6 +21,9 @@ struct SearchSheet: View {
     @State private var results: [POI] = []
     @State private var isSearching = false
     @State private var hasSearched = false
+    /// Gespeicherte Orte des Users – im Ausgangszustand ganz oben gelistet,
+    /// damit man sie direkt aus der Suche ansteuern kann.
+    @State private var savedPlaces: [SavedPlace] = []
     /// Aktiver Kategorie-Chip (für die Hervorhebung); nil bei Freitext-Suche.
     @State private var activeChip: String?
     /// Sheet-Höhe: startet als Medium, wächst beim Tippen auf die volle Höhe.
@@ -28,13 +31,13 @@ struct SearchSheet: View {
     @FocusState private var searchFieldFocused: Bool
 
     var body: some View {
-        VStack(spacing: 0) {
+        VStack(spacing: 16) {
             searchField
                 .padding(.horizontal)
-                .padding(.top, 8)
+                // Mehr Luft zwischen Grabber und Suchfeld.
+                .padding(.top, 20)
 
             categoryFilters
-                .padding(.vertical, 12)
 
             content
         }
@@ -45,6 +48,7 @@ struct SearchSheet: View {
         .onChange(of: searchFieldFocused) { _, focused in
             if focused { detent = .large }
         }
+        .task { await loadSavedPlaces() }
     }
 
     // MARK: - Inhalt (Ergebnisse oder Ausgangszustand)
@@ -89,36 +93,50 @@ struct SearchSheet: View {
                 .accessibilityLabel("Suche löschen")
             }
         }
-        .padding(10)
-        .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 10))
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        // Ganz gerundete Ecken (Pill/Capsule) statt leicht gerundetem Rechteck.
+        .background(Color(.systemGray6), in: Capsule())
     }
 
-    /// Kategorie-Filter (Café, WC, Restaurant …) als antippbare Chips.
+    /// Kategorie-Filter (Café, WC, Restaurant …) als kreisförmige Icon-Buttons
+    /// mit Titel darunter (Apple-Maps-Manier).
     private var categoryFilters: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
+            HStack(alignment: .top, spacing: 16) {
                 ForEach(POICategory.chipLabels, id: \.self) { chip in
-                    let isActive = activeChip == chip
-                    Button {
-                        runCategory(chip)
-                    } label: {
-                        Label(chip, systemImage: POICategory.symbol(forChip: chip))
-                            .font(.subheadline.weight(.medium))
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 8)
-                            .background(
-                                isActive ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(Color(.systemGray6)),
-                                in: Capsule()
-                            )
-                            .foregroundStyle(isActive ? .white : .primary)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("\(chip) suchen")
-                    .accessibilityAddTraits(isActive ? .isSelected : [])
+                    categoryChip(chip)
                 }
             }
             .padding(.horizontal)
         }
+    }
+
+    /// Ein Kategorie-Chip: farbiger Kreis mit Kategorie-Icon und Titel darunter.
+    private func categoryChip(_ chip: String) -> some View {
+        let isActive = activeChip == chip
+        return Button {
+            runCategory(chip)
+        } label: {
+            VStack(spacing: 6) {
+                ZStack {
+                    Circle()
+                        .fill(isActive ? Color.accentColor : Color(.systemGray6))
+                        .frame(width: 54, height: 54)
+                    Image(systemName: POICategory.symbol(forChip: chip))
+                        .font(.system(size: 22, weight: .medium))
+                        .foregroundStyle(isActive ? Color.white : AppColor.accentPrimary)
+                }
+                Text(chip)
+                    .font(.caption)
+                    .foregroundStyle(isActive ? AppColor.accentPrimary : AppColor.textPrimary)
+                    .lineLimit(1)
+            }
+            .frame(width: 68)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(chip) suchen")
+        .accessibilityAddTraits(isActive ? .isSelected : [])
     }
 
     // MARK: - Ausgangszustand: Letzte Orte + In der Nähe
@@ -127,6 +145,24 @@ struct SearchSheet: View {
     /// POIs als Liste mit Icon und Name.
     private var browseList: some View {
         List {
+            if !savedPlaces.isEmpty {
+                Section("Gespeicherte Orte") {
+                    ForEach(savedPlaces) { place in
+                        let resolved = poi(for: place)
+                        Button {
+                            select(resolved)
+                        } label: {
+                            placeRow(
+                                poi: resolved,
+                                leadingSymbol: "bookmark.fill",
+                                subtitle: resolved.address
+                            )
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+
             if !recentPlaces.isEmpty {
                 Section("Letzte Orte") {
                     ForEach(recentPlaces) { place in
@@ -162,7 +198,7 @@ struct SearchSheet: View {
                 }
             }
 
-            if recentPlaces.isEmpty && nearby.isEmpty {
+            if savedPlaces.isEmpty && recentPlaces.isEmpty && nearby.isEmpty {
                 emptyBrowseState
             }
         }
@@ -209,7 +245,7 @@ struct SearchSheet: View {
                 .foregroundStyle(.secondary)
                 .monospacedDigit()
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, 8)
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(poi.name), \(poi.accessStatus.shortLabel), \(viewModel.userDistanceText(to: poi))")
@@ -276,7 +312,7 @@ struct SearchSheet: View {
                 .foregroundStyle(.secondary)
                 .monospacedDigit()
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, 8)
     }
 
     // Empty-State mit Handlungs-Hinweis.
@@ -325,6 +361,19 @@ struct SearchSheet: View {
     private func select(_ poi: POI) {
         onSelect(poi)
         dismiss()
+    }
+
+    /// Löst einen gespeicherten Ort auf einen echten Altstadt-POI auf (damit
+    /// die Auswahl im gewohnten POI-Detail landet); fällt sonst auf einen
+    /// leichten POI aus den gespeicherten Koordinaten zurück.
+    private func poi(for place: SavedPlace) -> POI {
+        viewModel.poi(named: place.displayName) ?? POI(savedPlace: place)
+    }
+
+    /// Gespeicherte Orte des Users laden (still: Fehler werden ignoriert, die
+    /// Sektion bleibt dann einfach leer).
+    private func loadSavedPlaces() async {
+        savedPlaces = (try? await SavedPlacesService.shared.fetchSavedPlaces()) ?? []
     }
 
     private func resetToBrowse() {

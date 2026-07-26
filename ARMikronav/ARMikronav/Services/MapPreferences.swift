@@ -47,6 +47,14 @@ enum MapStyleChoice: String, CaseIterable, Identifiable {
         }
     }
 
+    /// SF-Symbol für die Auswahl-Kacheln im Karteneinstellungs-Overlay.
+    var symbol: String {
+        switch self {
+        case .standard:  return "map.fill"
+        case .satellite: return "globe.europe.africa.fill"
+        }
+    }
+
     /// Hybrid statt reinem Satellit, damit Strassennamen und die
     /// Routen-Polyline lesbar bleiben.
     var mapKitStyle: MapStyle {

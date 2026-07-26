@@ -33,9 +33,11 @@ struct MapView: View {
     /// Suche) – bleibt als Marker sichtbar, auch wenn er nicht unter den
     /// angezeigten POIs in der Nähe ist.
     @State private var focusedPOI: POI?
-    @State private var showingFilter = false
     @State private var showingSearch = false
-    @State private var showingSavedPlaces = false
+    /// Karteneinstellungen-Overlay (Kartenmodus, Darstellung, Sichtbarkeit von
+    /// Orten/Barrieren, Barrierentypen-Filter) – bündelt in Apple-Maps-Manier,
+    /// was vorher über einzelne Karten-Buttons verstreut war.
+    @State private var showingMapSettings = false
     /// Listenansicht der Barrieren entlang der aktiven Route.
     @State private var showingRouteBarriers = false
     /// Turn-by-turn-Listenansicht der aktiven Route.
@@ -43,8 +45,6 @@ struct MapView: View {
     /// In der Barrieren-Liste angetippte Barriere: wird nach dem Schliessen
     /// der Liste als Detail-Sheet geöffnet (zwei Sheets nicht gleichzeitig).
     @State private var pendingListBarrier: Barrier?
-    /// Auf der Karte markierter gespeicherter Ort (aus dem Bookmark-Sheet).
-    @State private var selectedSavedPlace: SavedPlace?
     /// Einmaliges Zentrieren auf den Standort beim ersten GPS-Fix. Danach
     /// bleibt der vom User gewählte Kartenausschnitt (Zoom/Position) stehen,
     /// bis eine Aktion (Suche, Route, Standort-Button) die Kamera bewegt.
@@ -142,20 +142,6 @@ struct MapView: View {
                         .onTapGesture { selectedPOI = poi }
                 }
             }
-
-            // Aus dem Bookmark-Sheet gewählter gespeicherter Ort.
-            if let place = selectedSavedPlace {
-                Annotation(
-                    place.displayName,
-                    coordinate: CLLocationCoordinate2D(
-                        latitude: place.latitude,
-                        longitude: place.longitude
-                    )
-                ) {
-                    SavedPlaceMarker()
-                        .onTapGesture { selectedSavedPlace = nil }
-                }
-            }
         }
         .mapControls {
             MapUserLocationButton()
@@ -206,12 +192,17 @@ struct MapView: View {
             barrierNotifications.tappedBarrierId = nil
             selectedBarrier = barrier
         }
+        // Suche als kompaktes Icon (Apple-Maps-Manier) links oben – der frühere
+        // breite Suchbalken entfällt. Rechts oben sitzt der Kompass.
+        .overlay(alignment: .topLeading) {
+            searchButton
+                .padding(.leading, 16)
+                .padding(.top, 16)
+        }
+        // Banner sitzen unterhalb der Bedienzeile (Such-Icon links, Kompass
+        // rechts), damit sie die Ecken-Buttons nicht verdecken.
         .overlay(alignment: .top) {
             VStack(spacing: 8) {
-                searchBar
-                    .padding(.leading)
-                    .padding(.trailing, 60) // Platz für den Kompass (rechts oben)
-
                 // Fallback-Banner nur ohne Mitteilungs-Berechtigung; sonst
                 // kommt die Warnung als System-Mitteilung (UserNotifications).
                 if !barrierNotifications.isAuthorized,
@@ -249,8 +240,9 @@ struct MapView: View {
                     .background(.thinMaterial, in: Capsule())
                 }
             }
-            // Bündig mit dem Home-Button (HomeView, .padding() = 16).
-            .padding(.top, 16)
+            // Unterhalb der Bedienzeile (Such-Icon/Kompass, ~44 pt hoch), damit
+            // Banner die Ecken-Buttons nicht überdecken.
+            .padding(.top, 68)
             .animation(.easeInOut(duration: 0.25), value: connectivity.isOnline)
             .animation(.spring(duration: 0.35), value: proximityService.activeWarning?.barrier.id)
             .animation(.spring(duration: 0.35), value: viewModel.isOffRoute)
@@ -264,17 +256,12 @@ struct MapView: View {
                 .padding(.top, 16)
         }
         .overlay(alignment: .bottomLeading) {
-            // Während der Navigation ersetzt das Routen-Panel Filter und Chips.
+            // Während der Navigation ersetzt das Routen-Panel die Bedienelemente.
+            // Ein einziger Button öffnet die gebündelten Karteneinstellungen.
             if viewModel.activeRoute == nil {
-                VStack(alignment: .leading, spacing: 10) {
-                    mapStyleButton
-                    barrierToggleButton
-                    poiToggleButton
-                    savedPlacesButton
-                    filterButton
-                }
-                .padding(.leading)
-                .padding(.bottom, 12)
+                mapSettingsButton
+                    .padding(.leading)
+                    .padding(.bottom, 12)
             }
         }
         .overlay(alignment: .bottom) {
@@ -290,8 +277,8 @@ struct MapView: View {
                     onShowBarriers: { showingRouteBarriers = true },
                     onStop: { viewModel.stopNavigation() }
                 )
-                // Volle Breite während der Navigation: Der AR-FAB ist
-                // ausgeblendet, die Abbiege-Anweisung bekommt so mehr Platz.
+                // Volle Breite während der Navigation: Die Karten-Bedienelemente
+                // sind ausgeblendet, die Abbiege-Anweisung bekommt so mehr Platz.
                 .padding(.horizontal)
                 .padding(.bottom, 12)
                 .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -300,7 +287,7 @@ struct MapView: View {
         .animation(.spring(duration: 0.35), value: viewModel.activeRoute)
         .overlay {
             if showEmptyState {
-                EmptyStateView { showingFilter = true }
+                EmptyStateView { showingMapSettings = true }
             }
         }
         .overlay(alignment: .bottom) {
@@ -364,131 +351,49 @@ struct MapView: View {
                 "name": poi.name
             ])
         }
-        .sheet(isPresented: $showingFilter) {
-            FilterSheet(initial: viewModel.filterState) { newFilter in
-                viewModel.applyFilter(newFilter)
-            }
-            .trackScreen("filter")
-        }
         .sheet(isPresented: $showingSearch) {
             SearchSheet(viewModel: viewModel) { poi in
                 focus(on: poi)
             }
             .trackScreen("search")
         }
-        .sheet(isPresented: $showingSavedPlaces) {
-            NavigationStack {
-                SavedPlacesListView { place in
-                    showingSavedPlaces = false
-                    focus(on: place)
-                }
-            }
-            .presentationDetents([.medium, .large])
-            .presentationDragIndicator(.visible)
-            .trackScreen("saved_places")
+        .sheet(isPresented: $showingMapSettings) {
+            MapSettingsSheet(viewModel: viewModel, mapPreferences: mapPreferences)
+                .trackScreen("map_settings")
         }
     }
 
     // MARK: - Components
 
-    private var searchBar: some View {
+    /// Kompaktes Such-Icon (öffnet das SearchSheet) – ersetzt den früheren
+    /// breiten Suchbalken. Gleiche Grösse/Optik wie der Einstellungs-Button.
+    private var searchButton: some View {
         Button {
             showingSearch = true
         } label: {
-            HStack {
-                Image(systemName: "magnifyingglass")
-                Text("Ort suchen…")
-                Spacer()
-            }
-            // Kräftigere Textfarbe: der Platzhalter war auf der hellen Karte
-            // (thinMaterial) kaum lesbar.
-            .foregroundStyle(AppColor.textPrimary)
-            .padding(.horizontal, 12)
-            // Gleiche Höhe wie der Home-Button (HomeView).
-            .frame(height: 44)
-            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12))
+            Image(systemName: "magnifyingglass")
+                .font(.title2.weight(.semibold))
+                .foregroundStyle(AppColor.textPrimary)
+                .frame(width: 44, height: 44)
+                .background(.thinMaterial, in: Circle())
         }
         .accessibilityLabel("Orte suchen")
     }
 
-    /// Menü für Kartenansicht (Karte/Satellit) und Hell-/Dunkel-Modus.
-    private var mapStyleButton: some View {
-        Menu {
-            Picker("Kartenansicht", selection: $mapPreferences.style) {
-                ForEach(MapStyleChoice.allCases) { choice in
-                    Text(choice.label).tag(choice)
-                }
-            }
-            Picker("Kartendesign", selection: $mapPreferences.appearance) {
-                ForEach(MapAppearance.allCases) { appearance in
-                    Text(appearance.label).tag(appearance)
-                }
-            }
+    /// Öffnet das Karteneinstellungs-Overlay (Kartenmodus, Darstellung,
+    /// Sichtbarkeit von Orten/Barrieren, Barrierentypen-Filter). Ersetzt die
+    /// früheren einzelnen Karten-Buttons.
+    private var mapSettingsButton: some View {
+        Button {
+            showingMapSettings = true
         } label: {
             Image(systemName: "square.3.layers.3d")
-                .font(.title)
-                .padding(10)
+                .font(.title2.weight(.semibold))
+                .foregroundStyle(AppColor.textPrimary)
+                .frame(width: 44, height: 44)
                 .background(.thinMaterial, in: Circle())
         }
-        .accessibilityLabel("Kartenstil wählen")
-    }
-
-    /// Öffnet die gespeicherten Orte als Sheet; Auswahl zentriert die Karte.
-    private var savedPlacesButton: some View {
-        Button {
-            showingSavedPlaces = true
-        } label: {
-            Image(systemName: "bookmark.circle.fill")
-                .font(.title)
-                .padding(10)
-                .background(.thinMaterial, in: Circle())
-        }
-        .accessibilityLabel("Gespeicherte Orte")
-    }
-
-    private var filterButton: some View {
-        Button {
-            showingFilter = true
-        } label: {
-            Image(systemName: "line.3.horizontal.decrease.circle.fill")
-                .font(.title)
-                .padding(10)
-                .background(.thinMaterial, in: Circle())
-        }
-        .accessibilityLabel("Filter")
-    }
-
-    /// Blendet alle Barrieren-Marker ein/aus (gilt auch für die AR-Minikarte).
-    /// Annäherungswarnungen bleiben aktiv, auch wenn die Marker ausgeblendet sind.
-    private var barrierToggleButton: some View {
-        Button {
-            viewModel.barriersVisible.toggle()
-        } label: {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .font(.title)
-                .foregroundStyle(
-                    viewModel.barriersVisible ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(.tertiary)
-                )
-                .padding(10)
-                .background(.thinMaterial, in: Circle())
-        }
-        .accessibilityLabel(viewModel.barriersVisible ? "Barrieren ausblenden" : "Barrieren einblenden")
-    }
-
-    /// Blendet alle POI-Marker ein/aus (gilt auch für den AR-Modus).
-    private var poiToggleButton: some View {
-        Button {
-            viewModel.poisVisible.toggle()
-        } label: {
-            Image(systemName: "mappin.circle.fill")
-                .font(.title)
-                .foregroundStyle(
-                    viewModel.poisVisible ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(.tertiary)
-                )
-                .padding(10)
-                .background(.thinMaterial, in: Circle())
-        }
-        .accessibilityLabel(viewModel.poisVisible ? "Orte ausblenden" : "Orte einblenden")
+        .accessibilityLabel("Karteneinstellungen")
     }
 
     // Banner ~30 m vor profilrelevanter Barriere.
@@ -761,19 +666,6 @@ struct MapView: View {
         return success
     }
 
-    /// Gespeicherten Ort auf der Karte markieren und ansteuern.
-    private func focus(on place: SavedPlace) {
-        selectedSavedPlace = place
-        withAnimation(.easeInOut) {
-            cameraPosition = .region(
-                MKCoordinateRegion(
-                    center: CLLocationCoordinate2D(latitude: place.latitude, longitude: place.longitude),
-                    span: MKCoordinateSpan(latitudeDelta: 0.003, longitudeDelta: 0.003)
-                )
-            )
-        }
-    }
-
     private func focus(on poi: POI) {
         withAnimation(.easeInOut) {
             cameraPosition = .region(
@@ -855,27 +747,6 @@ struct MapView: View {
             && viewModel.filteredBarriers.isEmpty
             && viewModel.displayedPOIs.isEmpty
             && locationService.currentLocation != nil
-    }
-}
-
-/// Marker für einen gespeicherten Ort: Bookmark-Icon im Akzentkreis.
-/// Tippen entfernt die Markierung wieder.
-struct SavedPlaceMarker: View {
-    var body: some View {
-        ZStack {
-            Circle()
-                .fill(.white)
-                .frame(width: 34, height: 34)
-                .shadow(color: .black.opacity(0.25), radius: 3, y: 1)
-            Circle()
-                .fill(Color.accentColor)
-                .frame(width: 26, height: 26)
-            Image(systemName: "bookmark.fill")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(.white)
-        }
-        .accessibilityLabel("Gespeicherter Ort, Markierung entfernen")
-        .accessibilityAddTraits(.isButton)
     }
 }
 

@@ -94,16 +94,9 @@ struct HomeView: View {
         // Die Tab-Leiste (Navbar) bleibt auf der Karte sichtbar – der frühere
         // Home-Button ist damit überflüssig und entfällt. Die Karte respektiert
         // unten die Safe Area, damit Bedienelemente über der Tab-Leiste liegen.
+        // Der AR-Modus ist über den "Kamera"-Tab erreichbar; ein eigener AR-FAB
+        // auf der Karte entfällt daher.
         MapView(profile: profile, viewModel: viewModel, onStartARRoute: startARRoute)
-            // Der AR-FAB verschwindet während der aktiven Navigation: Das
-            // Routen-Panel (Abbiege-Anweisung) darf die volle Breite nutzen.
-            .overlay(alignment: .bottomTrailing) {
-                if viewModel.activeRoute == nil {
-                    arFAB
-                        .transition(.scale.combined(with: .opacity))
-                }
-            }
-            .animation(.spring(duration: 0.35), value: viewModel.activeRoute)
     }
 
     // AR erst aufbauen, wenn der Tab aktiv ist – so starten Kamera und
@@ -130,23 +123,5 @@ struct HomeView: View {
                 selectedTab = .ar
             }
         }
-    }
-
-    private var arFAB: some View {
-        Button {
-            selectedTab = .ar
-        } label: {
-            Image(systemName: "arkit")
-                .font(.title)
-                .foregroundStyle(.white)
-                .padding(18)
-                .background(Color.accentColor, in: Circle())
-                .shadow(radius: 4)
-        }
-        // Gleicher Abstand nach unten wie die Karten-Buttons (MapView,
-        // .padding(.bottom, 12)), damit AR-Button und Filter unten bündig sind.
-        .padding(.trailing)
-        .padding(.bottom, 12)
-        .accessibilityLabel("In AR ansehen")
     }
 }

@@ -155,6 +155,23 @@ extension POI {
         self.source = "apple"
         self.distanceM = distanceM
     }
+
+    /// Leichter POI aus einem gespeicherten Ort (saved_places). Wird in der
+    /// Suche genutzt, wenn sich der gespeicherte Ort nicht mehr auf einen
+    /// geladenen Altstadt-POI auflösen lässt – so lässt er sich trotzdem auf
+    /// der Karte ansteuern. Ohne Zugänglichkeitsdaten (Status «unbekannt»).
+    init(savedPlace: SavedPlace) {
+        self.id = savedPlace.referenceId ?? savedPlace.id
+        self.name = savedPlace.displayName
+        self.category = nil
+        self.latitude = savedPlace.latitude
+        self.longitude = savedPlace.longitude
+        self.address = nil
+        self.wheelchairAccessible = nil
+        self.accessibilityDetails = nil
+        self.source = "saved"
+        self.distanceM = 0
+    }
 }
 
 /// Eine ginto-Zugänglichkeits-Bewertung für ein Rollstuhl-Profil.
