@@ -4,7 +4,7 @@
 // POI-Detail als Bottom-Sheet: Name, Kategorie, Adresse, Distanz, Fotos,
 // Zugänglichkeits-Status fürs Profil, Bewertung für den eigenen
 // Rollstuhltyp, Detail-Werte aus accessibility_details, Webseite und
-// Aktionen (Route in AR starten, Ort speichern, Route auf der Karte anzeigen).
+// Aktionen (Route mit Kamera starten, Ort speichern, Route auf der Karte anzeigen).
 //
 // Styling gemäss Styleguide v1.0: ausschliesslich Design-Tokens (AppColor,
 // AppTypography, AppMetrics) und die gemeinsamen Komponenten (StatusBadge,
@@ -195,65 +195,67 @@ struct POIDetailSheet: View {
     @ViewBuilder
     private var ratingsCard: some View {
         if let rating = poi.gintoRating(for: profile.wheelchairType) {
-            VStack(alignment: .leading, spacing: AppMetrics.Space.s + AppMetrics.Space.xs) {
-                sectionTitle("Zugänglichkeit im Detail")
+            // Ohne separaten «Zugänglichkeit im Detail»-Titel: die Einstufung
+            // steht in der Kopfzeile, der Fortschrittsbalken mit dem Prozentwert
+            // sitzt direkt darunter.
+            VStack(alignment: .leading, spacing: AppMetrics.Space.m) {
+                HStack(spacing: AppMetrics.Space.m) {
+                    Image(systemName: rating.status.symbolName)
+                        .font(.title3.weight(.semibold))
+                        .foregroundStyle(rating.status.tint)
+                        .frame(width: 28)
 
-                VStack(spacing: AppMetrics.Space.m) {
-                    HStack(spacing: AppMetrics.Space.m) {
-                        Image(systemName: rating.status.symbolName)
-                            .font(.title3.weight(.semibold))
-                            .foregroundStyle(rating.status.tint)
-                            .frame(width: 28)
-
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(rating.profileLabel)
-                                .font(AppTypography.headline)
-                                .foregroundStyle(AppColor.textPrimary)
-                            Text("Dein Rollstuhltyp")
-                                .font(AppTypography.footnote)
-                                .foregroundStyle(AppColor.textSecondary)
-                        }
-
-                        Spacer(minLength: AppMetrics.Space.s)
-
-                        VStack(alignment: .trailing, spacing: 2) {
-                            Text(rating.gradeLabel)
-                                .font(AppTypography.subheadline.weight(.medium))
-                                .foregroundStyle(AppColor.textPrimary)
-                                .multilineTextAlignment(.trailing)
-                            if let percent = rating.conformancePercent {
-                                Text("\(Int(percent)) %")
-                                    .font(AppTypography.footnote)
-                                    .foregroundStyle(AppColor.textSecondary)
-                                    .monospacedDigit()
-                            }
-                        }
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(rating.profileLabel)
+                            .font(AppTypography.headline)
+                            .foregroundStyle(AppColor.textPrimary)
+                        Text("Dein Rollstuhltyp")
+                            .font(AppTypography.footnote)
+                            .foregroundStyle(AppColor.textSecondary)
                     }
 
-                    if let percent = rating.conformancePercent {
-                        conformanceBar(percent: percent, tint: rating.status.tint)
-                    }
+                    Spacer(minLength: AppMetrics.Space.s)
+
+                    Text(rating.gradeLabel)
+                        .font(AppTypography.subheadline.weight(.semibold))
+                        .foregroundStyle(rating.status.tint)
+                        .multilineTextAlignment(.trailing)
                 }
-                .padding(AppMetrics.Space.m)
-                .cardBackground()
-                .accessibilityElement(children: .combine)
+
+                if let percent = rating.conformancePercent {
+                    conformanceBar(percent: percent, tint: rating.status.tint)
+                }
             }
+            .padding(AppMetrics.Space.m)
+            .cardBackground()
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("\(rating.profileLabel): \(rating.gradeLabel)"
+                + (rating.conformancePercent.map { ", \(Int($0)) Prozent erfüllt" } ?? ""))
         }
     }
 
-    /// Fortschrittsbalken für den erfüllten Kriterien-Anteil (Prozent).
+    /// Fortschrittsbalken für den erfüllten Kriterien-Anteil, mit dem Prozentwert
+    /// rechts daneben – direkt unter der Einstufung.
     private func conformanceBar(percent: Double, tint: Color) -> some View {
-        GeometryReader { geo in
-            let fraction = max(0, min(1, percent / 100))
-            ZStack(alignment: .leading) {
-                Capsule()
-                    .fill(AppColor.borderDecorative)
-                Capsule()
-                    .fill(tint)
-                    .frame(width: geo.size.width * fraction)
+        HStack(spacing: AppMetrics.Space.s + AppMetrics.Space.xs) {
+            GeometryReader { geo in
+                let fraction = max(0, min(1, percent / 100))
+                ZStack(alignment: .leading) {
+                    Capsule()
+                        .fill(AppColor.borderDecorative)
+                    Capsule()
+                        .fill(tint)
+                        .frame(width: geo.size.width * fraction)
+                }
             }
+            .frame(height: 8)
+
+            Text("\(Int(percent)) %")
+                .font(AppTypography.subheadline.weight(.semibold))
+                .foregroundStyle(tint)
+                .monospacedDigit()
+                .fixedSize()
         }
-        .frame(height: 6)
         .accessibilityHidden(true)
     }
 
@@ -354,7 +356,7 @@ struct POIDetailSheet: View {
             dismiss()
             onStartARRoute(poi)
         } label: {
-            Label("Route in AR starten", systemImage: "arkit")
+            Label("Route mit Kamera starten", systemImage: "camera.viewfinder")
         }
         .buttonStyle(.appPrimary)
         .disabled(onStartARRoute == nil)
@@ -366,50 +368,110 @@ struct POIDetailSheet: View {
         )
     }
 
+    /// Zwei gleichwertige Sekundär-Aktionen als Kacheln (Icon über Label):
+    /// «Ort speichern» getönt, «Route anzeigen» als Umriss.
     private var actionRow: some View {
-        HStack(spacing: AppMetrics.Space.s + AppMetrics.Space.xs) {
-            Button {
-                savePlace()
-            } label: {
-                switch saveState {
-                case .idle:
-                    Label("Ort speichern", systemImage: "bookmark")
-                case .saving:
-                    ProgressView()
-                case .saved:
-                    Label("Gespeichert", systemImage: "bookmark.fill")
-                case .failed:
-                    Label("Fehlgeschlagen", systemImage: "exclamationmark.triangle")
-                }
-            }
-            .buttonStyle(.appQuiet(fullWidth: true))
-            .disabled(saveState == .saving || saveState == .saved)
+        HStack(spacing: AppMetrics.Space.m) {
+            actionTile(
+                icon: saveIcon,
+                title: saveTitle,
+                style: .tinted,
+                loading: saveState == .saving,
+                disabled: saveState == .saving || saveState == .saved,
+                action: savePlace
+            )
 
-            Button {
+            actionTile(
+                icon: "map.fill",
+                title: "Route anzeigen",
+                style: .outline,
+                accessibilityHint: onShowRoute == nil
+                    ? "Öffnet die Route in Apple Karten"
+                    : "Berechnet die rollstuhlgerechte Route und zeigt sie auf der Karte"
+            ) {
                 if let onShowRoute {
                     dismiss()
                     onShowRoute(poi)
                 } else {
                     openInMaps()
                 }
-            } label: {
-                Label("Route anzeigen", systemImage: "arrow.triangle.turn.up.right.diamond")
             }
-            .buttonStyle(.appQuiet(fullWidth: true))
-            .accessibilityHint(
-                onShowRoute == nil
-                    ? "Öffnet die Route in Apple Karten"
-                    : "Berechnet die rollstuhlgerechte Route und zeigt sie auf der Karte"
-            )
         }
     }
 
-    // MARK: - Building blocks
+    /// Optische Ausprägung einer Aktions-Kachel.
+    private enum ActionTileStyle {
+        case tinted, outline
+    }
 
-    private func sectionTitle(_ text: String) -> some View {
-        Text(text)
-            .font(AppTypography.subheadline.weight(.semibold))
-            .foregroundStyle(AppColor.textSecondary)
+    /// Icon-über-Label-Kachel als sekundäre Aktion. Volle Breite, gleiche Höhe,
+    /// grosszügige Tap-Fläche; getönt oder als Umriss.
+    private func actionTile(
+        icon: String,
+        title: String,
+        style: ActionTileStyle,
+        loading: Bool = false,
+        disabled: Bool = false,
+        accessibilityHint: String? = nil,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            VStack(spacing: AppMetrics.Space.s) {
+                ZStack {
+                    if loading {
+                        ProgressView()
+                    } else {
+                        Image(systemName: icon)
+                            .font(.title3.weight(.semibold))
+                    }
+                }
+                .frame(height: 26)
+
+                Text(title)
+                    .font(AppTypography.subheadline.weight(.semibold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
+            .frame(maxWidth: .infinity)
+            .frame(minHeight: 76)
+            .padding(.horizontal, AppMetrics.Space.s)
+            .foregroundStyle(AppColor.accentPrimary)
+            .background(
+                RoundedRectangle(cornerRadius: AppMetrics.Radius.button, style: .continuous)
+                    .fill(style == .tinted ? AnyShapeStyle(AppColor.Violet.v100) : AnyShapeStyle(Color.clear))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: AppMetrics.Radius.button, style: .continuous)
+                    .strokeBorder(
+                        AppColor.accentPrimary.opacity(style == .outline ? 1 : 0),
+                        lineWidth: 1.5
+                    )
+            )
+        }
+        .buttonStyle(.plain)
+        .opacity(disabled ? 0.6 : 1)
+        .disabled(disabled)
+        .accessibilityHint(accessibilityHint ?? "")
+    }
+
+    /// Icon der «Ort speichern»-Kachel je nach Speicherzustand.
+    private var saveIcon: String {
+        switch saveState {
+        case .idle:   return "bookmark"
+        case .saving: return "bookmark"
+        case .saved:  return "bookmark.fill"
+        case .failed: return "exclamationmark.triangle"
+        }
+    }
+
+    /// Beschriftung der «Ort speichern»-Kachel je nach Speicherzustand.
+    private var saveTitle: String {
+        switch saveState {
+        case .idle:   return "Ort speichern"
+        case .saving: return "Speichern…"
+        case .saved:  return "Gespeichert"
+        case .failed: return "Fehlgeschlagen"
+        }
     }
 
     // MARK: - Actions
