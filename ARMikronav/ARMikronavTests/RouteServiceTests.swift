@@ -188,36 +188,48 @@ struct RouteServiceTests {
     }
 
     /// Szenario aus dem Feldtest: Route führt nach Osten, man schaut aber nach
-    /// Süden – aus Sicht des Users muss man nach LINKS (nicht rechts), und die
-    /// Anweisung soll das "jetzt" ansagen.
-    @Test func maneuverReorientsLeftWhenFacingSouthOnEastRoute() {
+    /// Süden – aus Sicht des Users muss man nach LINKS. Die Route knickt nur ab,
+    /// also eine sanfte "leicht links halten"-Ansage (kein "abbiegen"), "jetzt".
+    @Test func maneuverReorientsSlightLeftWhenFacingSouthOnEastRoute() {
         let route = eastRoute
         let start = CLLocation(latitude: 47.3700, longitude: 8.5400)
 
         let maneuver = RouteService.nextManeuver(of: route, at: start, heading: 180)
 
-        #expect(maneuver?.direction == .left)
+        #expect(maneuver?.direction == .slightLeft)
         #expect(maneuver?.distanceM == 0)
+        #expect(maneuver?.instruction == "Jetzt leicht links halten")
     }
 
-    /// Spiegelbild: Route nach Norden, Blick nach Osten ⇒ links.
-    @Test func maneuverReorientsLeftWhenFacingEastOnNorthRoute() {
+    /// Spiegelbild: Route nach Norden, Blick nach Osten ⇒ leicht links halten.
+    @Test func maneuverReorientsSlightLeftWhenFacingEastOnNorthRoute() {
         let route = straightRoute
         let start = CLLocation(latitude: 47.3700, longitude: 8.5400)
 
         let maneuver = RouteService.nextManeuver(of: route, at: start, heading: 90)
 
-        #expect(maneuver?.direction == .left)
+        #expect(maneuver?.direction == .slightLeft)
     }
 
-    /// Route nach Norden, Blick nach Westen ⇒ rechts.
-    @Test func maneuverReorientsRightWhenFacingWestOnNorthRoute() {
+    /// Route nach Norden, Blick nach Westen ⇒ leicht rechts halten.
+    @Test func maneuverReorientsSlightRightWhenFacingWestOnNorthRoute() {
         let route = straightRoute
         let start = CLLocation(latitude: 47.3700, longitude: 8.5400)
 
         let maneuver = RouteService.nextManeuver(of: route, at: start, heading: 270)
 
-        #expect(maneuver?.direction == .right)
+        #expect(maneuver?.direction == .slightRight)
+    }
+
+    /// Erst bei annähernder Kehrtwende (hier ~170° neben der Route) wird die
+    /// Ausrichtung als volles Abbiegen angesagt.
+    @Test func maneuverReorientsFullTurnWhenFacingBackwards() {
+        let route = straightRoute // nach Norden
+        let start = CLLocation(latitude: 47.3700, longitude: 8.5400)
+
+        let maneuver = RouteService.nextManeuver(of: route, at: start, heading: 170)
+
+        #expect(maneuver?.direction == .left)
     }
 
     /// Grob zur Route ausgerichtet: die egozentrische Korrektur greift nicht,

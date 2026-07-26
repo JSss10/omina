@@ -393,6 +393,11 @@ enum RouteService {
     /// Routenknicks). Bewusst grösser als der Slight-Turn-Schwellwert, damit
     /// nur klare Fehlausrichtungen (quer/rückwärts) die Knick-Ansage überschreiben.
     private static let reorientThresholdDeg = 45.0
+    /// Winkel (Grad), ab dem die Ausrichtung als volles Abbiegen (statt "leicht
+    /// … halten") angesagt wird. Bewusst hoch: Eine normale Kurskorrektur zur
+    /// Route ist eine sanfte "halten"-Ansage; erst eine annähernde Kehrtwende
+    /// wird zum "abbiegen".
+    private static let reorientTurnThresholdDeg = 120.0
 
     /// Bestimmt das nächste Manöver auf der Route.
     ///
@@ -416,15 +421,21 @@ enum RouteService {
         guard coords.count >= 2 else { return nil }
 
         // Blickrichtung quer zur Route → zuerst zur Route hin ausrichten.
+        // Bewusst als sanfte "leicht … halten"-Ansage (die Route knickt ja nur
+        // ab, es ist kein echtes Abbiegen); erst eine annähernde Kehrtwende
+        // wird zum "abbiegen".
         if let heading, let routeBearing = travelBearingDegrees(of: route, at: location) {
             let reorient = normalizedSignedDegrees(routeBearing - heading)
             if abs(reorient) >= reorientThresholdDeg {
                 // Kompasskurs im Uhrzeigersinn: positiv = Route rechts der
-                // Blickrichtung ⇒ nach rechts drehen, negativ ⇒ nach links.
-                return RouteManeuver(
-                    direction: reorient > 0 ? .right : .left,
-                    distanceM: 0
-                )
+                // Blickrichtung ⇒ nach rechts halten, negativ ⇒ nach links.
+                let direction: ManeuverDirection
+                if abs(reorient) >= reorientTurnThresholdDeg {
+                    direction = reorient > 0 ? .right : .left
+                } else {
+                    direction = reorient > 0 ? .slightRight : .slightLeft
+                }
+                return RouteManeuver(direction: direction, distanceM: 0)
             }
         }
 
