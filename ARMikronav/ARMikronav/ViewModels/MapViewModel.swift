@@ -95,8 +95,8 @@ final class MapViewModel: ObservableObject {
     /// – Barrieren per Toggle ausgeblendet → keine
     /// – aktive Route → nur Barrieren im Korridor direkt entlang der Route,
     ///   co-lokalisierte zu EINER Stelle zusammengefasst (siehe unten)
-    /// – sonst → nur profilrelevante Barrieren im Umkreis des Standorts
-    ///   (defaultBarrierRadius), co-lokalisierte zusammengefasst
+    /// – sonst → nur profilrelevante Barrieren im engen Umkreis des Standorts
+    ///   (nearbyDisplayRadiusM), co-lokalisierte zusammengefasst
     var displayedBarriers: [Barrier] {
         guard barriersVisible else { return [] }
         if let route = activeRoute {
@@ -111,22 +111,26 @@ final class MapViewModel: ObservableObject {
             }
             return collapseColocated(onRoute)
         }
-        // Ohne Route nur die Barrieren im Umkreis des aktuellen Standorts
-        // anzeigen (Überlastung vermeiden); passt sich beim Weiterfahren an.
-        return collapseColocated(barriersNearCurrentLocation(filteredBarriers))
+        // Ohne Route nur die Barrieren im engen Umkreis des aktuellen
+        // Standorts anzeigen (Überlastung vermeiden); passt sich beim
+        // Weiterfahren an.
+        return collapseColocated(nearCurrentLocation(filteredBarriers) {
+            CLLocation(latitude: $0.latitude, longitude: $0.longitude)
+        })
     }
 
-    /// Radius um den aktuellen Standort, innerhalb dessen Barrieren auf der
-    /// Karte erscheinen. Bewusst begrenzt, damit in der dichten Altstadt nicht
-    /// alle Barrieren gleichzeitig die Karte überladen (Feldtest-Rückmeldung
-    /// Tag 1). Ohne Standort-Fix (kurz nach dem Start) werden übergangsweise
-    /// alle geladenen Barrieren gezeigt.
-    private func barriersNearCurrentLocation(_ barriers: [Barrier]) -> [Barrier] {
-        guard let location = locationService.currentLocation else { return barriers }
-        return barriers.filter { barrier in
-            location.distance(
-                from: CLLocation(latitude: barrier.latitude, longitude: barrier.longitude)
-            ) <= AppConfig.defaultBarrierRadius
+    /// Filtert Elemente auf den Anzeige-Umkreis (nearbyDisplayRadiusM) um den
+    /// aktuellen Standort. Bewusst eng, damit in der dichten Altstadt nur die
+    /// unmittelbare Umgebung sichtbar ist (Feldtest-Rückmeldung Tag 1). Ohne
+    /// Standort-Fix (kurz nach dem Start) werden übergangsweise alle Elemente
+    /// gezeigt. `location` liefert die Position je Element.
+    private func nearCurrentLocation<Element>(
+        _ elements: [Element],
+        location: (Element) -> CLLocation
+    ) -> [Element] {
+        guard let userLocation = locationService.currentLocation else { return elements }
+        return elements.filter { element in
+            userLocation.distance(from: location(element)) <= AppConfig.nearbyDisplayRadiusM
         }
     }
 
@@ -193,9 +197,10 @@ final class MapViewModel: ObservableObject {
     /// – aktive Navigation → nur noch das Ziel (auch bei ausgeblendeten POIs,
     ///   damit das Navigationsziel immer sichtbar bleibt)
     /// – POIs per Toggle ausgeblendet → keine
-    /// – aktive Freitext-Suche → deren Treffer
-    /// – aktiver Kategorie-Chip → alle Altstadt-POIs dieser Kategorie
-    /// – sonst → alle POIs der Altstadt
+    /// – aktive Freitext-Suche → deren Treffer (bewusst NICHT auf den Umkreis
+    ///   beschränkt: eine gezielte Suche soll auch entfernte Treffer zeigen)
+    /// – aktiver Kategorie-Chip → Kategorie-POIs im engen Umkreis
+    /// – sonst → POIs im engen Umkreis des Standorts (nearbyDisplayRadiusM)
     var displayedPOIs: [POI] {
         if activeRoute != nil {
             return navigationTarget.map { [$0] } ?? []
@@ -205,9 +210,18 @@ final class MapViewModel: ObservableObject {
             return searchResults
         }
         if let activeCategory {
-            return poisForCategory(activeCategory)
+            return poisNearCurrentLocation(poisForCategory(activeCategory))
         }
-        return altstadtPOIs
+        return poisNearCurrentLocation(altstadtPOIs)
+    }
+
+    /// POIs im Anzeige-Umkreis (nearbyDisplayRadiusM) um den aktuellen
+    /// Standort – dieselbe enge Begrenzung wie bei den Barrieren, damit Karte
+    /// und AR-Modus nur die unmittelbare Umgebung zeigen.
+    private func poisNearCurrentLocation(_ pois: [POI]) -> [POI] {
+        nearCurrentLocation(pois) {
+            CLLocation(latitude: $0.latitude, longitude: $0.longitude)
+        }
     }
 
     /// Alle Altstadt-POIs eines Kategorie-Chips (exaktes Key-Matching),

@@ -33,6 +33,12 @@ enum AppConfig {
     static let defaultBarrierRadius: Double = 500
     static let approachWarningDistance: Double = 30
 
+    // Umkreis (Meter) um den aktuellen Standort, innerhalb dessen Barrieren
+    // UND POIs auf Karte und im AR-Modus angezeigt werden. Bewusst eng, damit
+    // in der dichten Altstadt nur die unmittelbare Umgebung sichtbar ist und
+    // die Ansicht nicht überladen wirkt; passt sich beim Bewegen an.
+    static let nearbyDisplayRadiusM: Double = 50
+
     // MARK: - ginto API (Endpoint ist öffentlich, der Bearer-Token nicht)
     static let gintoAPIEndpoint = "https://api.ginto.guide/graphql"
 
