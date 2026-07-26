@@ -24,10 +24,6 @@ struct ARRoutePanel: View {
     @StateObject private var locationService = LocationService.shared
     @State private var cameraPosition: MapCameraPosition
 
-    // Enger Ausschnitt (~100 m), damit die unmittelbare Umgebung entlang
-    // der Route gut erkennbar ist; die Kamera folgt dem Standort.
-    private static let closeUpSpan = MKCoordinateSpan(latitudeDelta: 0.001, longitudeDelta: 0.001)
-
     init(
         route: ActiveRoute,
         progress: RouteProgress?,
@@ -40,7 +36,7 @@ struct ARRoutePanel: View {
         self.maneuver = maneuver
         self.onStop = onStop
         self.onMapTap = onMapTap
-        _cameraPosition = State(initialValue: Self.closeUpCamera(for: route))
+        _cameraPosition = State(initialValue: .region(Self.fittedRegion(for: route)))
     }
 
     var body: some View {
@@ -86,12 +82,13 @@ struct ARRoutePanel: View {
         }
         .mapDisplayPreferences()
         .allowsHitTesting(false)
-        // Kamera folgt dem aktuellen Standort im engen Ausschnitt.
-        .onReceive(locationService.$currentLocation.compactMap { $0 }) { location in
+        // Die Minikarte zeigt stets die ganze Route (Start bis Ziel) – der
+        // Standortpunkt bewegt sich darin, der Ausschnitt bleibt aber fix, damit
+        // man jederzeit den kompletten Verlauf sieht. Bei einer Neuberechnung
+        // (neue Route-ID) wird der Ausschnitt auf die neue Route angepasst.
+        .onChange(of: route.id) { _, _ in
             withAnimation(.easeInOut) {
-                cameraPosition = .region(
-                    MKCoordinateRegion(center: location.coordinate, span: Self.closeUpSpan)
-                )
+                cameraPosition = .region(Self.fittedRegion(for: route))
             }
         }
         // Tap-Fläche über der (nicht interaktiven) Karte: wechselt zur Karte.
@@ -116,12 +113,40 @@ struct ARRoutePanel: View {
         return snap.offsetM <= Self.snapToRouteMaxOffsetM ? snap.coordinate : location.coordinate
     }
 
-    /// Start-Kamera eng am Routenanfang (= Standort bei Routenberechnung);
-    /// danach folgt die Kamera dem Live-Standort.
-    private static func closeUpCamera(for route: ActiveRoute) -> MapCameraPosition {
-        guard let start = route.coordinates.first else {
-            return .userLocation(fallback: .automatic)
+    /// Kartenausschnitt, der die komplette Route (Start bis Ziel) mit etwas
+    /// Rand umfasst – so ist der ganze Verlauf im Kartenmodul sichtbar. Der
+    /// Zoom passt sich der Routenlänge an (mit sinnvoller Unter-/Obergrenze,
+    /// damit sehr kurze Routen nicht übermässig herangezoomt werden).
+    private static func fittedRegion(for route: ActiveRoute) -> MKCoordinateRegion {
+        let coordinates = route.coordinates
+        guard let first = coordinates.first else {
+            // Ohne Wegpunkte wenigstens das Ziel zentrieren.
+            return MKCoordinateRegion(
+                center: route.destinationCoordinate,
+                span: MKCoordinateSpan(latitudeDelta: 0.003, longitudeDelta: 0.003)
+            )
         }
-        return .region(MKCoordinateRegion(center: start, span: closeUpSpan))
+
+        var minLat = first.latitude, maxLat = first.latitude
+        var minLng = first.longitude, maxLng = first.longitude
+        for coordinate in coordinates {
+            minLat = min(minLat, coordinate.latitude)
+            maxLat = max(maxLat, coordinate.latitude)
+            minLng = min(minLng, coordinate.longitude)
+            maxLng = max(maxLng, coordinate.longitude)
+        }
+
+        let center = CLLocationCoordinate2D(
+            latitude: (minLat + maxLat) / 2,
+            longitude: (minLng + maxLng) / 2
+        )
+        // 40 % Rand rundum, damit Start- und Zielmarker nicht am Kartenrand
+        // kleben; Untergrenze für sehr kurze Routen.
+        let latDelta = max((maxLat - minLat) * 1.4, 0.0012)
+        let lngDelta = max((maxLng - minLng) * 1.4, 0.0012)
+        return MKCoordinateRegion(
+            center: center,
+            span: MKCoordinateSpan(latitudeDelta: latDelta, longitudeDelta: lngDelta)
+        )
     }
 }

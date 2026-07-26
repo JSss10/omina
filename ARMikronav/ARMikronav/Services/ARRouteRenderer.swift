@@ -23,13 +23,10 @@ enum ARRouteRenderer {
     /// Stützpunkte lassen den Pfad der Gasse folgen statt lange Segmente zu
     /// überspringen (siehe RouteService.densify).
     static let waypointSpacing: Float = 2
-    /// Höhe, in der die Richtungs-Chevrons ÜBER dem Bodenpfad schweben (Meter).
-    /// Der AR-Weg wird bewusst im sichtbaren Band zwischen Bodenhöhe und der
-    /// Höhe der Handyhalterung berechnet: Der halbtransparente Teppich liegt auf
-    /// dem Boden, die Chevrons schweben etwas darüber (aber stets unterhalb des
-    /// Geräts), damit sie auch dann sichtbar bleiben, wenn eine Menschenmenge
-    /// den Boden direkt vor dem Rollstuhl verdeckt (Feldtest-Rückmeldung Tag 1).
-    static let chevronFloatHeight: Float = 0.9
+    /// Höhe, in der die weissen Richtungs-Pfeile ÜBER der Pfadoberfläche liegen
+    /// (Meter). Die Pfeile sollen direkt auf dem violetten Weg liegen; ein
+    /// kleiner Abstand verhindert lediglich Z-Fighting mit dem Teppich.
+    static let chevronFloatHeight: Float = 0.03
 
     /// Erzeugt einen Welt-Anker mit allen Route-Entities.
     /// `deviceHeight` ist die geschätzte Höhe, in der das iPhone gehalten wird
@@ -69,9 +66,15 @@ enum ARRouteRenderer {
 
     // MARK: - Pfad
 
+    /// Zusammenhängender violetter Weg: Zwischen den Wegpunkten liegen flache
+    /// Segmente, an jeder Richtungsänderung und an beiden Enden eine runde
+    /// Scheibe. So verschmelzen die Segmente ohne Lücke zu einem durchgehenden
+    /// Pfad mit runden Ecken und Enden (statt eckig abgeschnittener Stücke).
     private static func addCarpet(to anchor: AnchorEntity, along points: [SIMD3<Float>]) {
-        let material = unlitMaterial(color: pathColor, opacity: 0.55)
+        let material = unlitMaterial(color: pathColor, opacity: 0.6)
+        let disc = discMesh(radius: pathWidth / 2)
 
+        // Gerade Segmente.
         for i in 0..<(points.count - 1) {
             let start = points[i]
             let end = points[i + 1]
@@ -87,6 +90,66 @@ enum ARRouteRenderer {
             segment.orientation = simd_quatf(angle: atan2(delta.x, delta.z), axis: [0, 1, 0])
             anchor.addChild(segment)
         }
+
+        // Runde Kappen an Start und Ziel plus runde Füllstücke an den Ecken,
+        // damit der Pfad ununterbrochen und weich gerundet wirkt.
+        func addDisc(at point: SIMD3<Float>) {
+            let entity = ModelEntity(mesh: disc, materials: [material])
+            // Minimal über der Teppichoberkante, um Z-Fighting zu vermeiden.
+            entity.position = SIMD3(point.x, point.y + 0.012, point.z)
+            anchor.addChild(entity)
+        }
+
+        if let first = points.first { addDisc(at: first) }
+        if points.count > 1, let last = points.last { addDisc(at: last) }
+
+        // An jeder nennenswerten Richtungsänderung eine Scheibe als runde Ecke.
+        guard points.count > 2 else { return }
+        for i in 1..<(points.count - 1) {
+            let inDir = points[i] - points[i - 1]
+            let outDir = points[i + 1] - points[i]
+            let inLen = simd_length(SIMD2(inDir.x, inDir.z))
+            let outLen = simd_length(SIMD2(outDir.x, outDir.z))
+            guard inLen > 0.05, outLen > 0.05 else { continue }
+            let a = SIMD2(inDir.x, inDir.z) / inLen
+            let b = SIMD2(outDir.x, outDir.z) / outLen
+            // cos des Winkels zwischen den Segmenten; < ~0.99 ≈ > 8° Richtungswechsel.
+            if simd_dot(a, b) < 0.99 {
+                addDisc(at: points[i])
+            }
+        }
+    }
+
+    /// Flache, runde Scheibe in der XZ-Ebene (Normale +Y), beidseitig sichtbar –
+    /// für runde Pfad-Enden und weiche Ecken.
+    private static func discMesh(radius: Float, segments: Int = 24) -> MeshResource {
+        var positions: [SIMD3<Float>] = [SIMD3<Float>(0, 0, 0)]
+        for i in 0...segments {
+            let angle = Float(i) / Float(segments) * 2 * .pi
+            positions.append(SIMD3<Float>(cos(angle) * radius, 0, sin(angle) * radius))
+        }
+
+        var indices: [UInt32] = []
+        for i in 1...segments {
+            let outer = UInt32(i)
+            let next = UInt32(i + 1)
+            // Vorder- und Rückseite, damit die Scheibe unabhängig von der
+            // Blickrichtung (Face-Culling) immer sichtbar bleibt.
+            indices += [0, outer, next]
+            indices += [0, next, outer]
+        }
+
+        var descriptor = MeshDescriptor(name: "routeDisc")
+        descriptor.positions = MeshBuffers.Positions(positions)
+        descriptor.normals = MeshBuffers.Normals(
+            [SIMD3<Float>](repeating: [0, 1, 0], count: positions.count)
+        )
+        descriptor.primitives = .triangles(indices)
+
+        if let mesh = try? MeshResource.generate(from: [descriptor]) {
+            return mesh
+        }
+        return .generatePlane(width: radius * 2, depth: radius * 2)
     }
 
     // MARK: - Richtungs-Chevrons
@@ -97,15 +160,11 @@ enum ARRouteRenderer {
         groundY: Float
     ) {
         let mesh = chevronMesh()
-        let material = unlitMaterial(color: .white, opacity: 0.92)
+        let material = unlitMaterial(color: .white, opacity: 0.95)
 
-        // Schwebehöhe der Chevrons: im Band zwischen Bodenpfad (groundY) und
-        // Gerätehöhe (y = 0), aber immer klar unterhalb des Geräts – sonst
-        // hängt die Führung "im Gesicht". `deviceHeight` = -groundY, wenn der
-        // Boden unter dem Session-Ursprung liegt (Normalfall). Fällt der
-        // erkannte Boden über den Ursprung, bleibt der kleine Bodenabstand.
-        let deviceHeight = max(-groundY, 0.05)
-        let floatY = groundY + min(chevronFloatHeight, deviceHeight * 0.7)
+        // Die weissen Pfeile liegen direkt auf dem violetten Weg – nur ein
+        // kleiner Abstand über der Teppichoberkante verhindert Z-Fighting.
+        let floatY = groundY + chevronFloatHeight
 
         var travelled: Float = 0
         var nextChevronAt: Float = 2
