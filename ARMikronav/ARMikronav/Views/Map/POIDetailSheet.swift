@@ -39,9 +39,9 @@ struct POIDetailSheet: View {
             VStack(alignment: .leading, spacing: AppMetrics.Space.l) {
                 header
                 photoCarousel
-                statusBadge
                 eurokeyHint
                 ratingsCard
+                accessStatusLine
                 detailsCard
                 websiteRow
 
@@ -185,8 +185,31 @@ struct POIDetailSheet: View {
         .clipped()
     }
 
-    private var statusBadge: some View {
-        StatusBadge(status: poi.accessStatus)
+    /// Zugänglichkeits-Status nur als Rückfall, wenn es keine Rollstuhl-
+    /// Bewertung gibt – sonst trägt die Bewertungskarte den Status und ein
+    /// zusätzlicher Gesamt-Status wäre doppelt.
+    @ViewBuilder
+    private var accessStatusLine: some View {
+        if poi.gintoRating(for: profile.wheelchairType) == nil {
+            let status = poi.accessStatus
+            HStack(spacing: AppMetrics.Space.s + AppMetrics.Space.xs) {
+                Image(systemName: status.symbolName)
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(status.tint)
+                Text(status.label)
+                    .font(AppTypography.subheadline.weight(.semibold))
+                    .foregroundStyle(AppColor.textPrimary)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, AppMetrics.Space.m)
+            .padding(.vertical, AppMetrics.Space.s + AppMetrics.Space.xs)
+            .background(
+                status.tint.opacity(0.12),
+                in: RoundedRectangle(cornerRadius: AppMetrics.Radius.field, style: .continuous)
+            )
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(status.label)
+        }
     }
 
     /// ginto-Bewertung für den eigenen Rollstuhltyp mit Einstufung und
@@ -205,14 +228,11 @@ struct POIDetailSheet: View {
                         .foregroundStyle(rating.status.tint)
                         .frame(width: 28)
 
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(rating.profileLabel)
-                            .font(AppTypography.headline)
-                            .foregroundStyle(AppColor.textPrimary)
-                        Text("Dein Rollstuhltyp")
-                            .font(AppTypography.footnote)
-                            .foregroundStyle(AppColor.textSecondary)
-                    }
+                    // Konkreter Rollstuhltyp des Users statt der generischen
+                    // Beschriftung «Dein Rollstuhltyp».
+                    Text(profile.wheelchairType.displayName)
+                        .font(AppTypography.headline)
+                        .foregroundStyle(AppColor.textPrimary)
 
                     Spacer(minLength: AppMetrics.Space.s)
 
@@ -229,7 +249,7 @@ struct POIDetailSheet: View {
             .padding(AppMetrics.Space.m)
             .cardBackground()
             .accessibilityElement(children: .combine)
-            .accessibilityLabel("\(rating.profileLabel): \(rating.gradeLabel)"
+            .accessibilityLabel("\(profile.wheelchairType.displayName): \(rating.gradeLabel)"
                 + (rating.conformancePercent.map { ", \(Int($0)) Prozent erfüllt" } ?? ""))
         }
     }

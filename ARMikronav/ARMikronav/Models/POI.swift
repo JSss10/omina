@@ -261,12 +261,13 @@ enum POIAccessStatus {
     }
 
     /// SF-Symbol mit Grundform + Symbol (P2: Farbe trägt nie allein Information).
-    /// Kreis+Häkchen · Dreieck+Ausrufezeichen · Achteck+Kreuz.
+    /// Durchgehend gefüllte Kreise als gemeinsame Grundform: Häkchen (grün),
+    /// Ausrufezeichen (orange), Kreuz (rot).
     var symbolName: String {
         switch self {
         case .accessible:    return "checkmark.circle.fill"
-        case .limited:       return "exclamationmark.triangle.fill"
-        case .notAccessible: return "xmark.octagon.fill"
+        case .limited:       return "exclamationmark.circle.fill"
+        case .notAccessible: return "xmark.circle.fill"
         case .unknown:       return "questionmark.circle.fill"
         }
     }

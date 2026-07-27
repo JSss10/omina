@@ -34,10 +34,13 @@ struct MapView: View {
     /// angezeigten POIs in der Nähe ist.
     @State private var focusedPOI: POI?
     @State private var showingSearch = false
-    /// Karteneinstellungen-Overlay (Kartenmodus, Darstellung, Sichtbarkeit von
-    /// Orten/Barrieren, Barrierentypen-Filter) – bündelt in Apple-Maps-Manier,
-    /// was vorher über einzelne Karten-Buttons verstreut war.
+    /// Karteneinstellungen-Overlay (Kartenmodus, Darstellung) – schlank in
+    /// Apple-Maps-Manier. Sichtbarkeit und Barrierentypen-Filter liegen im
+    /// Filter-Sheet (neben der Suchleiste bzw. über den Empty-State).
     @State private var showingMapSettings = false
+    /// Filter-Sheet (Sichtbarkeit von Orten/Barrieren + Barrierentypen), auch
+    /// direkt aus dem Empty-State heraus erreichbar.
+    @State private var showingFilter = false
     /// Listenansicht der Barrieren entlang der aktiven Route.
     @State private var showingRouteBarriers = false
     /// Turn-by-turn-Listenansicht der aktiven Route.
@@ -193,11 +196,17 @@ struct MapView: View {
             selectedBarrier = barrier
         }
         // Suche als kompaktes Icon (Apple-Maps-Manier) links oben – der frühere
-        // breite Suchbalken entfällt. Rechts oben sitzt der Kompass.
+        // breite Suchbalken entfällt. Direkt darunter der Einstellungs-Button
+        // (während der Navigation ausgeblendet). Rechts oben sitzt der Kompass.
         .overlay(alignment: .topLeading) {
-            searchButton
-                .padding(.leading, 16)
-                .padding(.top, 16)
+            VStack(spacing: 12) {
+                searchButton
+                if viewModel.activeRoute == nil {
+                    mapSettingsButton
+                }
+            }
+            .padding(.leading, 16)
+            .padding(.top, 16)
         }
         // Banner sitzen unterhalb der Bedienzeile (Such-Icon links, Kompass
         // rechts), damit sie die Ecken-Buttons nicht verdecken.
@@ -240,9 +249,10 @@ struct MapView: View {
                     .background(.thinMaterial, in: Capsule())
                 }
             }
-            // Unterhalb der Bedienzeile (Such-Icon/Kompass, ~44 pt hoch), damit
-            // Banner die Ecken-Buttons nicht überdecken.
-            .padding(.top, 68)
+            // Unterhalb der Bedienelemente oben links, damit Banner sie nicht
+            // überdecken: ohne Navigation stehen Such- und Einstellungs-Icon
+            // untereinander (höher), während der Navigation nur das Such-Icon.
+            .padding(.top, viewModel.activeRoute == nil ? 124 : 68)
             .animation(.easeInOut(duration: 0.25), value: connectivity.isOnline)
             .animation(.spring(duration: 0.35), value: proximityService.activeWarning?.barrier.id)
             .animation(.spring(duration: 0.35), value: viewModel.isOffRoute)
@@ -251,18 +261,9 @@ struct MapView: View {
         // Höhe der Suchleiste – dort, wo früher der Home-Button sass (jetzt
         // ersetzt durch die sichtbare Tab-Leiste, HomeView).
         .overlay(alignment: .topTrailing) {
-            CompassView(heading: locationService.heading)
+            CompassView(heading: locationService.heading, background: Self.controlBackground)
                 .padding(.trailing, 16)
                 .padding(.top, 16)
-        }
-        .overlay(alignment: .bottomLeading) {
-            // Während der Navigation ersetzt das Routen-Panel die Bedienelemente.
-            // Ein einziger Button öffnet die gebündelten Karteneinstellungen.
-            if viewModel.activeRoute == nil {
-                mapSettingsButton
-                    .padding(.leading)
-                    .padding(.bottom, 12)
-            }
         }
         .overlay(alignment: .bottom) {
             if let route = viewModel.activeRoute {
@@ -287,7 +288,7 @@ struct MapView: View {
         .animation(.spring(duration: 0.35), value: viewModel.activeRoute)
         .overlay {
             if showEmptyState {
-                EmptyStateView { showingMapSettings = true }
+                EmptyStateView { showingFilter = true }
             }
         }
         .overlay(alignment: .bottom) {
@@ -358,12 +359,21 @@ struct MapView: View {
             .trackScreen("search")
         }
         .sheet(isPresented: $showingMapSettings) {
-            MapSettingsSheet(viewModel: viewModel, mapPreferences: mapPreferences)
+            MapSettingsSheet(mapPreferences: mapPreferences)
                 .trackScreen("map_settings")
+        }
+        .sheet(isPresented: $showingFilter) {
+            FilterSheet(viewModel: viewModel)
+                .trackScreen("filter")
         }
     }
 
     // MARK: - Components
+
+    /// Deckender weisser Hintergrund für die Karten-Bedienelemente (Suche,
+    /// Karteneinstellungen, Kompass) – konsistent statt durchscheinendem
+    /// Material, mit dezentem Schatten zur Abhebung von der Karte.
+    private static let controlBackground = AnyShapeStyle(Color(.systemBackground))
 
     /// Kompaktes Such-Icon (öffnet das SearchSheet) – ersetzt den früheren
     /// breiten Suchbalken. Gleiche Grösse/Optik wie der Einstellungs-Button.
@@ -375,23 +385,25 @@ struct MapView: View {
                 .font(.title2.weight(.semibold))
                 .foregroundStyle(AppColor.textPrimary)
                 .frame(width: 44, height: 44)
-                .background(.thinMaterial, in: Circle())
+                .background(Self.controlBackground, in: Circle())
+                .shadow(color: .black.opacity(0.2), radius: 3, y: 1)
         }
         .accessibilityLabel("Orte suchen")
     }
 
-    /// Öffnet das Karteneinstellungs-Overlay (Kartenmodus, Darstellung,
-    /// Sichtbarkeit von Orten/Barrieren, Barrierentypen-Filter). Ersetzt die
-    /// früheren einzelnen Karten-Buttons.
+    /// Öffnet das Karteneinstellungs-Overlay (Kartenmodus, Darstellung).
+    /// Sitzt direkt unter dem Such-Icon; der Barrierentypen-Filter und die
+    /// Sichtbarkeit von Orten/Barrieren liegen jetzt im Such-Sheet.
     private var mapSettingsButton: some View {
         Button {
             showingMapSettings = true
         } label: {
-            Image(systemName: "square.3.layers.3d")
+            Image(systemName: "gearshape.fill")
                 .font(.title2.weight(.semibold))
                 .foregroundStyle(AppColor.textPrimary)
                 .frame(width: 44, height: 44)
-                .background(.thinMaterial, in: Circle())
+                .background(Self.controlBackground, in: Circle())
+                .shadow(color: .black.opacity(0.2), radius: 3, y: 1)
         }
         .accessibilityLabel("Karteneinstellungen")
     }

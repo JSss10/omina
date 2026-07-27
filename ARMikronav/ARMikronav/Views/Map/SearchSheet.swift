@@ -28,19 +28,32 @@ struct SearchSheet: View {
     @State private var activeChip: String?
     /// Sheet-Höhe: startet als Medium, wächst beim Tippen auf die volle Höhe.
     @State private var detent: PresentationDetent = .medium
+    /// Filter-Sheet (Sichtbarkeit von Orten/Barrieren + Barrierentypen) – jetzt
+    /// direkt neben der Suchleiste statt in den Karteneinstellungen.
+    @State private var showingFilter = false
     @FocusState private var searchFieldFocused: Bool
 
     var body: some View {
         VStack(spacing: 16) {
-            searchField
-                .padding(.horizontal)
-                // Mehr Luft zwischen Grabber und Suchfeld.
-                .padding(.top, 20)
+            // Suchfeld und – direkt rechts daneben – der Filter-Button für die
+            // Barrierentypen und die Sichtbarkeit von Orten/Barrieren.
+            HStack(spacing: 12) {
+                searchField
+                filterButton
+            }
+            .padding(.horizontal)
+            // Mehr Luft zwischen Grabber und Suchfeld.
+            .padding(.top, 20)
 
             categoryFilters
 
             content
         }
+        // Durchgehend der gruppierte Hintergrund (wie die insetGrouped-Liste),
+        // damit Suchfeld, Kategorien und Liste auf derselben Fläche liegen –
+        // Medium- und Voll-Ansicht sehen dadurch identisch aus.
+        .background(Color(.systemGroupedBackground))
+        .presentationBackground(Color(.systemGroupedBackground))
         .presentationDetents([.medium, .large], selection: $detent)
         .presentationDragIndicator(.visible)
         // Beim Fokussieren auf volle Höhe wachsen, damit die Tastatur die
@@ -49,6 +62,39 @@ struct SearchSheet: View {
             if focused { detent = .large }
         }
         .task { await loadSavedPlaces() }
+        .sheet(isPresented: $showingFilter) {
+            FilterSheet(viewModel: viewModel)
+                .trackScreen("filter")
+        }
+    }
+
+    /// Icon-Button rechts neben der Suchleiste: öffnet das Filter-Sheet.
+    /// Hebt sich (Akzent-Füllung) hervor, sobald ein Filter aktiv ist –
+    /// Orte/Barrieren ausgeblendet oder nicht alle Barrierentypen sichtbar.
+    private var filterButton: some View {
+        Button {
+            showingFilter = true
+        } label: {
+            Image(systemName: "line.3.horizontal.decrease")
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(filtersActive ? Color.white : AppColor.accentPrimary)
+                .frame(width: 44, height: 44)
+                .background(
+                    filtersActive
+                        ? AnyShapeStyle(Color.accentColor)
+                        : AnyShapeStyle(Color(.secondarySystemGroupedBackground)),
+                    in: Circle()
+                )
+        }
+        .accessibilityLabel("Filter")
+        .accessibilityAddTraits(filtersActive ? .isSelected : [])
+    }
+
+    /// Ob aktuell ein Filter greift (für die Hervorhebung des Filter-Buttons).
+    private var filtersActive: Bool {
+        !viewModel.poisVisible
+            || !viewModel.barriersVisible
+            || viewModel.filterState.enabledTypes.count != BarrierType.allCases.count
     }
 
     // MARK: - Inhalt (Ergebnisse oder Ausgangszustand)
@@ -95,8 +141,9 @@ struct SearchSheet: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
-        // Ganz gerundete Ecken (Pill/Capsule) statt leicht gerundetem Rechteck.
-        .background(Color(.systemGray6), in: Capsule())
+        // Weisse Pille auf dem gruppierten (grauen) Sheet-Hintergrund – hebt
+        // sich wie die Listen-Karten ab (statt grau auf grau).
+        .background(Color(.secondarySystemGroupedBackground), in: Capsule())
     }
 
     /// Kategorie-Filter (Café, WC, Restaurant …) als kreisförmige Icon-Buttons
@@ -121,7 +168,7 @@ struct SearchSheet: View {
             VStack(spacing: 6) {
                 ZStack {
                     Circle()
-                        .fill(isActive ? Color.accentColor : Color(.systemGray6))
+                        .fill(isActive ? Color.accentColor : Color(.secondarySystemGroupedBackground))
                         .frame(width: 54, height: 54)
                     Image(systemName: POICategory.symbol(forChip: chip))
                         .font(.system(size: 22, weight: .medium))
@@ -269,6 +316,9 @@ struct SearchSheet: View {
 
     // MARK: - Ergebnisliste (Suche / Kategorie)
 
+    /// Ergebnisliste: gleiche Zeilen-Optik und Listenform wie der
+    /// Ausgangszustand (browseList), damit Medium- und Voll-Ansicht des Sheets
+    /// einheitlich aussehen.
     private var resultsList: some View {
         List {
             Section {
@@ -276,7 +326,11 @@ struct SearchSheet: View {
                     Button {
                         select(poi)
                     } label: {
-                        resultRow(poi)
+                        placeRow(
+                            poi: poi,
+                            leadingSymbol: poi.categorySymbol,
+                            subtitle: poi.address
+                        )
                     }
                     .buttonStyle(.plain)
                 }
@@ -284,35 +338,7 @@ struct SearchSheet: View {
                 Text("\(results.count) Ergebnisse · nach Entfernung")
             }
         }
-        .listStyle(.plain)
-    }
-
-    private func resultRow(_ poi: POI) -> some View {
-        HStack(alignment: .top) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(poi.name)
-                    .font(.body.weight(.semibold))
-                if let address = poi.address {
-                    Text(address)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
-                HStack(spacing: 6) {
-                    Image(systemName: poi.accessStatus.symbolName)
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(poi.accessStatus.tint)
-                    Text(poi.accessStatus.shortLabel)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            Spacer()
-            Text(viewModel.userDistanceText(to: poi))
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .monospacedDigit()
-        }
-        .padding(.vertical, 8)
+        .listStyle(.insetGrouped)
     }
 
     // Empty-State mit Handlungs-Hinweis.
