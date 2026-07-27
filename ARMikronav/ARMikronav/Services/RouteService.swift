@@ -81,6 +81,23 @@ struct RouteSnap {
     let offsetM: CLLocationDistance
 }
 
+/// Verortung eines Standorts auf der Route: auf welchem Segment er liegt, wie
+/// weit er seitlich daneben liegt und wie viel Weg davor bzw. dahinter liegt.
+/// Gemeinsame Grundlage für Restweg, Einrasten, Abbiege-Ansage und
+/// Kartendrehung – damit alle vier dieselbe Stelle der Route meinen.
+struct RouteFix {
+    /// Index des Segments (Wegpunkt i → i+1), auf das projiziert wurde.
+    let segmentIndex: Int
+    /// Auf die Route projizierter Punkt (auf der Linie).
+    let coordinate: CLLocationCoordinate2D
+    /// Seitlicher Abstand des Rohstandorts zur Route in Metern.
+    let offsetM: CLLocationDistance
+    /// Weglänge vom Routenstart bis zum Fusspunkt.
+    let alongM: CLLocationDistance
+    /// Weglänge vom Fusspunkt bis zum Ziel.
+    let remainingM: CLLocationDistance
+}
+
 /// Richtung des nächsten Manövers entlang der Route (aus der Polyline-
 /// Geometrie abgeleitet). Positiver Winkel = Linkskurve.
 enum ManeuverDirection: Equatable {
@@ -324,18 +341,54 @@ enum RouteService {
     private static let orsDirectionsURL =
         URL(string: "https://api.openrouteservice.org/v2/directions/wheelchair/geojson")!
 
+    // MARK: - Plausibilität einer Route
+
+    /// Luftlinie (Meter), unterhalb derer das Ziel als "praktisch nebenan"
+    /// gilt – dort fällt ein grosser Umweg sofort auf.
+    private static let shortTripBeelineM: CLLocationDistance = 400
+    /// Verhältnis Routenlänge zu Luftlinie, ab dem die Rollstuhl-Route als
+    /// unplausibel gilt.
+    private static let implausibleDetourFactor = 6.0
+    /// Sockel obendrauf, damit normale Umwege auf kurzen Strecken (Hauseingang
+    /// auf der anderen Seite, Treppe umfahren) nicht anschlagen.
+    private static let implausibleDetourMarginM: CLLocationDistance = 250
+    /// So viel kürzer muss die Fussgängerroute sein, damit sie eine als
+    /// unplausibel erkannte Rollstuhl-Route ersetzt.
+    private static let plausibleFallbackFactor = 0.6
+
+    /// Ist die berechnete Route gemessen an der Luftlinie unplausibel lang?
+    /// Genau der Fall aus dem Feldtest: Das Ziel liegt 40 m entfernt auf der
+    /// anderen Strassenseite, die Route führt aber 1,9 km über die übernächste
+    /// Brücke – typischerweise, weil der Startpunkt aus einem GPS-Ausreisser
+    /// stammt oder die Profil-Limits das direkte Wegstück ausschliessen.
+    static func isImplausibleDetour(
+        routeDistanceM: CLLocationDistance,
+        beelineM: CLLocationDistance
+    ) -> Bool {
+        guard beelineM < shortTripBeelineM else { return false }
+        return routeDistanceM > beelineM * implausibleDetourFactor + implausibleDetourMarginM
+    }
+
     /// Berechnet die Route zum Ziel: zuerst rollstuhlgerecht via
     /// OpenRouteService mit den Limits aus dem Profil. Schlägt das fehl
     /// (kein API-Key, Netzfehler, keine rollstuhlgerechte Route), kommt
     /// die MapKit-Fussgängerroute als gekennzeichneter Fallback.
+    ///
+    /// Zusätzlich wird die Rollstuhl-Route auf Plausibilität geprüft: Ist sie
+    /// gegenüber der Luftlinie absurd lang (Ziel nebenan, Route kilometerweit)
+    /// und liefert die Fussgängerroute einen deutlich kürzeren Weg, wird diese
+    /// – klar als Fussgängerroute gekennzeichnet – vorgezogen. Lieber ein
+    /// sichtbar mit "Barrieren nicht berücksichtigt" markierter kurzer Weg als
+    /// ein unbrauchbarer Riesenumweg.
     static func route(
         from start: CLLocationCoordinate2D,
         to destination: CLLocationCoordinate2D,
         destinationName: String,
         profile: UserProfile
     ) async throws -> ActiveRoute {
+        let wheelchair: ActiveRoute
         do {
-            return try await wheelchairRoute(
+            wheelchair = try await wheelchairRoute(
                 from: start,
                 to: destination,
                 destinationName: destinationName,
@@ -348,6 +401,26 @@ enum RouteService {
                 destinationName: destinationName
             )
         }
+
+        let beelineM = CLLocation(latitude: start.latitude, longitude: start.longitude)
+            .distance(
+                from: CLLocation(latitude: destination.latitude, longitude: destination.longitude)
+            )
+        guard isImplausibleDetour(
+            routeDistanceM: wheelchair.totalDistanceM,
+            beelineM: beelineM
+        ) else {
+            return wheelchair
+        }
+
+        guard let walking = try? await walkingRoute(
+            from: start,
+            to: destination,
+            destinationName: destinationName
+        ), walking.totalDistanceM < wheelchair.totalDistanceM * plausibleFallbackFactor else {
+            return wheelchair
+        }
+        return walking
     }
 
     // MARK: - Rollstuhl-Route (OpenRouteService)
@@ -501,12 +574,128 @@ enum RouteService {
         return steps
     }
 
-    /// Projiziert den Standort auf das nächstgelegene Routensegment und
-    /// summiert die verbleibenden Segmentlängen. Restzeit anteilig zur
-    /// erwarteten Gesamtzeit.
-    static func progress(of route: ActiveRoute, at location: CLLocation) -> RouteProgress {
-        let coords = route.coordinates
-        guard coords.count >= 2 else {
+    // MARK: - Verortung auf der Route
+
+    /// Wie weit der Fusspunkt hinter dem bisher erreichten Punkt liegen darf,
+    /// ohne dass es als Rückwärtssprung zählt (GPS-Rauschen, Stehenbleiben).
+    private static let anchorBacktrackToleranceM = 30.0
+    /// Wie weit der Fusspunkt vor dem bisher erreichten Punkt liegen darf.
+    /// Zwischen zwei Standort-Updates legt man höchstens ein paar Dutzend
+    /// Meter zurück; alles darüber wäre ein Sprung auf einen anderen
+    /// Routenabschnitt, der zufällig in der Nähe verläuft.
+    private static let anchorForwardWindowM = 250.0
+    /// Aufschlag je Meter, den ein Kandidat ausserhalb dieses Fensters liegt.
+    /// Bewusst < 1, damit ein klar näher liegendes Segment weiterhin gewinnen
+    /// kann – der Anker lenkt die Wahl, er erzwingt sie nicht.
+    private static let anchorWindowPenaltyPerM = 0.35
+
+    /// Fusspunkt in lokalen Ost/Nord-Metern (Standort = Ursprung).
+    private struct ProjectedFix {
+        let segmentIndex: Int
+        let projection: SIMD2<Double>
+        let offsetM: Double
+        let alongM: Double
+        let remainingM: Double
+    }
+
+    /// Route als lokales Ost/Nord-Meter-Koordinatensystem um `origin`
+    /// (der Bezugspunkt selbst liegt im Ursprung 0,0).
+    private static func routePoints(
+        of route: ActiveRoute,
+        relativeTo origin: CLLocationCoordinate2D
+    ) -> [SIMD2<Double>] {
+        route.coordinates.map { metersEastNorth(of: $0, relativeTo: origin) }
+    }
+
+    /// Projiziert den Ursprung (0,0) auf die Polyline.
+    ///
+    /// Ohne `alongAnchorM` gewinnt schlicht das nächstgelegene Segment. Das
+    /// genügt, solange die Route sich nicht selbst nahekommt – tut sie es
+    /// (Umweg über die nächste Brücke, Hin- und Rückweg in derselben Gasse,
+    /// Parallelgassen der Altstadt), rastet die Projektion sonst auf dem
+    /// falschen Ast ein: Restweg, Kartendrehung und Abbiege-Ansage kippen dann
+    /// schlagartig, bis hin zum dauerhaften "Bitte umdrehen".
+    ///
+    /// Mit `alongAnchorM` (bisher zurückgelegte Weglänge) werden Kandidaten
+    /// ausserhalb eines Fensters um diesen Wert mit einem Aufschlag bestraft.
+    /// Die Projektion bleibt damit vorwärtsgerichtet und stabil.
+    private static func project(
+        _ points: [SIMD2<Double>],
+        alongAnchorM: CLLocationDistance? = nil
+    ) -> ProjectedFix? {
+        guard points.count >= 2 else { return nil }
+
+        // prefix[i] = Weglänge vom Start bis Punkt i.
+        var prefix = [Double](repeating: 0, count: points.count)
+        for i in 1..<points.count {
+            prefix[i] = prefix[i - 1] + simd_distance(points[i - 1], points[i])
+        }
+        let totalLength = prefix[points.count - 1]
+
+        var best: ProjectedFix?
+        var bestScore = Double.greatestFiniteMagnitude
+
+        for i in 0..<(points.count - 1) {
+            let a = points[i]
+            let b = points[i + 1]
+            let ab = b - a
+            let lengthSquared = simd_length_squared(ab)
+            let t = lengthSquared > 0 ? min(1, max(0, simd_dot(-a, ab) / lengthSquared)) : 0
+            let projected = a + t * ab
+            let offset = simd_length(projected)
+            let along = prefix[i] + simd_distance(a, projected)
+
+            var score = offset
+            if let alongAnchorM {
+                let behind = (alongAnchorM - anchorBacktrackToleranceM) - along
+                let ahead = along - (alongAnchorM + anchorForwardWindowM)
+                let outside = max(0, max(behind, ahead))
+                score += outside * anchorWindowPenaltyPerM
+            }
+
+            if score < bestScore {
+                bestScore = score
+                best = ProjectedFix(
+                    segmentIndex: i,
+                    projection: projected,
+                    offsetM: offset,
+                    alongM: along,
+                    remainingM: max(0, totalLength - along)
+                )
+            }
+        }
+        return best
+    }
+
+    /// Verortet den Standort auf der Route (Segment, Fusspunkt, seitlicher
+    /// Abstand, Weg davor/dahinter). `alongAnchorM` hält die Projektion
+    /// vorwärtsgerichtet – siehe `project`.
+    static func locate(
+        on route: ActiveRoute,
+        at location: CLLocation,
+        alongAnchorM: CLLocationDistance? = nil
+    ) -> RouteFix? {
+        let origin = location.coordinate
+        let points = routePoints(of: route, relativeTo: origin)
+        guard let fix = project(points, alongAnchorM: alongAnchorM) else { return nil }
+        return RouteFix(
+            segmentIndex: fix.segmentIndex,
+            coordinate: coordinate(from: origin, east: fix.projection.x, north: fix.projection.y),
+            offsetM: fix.offsetM,
+            alongM: fix.alongM,
+            remainingM: fix.remainingM
+        )
+    }
+
+    /// Projiziert den Standort auf die Route und summiert die verbleibenden
+    /// Segmentlängen. Restzeit anteilig zur erwarteten Gesamtzeit.
+    static func progress(
+        of route: ActiveRoute,
+        at location: CLLocation,
+        alongAnchorM: CLLocationDistance? = nil
+    ) -> RouteProgress {
+        let points = routePoints(of: route, relativeTo: location.coordinate)
+        guard let fix = project(points, alongAnchorM: alongAnchorM) else {
             let destination = CLLocation(
                 latitude: route.destinationCoordinate.latitude,
                 longitude: route.destinationCoordinate.longitude
@@ -517,77 +706,33 @@ enum RouteService {
                 remainingTimeS: remainingTime(for: remaining, on: route)
             )
         }
-
-        // Lokales Ost/Nord-Meter-Koordinatensystem um den aktuellen Standort:
-        // der Standort selbst liegt im Ursprung (0,0).
-        let points = coords.map { metersEastNorth(of: $0, relativeTo: location.coordinate) }
-
-        // suffix[i] = Weglänge von Punkt i bis zum Ziel.
-        var suffix = [Double](repeating: 0, count: points.count)
-        for i in stride(from: points.count - 2, through: 0, by: -1) {
-            suffix[i] = suffix[i + 1] + simd_distance(points[i], points[i + 1])
-        }
-
-        var bestDistanceToPath = Double.greatestFiniteMagnitude
-        var bestRemaining = suffix[0]
-
-        for i in 0..<(points.count - 1) {
-            let a = points[i]
-            let b = points[i + 1]
-            let ab = b - a
-            let lengthSquared = simd_length_squared(ab)
-            let t = lengthSquared > 0 ? min(1, max(0, simd_dot(-a, ab) / lengthSquared)) : 0
-            let projected = a + t * ab
-            let distanceToPath = simd_length(projected)
-            if distanceToPath < bestDistanceToPath {
-                bestDistanceToPath = distanceToPath
-                bestRemaining = simd_distance(projected, b) + suffix[i + 1]
-            }
-        }
-
         return RouteProgress(
-            remainingDistanceM: bestRemaining,
-            remainingTimeS: remainingTime(for: bestRemaining, on: route)
+            remainingDistanceM: fix.remainingM,
+            remainingTimeS: remainingTime(for: fix.remainingM, on: route)
         )
     }
 
-    /// Projiziert den Standort auf das nächstgelegene Routensegment und gibt
-    /// den Fusspunkt (auf der violetten Linie) samt seitlichem Abstand zurück.
-    /// Damit lässt sich der Standortpunkt auf der Karte auf die Route
-    /// "einrasten", solange man nah genug an ihr ist – so springt er nicht mehr
-    /// neben der Linie herum (GPS-Rauschen und Mehrwegempfang in den engen,
-    /// hohen Altstadt-Gassen). Der Aufrufer entscheidet über `offsetM`, ob
-    /// eingerastet oder der Rohstandort gezeigt wird.
-    static func snappedLocation(on route: ActiveRoute, at location: CLLocation) -> RouteSnap {
-        let coords = route.coordinates
+    /// Projiziert den Standort auf die Route und gibt den Fusspunkt (auf der
+    /// violetten Linie) samt seitlichem Abstand zurück. Damit lässt sich der
+    /// Standortpunkt auf der Karte auf die Route "einrasten", solange man nah
+    /// genug an ihr ist – so springt er nicht mehr neben der Linie herum
+    /// (GPS-Rauschen und Mehrwegempfang in den engen, hohen Altstadt-Gassen).
+    /// Der Aufrufer entscheidet über `offsetM`, ob eingerastet oder der
+    /// Rohstandort gezeigt wird.
+    static func snappedLocation(
+        on route: ActiveRoute,
+        at location: CLLocation,
+        alongAnchorM: CLLocationDistance? = nil
+    ) -> RouteSnap {
         let origin = location.coordinate
-        guard coords.count >= 2 else {
+        let points = routePoints(of: route, relativeTo: origin)
+        guard let fix = project(points, alongAnchorM: alongAnchorM) else {
             return RouteSnap(coordinate: origin, offsetM: 0)
         }
-
-        // Lokales Ost/Nord-Meter-Koordinatensystem um den Standort (0,0).
-        let points = coords.map { metersEastNorth(of: $0, relativeTo: origin) }
-
-        var bestOffset = Double.greatestFiniteMagnitude
-        var bestProjection = points[0]
-        for i in 0..<(points.count - 1) {
-            let a = points[i]
-            let b = points[i + 1]
-            let ab = b - a
-            let lengthSquared = simd_length_squared(ab)
-            let t = lengthSquared > 0 ? min(1, max(0, simd_dot(-a, ab) / lengthSquared)) : 0
-            let projected = a + t * ab
-            let offset = simd_length(projected)
-            if offset < bestOffset {
-                bestOffset = offset
-                bestProjection = projected
-            }
-        }
-
         // Fusspunkt (Meter Ost/Nord relativ zum Standort) zurück in Koordinaten.
         return RouteSnap(
-            coordinate: coordinate(from: origin, east: bestProjection.x, north: bestProjection.y),
-            offsetM: bestOffset
+            coordinate: coordinate(from: origin, east: fix.projection.x, north: fix.projection.y),
+            offsetM: fix.offsetM
         )
     }
 
@@ -665,17 +810,20 @@ enum RouteService {
     static func nextManeuver(
         of route: ActiveRoute,
         at location: CLLocation,
-        heading: CLLocationDirection? = nil
+        heading: CLLocationDirection? = nil,
+        alongAnchorM: CLLocationDistance? = nil
     ) -> RouteManeuver? {
-        let coords = route.coordinates
-        guard coords.count >= 2 else { return nil }
+        let points = routePoints(of: route, relativeTo: location.coordinate)
+        guard let fix = project(points, alongAnchorM: alongAnchorM) else { return nil }
 
         // Blickrichtung quer zur Route → zuerst zur Route hin ausrichten.
         // Bewusst als sanfte "leicht … halten"-Ansage (die Route knickt ja nur
         // ab, es ist kein echtes Abbiegen); erst eine annähernde Kehrtwende
         // wird zum "abbiegen", und bei (annähernd) entgegengesetzter
-        // Blickrichtung zum "umdrehen".
-        if let heading, let routeBearing = travelBearingDegrees(of: route, at: location) {
+        // Blickrichtung zum "umdrehen". Die Routenrichtung kommt aus DEMSELBEN
+        // Fusspunkt wie der Rest der Ansage – sonst könnte die Ausrichtung auf
+        // einem anderen Routenast gemessen werden als der nächste Knick.
+        if let heading, let routeBearing = travelBearing(points: points, from: fix) {
             let reorient = normalizedSignedDegrees(routeBearing - heading)
             if abs(reorient) >= reorientThresholdDeg {
                 // Kompasskurs im Uhrzeigersinn: positiv = Route rechts der
@@ -694,28 +842,8 @@ enum RouteService {
             }
         }
 
-        // Lokales Ost/Nord-Meter-Koordinatensystem um den Standort (0,0).
-        let points = coords.map { metersEastNorth(of: $0, relativeTo: location.coordinate) }
-
-        // Nächstgelegenes Segment + Projektionspunkt (wie in progress).
-        var bestDistanceToPath = Double.greatestFiniteMagnitude
-        var bestIndex = 0
-        var bestProjection = points[0]
-
-        for i in 0..<(points.count - 1) {
-            let a = points[i]
-            let b = points[i + 1]
-            let ab = b - a
-            let lengthSquared = simd_length_squared(ab)
-            let t = lengthSquared > 0 ? min(1, max(0, simd_dot(-a, ab) / lengthSquared)) : 0
-            let projected = a + t * ab
-            let distanceToPath = simd_length(projected)
-            if distanceToPath < bestDistanceToPath {
-                bestDistanceToPath = distanceToPath
-                bestIndex = i
-                bestProjection = projected
-            }
-        }
+        let bestIndex = fix.segmentIndex
+        let bestProjection = fix.projection
 
         // Vorwärts laufen und den ersten signifikanten Knick suchen.
         var traveled = simd_distance(bestProjection, points[bestIndex + 1])
@@ -762,18 +890,9 @@ enum RouteService {
 
         // Lokales Ost/Nord-Meter-Koordinatensystem um die Koordinate:
         // sie selbst liegt im Ursprung (0,0).
-        let points = coords.map { metersEastNorth(of: $0, relativeTo: coordinate) }
-
-        var best = Double.greatestFiniteMagnitude
-        for i in 0..<(points.count - 1) {
-            let a = points[i]
-            let b = points[i + 1]
-            let ab = b - a
-            let lengthSquared = simd_length_squared(ab)
-            let t = lengthSquared > 0 ? min(1, max(0, simd_dot(-a, ab) / lengthSquared)) : 0
-            best = min(best, simd_length(a + t * ab))
-        }
-        return best
+        let points = routePoints(of: route, relativeTo: coordinate)
+        guard let fix = project(points) else { return .greatestFiniteMagnitude }
+        return fix.offsetM
     }
 
     /// Weglänge (Meter) vom Routen-Start bis zur Projektion der Koordinate
@@ -783,36 +902,11 @@ enum RouteService {
         to coordinate: CLLocationCoordinate2D,
         on route: ActiveRoute
     ) -> CLLocationDistance {
-        let coords = route.coordinates
-        guard coords.count >= 2 else { return 0 }
-
         // Lokales Ost/Nord-Meter-Koordinatensystem um die Koordinate:
         // sie selbst liegt im Ursprung (0,0).
-        let points = coords.map { metersEastNorth(of: $0, relativeTo: coordinate) }
-
-        // prefix[i] = Weglänge vom Start bis Punkt i.
-        var prefix = [Double](repeating: 0, count: points.count)
-        for i in 1..<points.count {
-            prefix[i] = prefix[i - 1] + simd_distance(points[i - 1], points[i])
-        }
-
-        var bestDistanceToPath = Double.greatestFiniteMagnitude
-        var bestAlong = 0.0
-
-        for i in 0..<(points.count - 1) {
-            let a = points[i]
-            let b = points[i + 1]
-            let ab = b - a
-            let lengthSquared = simd_length_squared(ab)
-            let t = lengthSquared > 0 ? min(1, max(0, simd_dot(-a, ab) / lengthSquared)) : 0
-            let projected = a + t * ab
-            let distanceToPath = simd_length(projected)
-            if distanceToPath < bestDistanceToPath {
-                bestDistanceToPath = distanceToPath
-                bestAlong = prefix[i] + simd_distance(a, projected)
-            }
-        }
-        return bestAlong
+        let points = routePoints(of: route, relativeTo: coordinate)
+        guard let fix = project(points) else { return 0 }
+        return fix.alongM
     }
 
     // MARK: - Karten-Ausrichtung
@@ -852,39 +946,27 @@ enum RouteService {
     /// nil, wenn die Route zu kurz ist oder der Standort schon am Ziel liegt.
     static func travelBearingDegrees(
         of route: ActiveRoute,
-        at location: CLLocation
+        at location: CLLocation,
+        alongAnchorM: CLLocationDistance? = nil
     ) -> CLLocationDirection? {
-        let coords = route.coordinates
-        guard coords.count >= 2 else { return nil }
+        let points = routePoints(of: route, relativeTo: location.coordinate)
+        guard let fix = project(points, alongAnchorM: alongAnchorM) else { return nil }
+        return travelBearing(points: points, from: fix)
+    }
 
-        // Lokales Ost/Nord-Meter-Koordinatensystem um den Standort (0,0).
-        let points = coords.map { metersEastNorth(of: $0, relativeTo: location.coordinate) }
+    /// Fahrtrichtung ab einem bereits bestimmten Fusspunkt: läuft die Polyline
+    /// vom Fusspunkt aus `travelBearingLookaheadM` Meter vorwärts (oder bis zum
+    /// Ziel) und misst den Kompasskurs dorthin.
+    private static func travelBearing(
+        points: [SIMD2<Double>],
+        from fix: ProjectedFix
+    ) -> CLLocationDirection? {
+        guard points.count >= 2 else { return nil }
 
-        // Nächstgelegenes Segment + Projektionspunkt (wie in nextManeuver).
-        var bestDistanceToPath = Double.greatestFiniteMagnitude
-        var bestIndex = 0
-        var bestProjection = points[0]
-        for i in 0..<(points.count - 1) {
-            let a = points[i]
-            let b = points[i + 1]
-            let ab = b - a
-            let lengthSquared = simd_length_squared(ab)
-            let t = lengthSquared > 0 ? min(1, max(0, simd_dot(-a, ab) / lengthSquared)) : 0
-            let projected = a + t * ab
-            let distanceToPath = simd_length(projected)
-            if distanceToPath < bestDistanceToPath {
-                bestDistanceToPath = distanceToPath
-                bestIndex = i
-                bestProjection = projected
-            }
-        }
-
-        // Vom Projektionspunkt aus die Polyline vorwärts laufen, bis
-        // `travelBearingLookaheadM` Meter erreicht sind (oder das Ziel).
         var remaining = travelBearingLookaheadM
         var reference = points[points.count - 1]
-        var segmentStart = bestProjection
-        for j in (bestIndex + 1)..<points.count {
+        var segmentStart = fix.projection
+        for j in (fix.segmentIndex + 1)..<points.count {
             let segmentEnd = points[j]
             let segmentLength = simd_distance(segmentStart, segmentEnd)
             if segmentLength >= remaining {
@@ -896,7 +978,7 @@ enum RouteService {
         }
 
         // Richtungsvektor Projektion → Vorausschau-Punkt (x = Ost, y = Nord).
-        let vector = reference - bestProjection
+        let vector = reference - fix.projection
         guard simd_length(vector) > 0.1 else { return nil }
         let bearing = atan2(vector.x, vector.y) * 180 / .pi
         return (bearing + 360).truncatingRemainder(dividingBy: 360)

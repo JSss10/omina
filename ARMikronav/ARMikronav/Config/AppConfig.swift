@@ -39,6 +39,14 @@ enum AppConfig {
     // die Ansicht nicht überladen wirkt; passt sich beim Bewegen an.
     static let nearbyDisplayRadiusM: Double = 50
 
+    // So viele Orte zeigt ein Kategorie-Filter höchstens: die nächstgelegenen.
+    // Auf der Karte, in der Suche und im AR-Bild wären alle Treffer einer
+    // Kategorie in der dichten Altstadt unübersichtlich – gebraucht wird das,
+    // was in Reichweite liegt. Bewusst eine Anzahl statt eines Radius: So
+    // bleibt die Liste auch dort brauchbar, wo in unmittelbarer Nähe gerade
+    // nichts dieser Kategorie ist.
+    static let nearestCategoryLimit = 5
+
     // MARK: - ginto API (Endpoint ist öffentlich, der Bearer-Token nicht)
     static let gintoAPIEndpoint = "https://api.ginto.guide/graphql"
 

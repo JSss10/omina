@@ -507,11 +507,12 @@ struct MapView: View {
     /// Standortkoordinate für den Karten-Marker: während der Navigation auf die
     /// Route (violette Linie) eingerastet, solange man nah genug an ihr ist –
     /// so springt der Punkt nicht mehr neben der Linie herum (GPS-Rauschen in
-    /// den engen Gassen). Ohne aktive Route die Rohposition.
+    /// den engen Gassen). Ohne aktive Route die Rohposition. Das Einrasten
+    /// läuft über das ViewModel, damit es denselben Fortschritts-Anker nutzt
+    /// wie Restweg und Abbiege-Ansage (sonst könnte der Punkt auf dem
+    /// Rückweg-Ast einer Route einrasten, die dicht an sich vorbeiführt).
     private func snappedUserCoordinate(for location: CLLocation) -> CLLocationCoordinate2D {
-        guard let route = viewModel.activeRoute else { return location.coordinate }
-        let snap = RouteService.snappedLocation(on: route, at: location)
-        return snap.offsetM <= Self.snapToRouteMaxOffsetM ? snap.coordinate : location.coordinate
+        viewModel.snappedCoordinate(for: location, maxOffsetM: Self.snapToRouteMaxOffsetM)
     }
 
     /// "Route anzeigen" aus dem POI-Detail: Route in-App berechnen und
@@ -602,7 +603,11 @@ struct MapView: View {
     /// Linkskurve nach links. Ohne bestimmbare Fahrtrichtung (z. B. am Ziel)
     /// bleibt die Kamera stehen.
     private func followCamera(route: ActiveRoute, location: CLLocation) {
-        guard let bearing = RouteService.travelBearingDegrees(of: route, at: location) else { return }
+        guard let bearing = RouteService.travelBearingDegrees(
+            of: route,
+            at: location,
+            alongAnchorM: viewModel.routeAnchorAlongM
+        ) else { return }
 
         let center = Self.coordinate(
             from: location.coordinate,

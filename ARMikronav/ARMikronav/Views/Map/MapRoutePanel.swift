@@ -75,14 +75,6 @@ struct MapRoutePanel: View {
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
-                if !hasArrived, route.kind == .walkingFallback {
-                    Label(
-                        "Fussgängerroute – Barrieren nicht berücksichtigt",
-                        systemImage: "exclamationmark.triangle"
-                    )
-                    .font(.caption)
-                    .foregroundStyle(AppColor.Status.limitedText)
-                }
             }
 
             Spacer(minLength: 8)
@@ -255,8 +247,10 @@ struct MapRoutePanel: View {
 
 /// Infozeile einer aktiven Route: Richtungspfeil mit Abbiege-Anweisung
 /// (geradeaus/links/rechts), Zielname, Restzeit/-distanz und Stop-Button,
-/// mit "Ziel erreicht"-Zustand bei Ankunft. Bei der Fussgänger-Fallback-
-/// Route (kein Rollstuhl-Routing verfügbar) erscheint ein Warnhinweis.
+/// mit "Ziel erreicht"-Zustand bei Ankunft. Die Art der Route (Rollstuhl-
+/// Routing oder Fussgänger-Fallback) zeigt nur noch das Symbol im
+/// Manöver-Kreis; die Barrieren entlang der Strecke werden in beiden Fällen
+/// ausgewiesen, ein zusätzlicher Warnhinweis wäre also irreführend.
 struct RouteInfoBar: View {
     let route: ActiveRoute
     let progress: RouteProgress?
@@ -308,14 +302,6 @@ struct RouteInfoBar: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .monospacedDigit()
-                if !hasArrived, route.kind == .walkingFallback {
-                    Label(
-                        "Fussgängerroute – Barrieren nicht berücksichtigt",
-                        systemImage: "exclamationmark.triangle"
-                    )
-                    .font(.caption)
-                    .foregroundStyle(AppColor.Status.limitedText)
-                }
             }
 
             Spacer(minLength: 8)
@@ -358,9 +344,6 @@ struct RouteInfoBar: View {
         var summary = "Navigation zu \(route.destinationName), noch \(progressText)"
         if let maneuver {
             summary = "\(maneuver.instruction). \(summary)"
-        }
-        if route.kind == .walkingFallback {
-            summary += ". Achtung: Fussgängerroute, Barrieren nicht berücksichtigt"
         }
         return summary
     }

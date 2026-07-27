@@ -4,8 +4,9 @@
 // Vollbild-AR-Ansicht.
 // Barrieren-Modus: sauberes Kamerabild, Barrieren melden sich NUR über das
 // Warn-Banner (keine 3D-Objekte). POI-Modus: die POIs der Altstadt erscheinen
-// als projizierte Karten im Kamerabild; der Filter-Button oben öffnet das
-// Kategorie-Sheet (alle ginto-Kategorien, ARPOIFilterSheet).
+// als projizierte Karten im Kamerabild; das Such-Icon oben öffnet dieselbe
+// Suche wie die Karte (SearchSheet) – Freitext, Kategorien, gespeicherte und
+// letzte Orte. Eine gewählte Kategorie zeigt die nächstgelegenen Orte.
 // Beim Start läuft ein Coaching-Overlay (Lokalisierung); nach Timeout oder
 // Session-Fehler erscheint der Fehler-State mit Rückweg zur Karte.
 
@@ -30,8 +31,8 @@ struct ARModeView: View {
     @State private var localizationTimedOut = false
     @State private var selectedBarrier: Barrier?
     @State private var selectedPOI: POI?
-    /// Kategorie-Filter-Sheet (alle ginto-Kategorien).
-    @State private var showingPOIFilter = false
+    /// Suche – dasselbe Sheet wie in der Kartenansicht.
+    @State private var showingSearch = false
 
     var body: some View {
         Group {
@@ -143,6 +144,7 @@ struct ARModeView: View {
                         route: route,
                         progress: viewModel.routeProgress,
                         maneuver: viewModel.nextManeuver,
+                        alongAnchorM: viewModel.routeAnchorAlongM,
                         onStop: { viewModel.stopNavigation() },
                         onMapTap: onClose
                     )
@@ -156,7 +158,7 @@ struct ARModeView: View {
             }
 
             VStack(spacing: 10) {
-                poiFilterRow
+                searchRow
 
                 // Hinweis, wenn man von der Route abkommt – mit Status der
                 // automatischen Neuberechnung (die AR-Route passt sich an).
@@ -228,9 +230,15 @@ struct ARModeView: View {
         .sheet(item: $selectedBarrier) { barrier in
             BarrierDetailSheet(barrier: barrier, profile: profile)
         }
-        .sheet(isPresented: $showingPOIFilter) {
-            ARPOIFilterSheet(viewModel: viewModel)
-                .trackScreen("ar_poi_filter")
+        // Gleiche Suche wie auf der Karte. Ein Treffer öffnet direkt das
+        // POI-Detail (im AR-Bild gibt es keinen Kartenausschnitt, auf den man
+        // zentrieren könnte) – von dort führen "Route in AR starten" und
+        // "Route anzeigen" weiter.
+        .sheet(isPresented: $showingSearch) {
+            SearchSheet(viewModel: viewModel) { poi in
+                selectedPOI = poi
+            }
+            .trackScreen("ar_search")
         }
         .sheet(item: $selectedPOI) { poi in
             POIDetailSheet(
@@ -255,42 +263,42 @@ struct ARModeView: View {
 
     // MARK: - POI-Modus
 
-    /// Filter-Button (öffnet das Kategorie-Sheet mit allen ginto-Kategorien)
-    /// plus Chip des aktiven Filters, der ihn per Tap wieder aufhebt.
-    private var poiFilterRow: some View {
+    /// Such-Icon (öffnet dasselbe SearchSheet wie die Kartenansicht) plus –
+    /// falls eine Kategorie gewählt ist – ein Chip mit dieser Kategorie, der
+    /// sie per Tap wieder aufhebt. Über der Kamera bewusst mit Material-
+    /// Hintergrund statt der weissen Kreise der Karte, damit die Bedienelemente
+    /// auf jedem Kamerabild lesbar bleiben.
+    private var searchRow: some View {
         HStack(spacing: 8) {
             Button {
-                showingPOIFilter = true
+                showingSearch = true
             } label: {
-                Label(
-                    viewModel.activeCategory ?? "Orte filtern",
-                    systemImage: "line.3.horizontal.decrease.circle.fill"
-                )
-                .font(.subheadline.weight(.medium))
-                .padding(.horizontal, 14)
-                .padding(.vertical, 8)
-                .background(
-                    viewModel.activeCategory != nil
-                        ? AnyShapeStyle(Color.accentColor)
-                        : AnyShapeStyle(.regularMaterial),
-                    in: Capsule()
-                )
-                .foregroundStyle(viewModel.activeCategory != nil ? .white : .primary)
+                Image(systemName: "magnifyingglass")
+                    .font(.title2.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .frame(width: 44, height: 44)
+                    .background(.regularMaterial, in: Circle())
+                    .shadow(color: .black.opacity(0.25), radius: 3, y: 1)
             }
-            .accessibilityLabel(
-                viewModel.activeCategory.map { "Orte filtern, aktiv: \($0)" } ?? "Orte filtern"
-            )
+            .accessibilityLabel("Orte suchen")
 
-            if viewModel.activeCategory != nil {
+            if let category = viewModel.activeCategory {
                 Button {
                     viewModel.setCategory(nil)
                 } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.title3)
-                        .padding(6)
-                        .background(.regularMaterial, in: Circle())
+                    HStack(spacing: 6) {
+                        Text(category)
+                            .font(.subheadline.weight(.medium))
+                            .lineLimit(1)
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.subheadline)
+                    }
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                    .background(Color.accentColor, in: Capsule())
                 }
-                .accessibilityLabel("Filter aufheben")
+                .accessibilityLabel("Kategorie \(category) aufheben")
             }
             Spacer()
         }

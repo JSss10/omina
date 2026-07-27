@@ -42,10 +42,6 @@ struct RouteStepsListSheet: View {
                 }
             } header: {
                 summaryHeader
-            } footer: {
-                if route.kind == .walkingFallback {
-                    Text("Fussgängerroute – Barrieren nicht berücksichtigt.")
-                }
             }
         }
         .listStyle(.plain)

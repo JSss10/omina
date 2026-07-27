@@ -36,6 +36,51 @@ final class LocationService: NSObject, ObservableObject {
         lookDirection ?? heading
     }
 
+    // MARK: - Güte der Standort-Fixes
+
+    /// Horizontale Ungenauigkeit (Meter), bis zu der ein Fix uneingeschränkt
+    /// verwendet wird. In den engen, hohen Altstadtgassen liefert das GPS
+    /// regelmässig Ausreisser mit 50–100 m Fehler – ein solcher Fix landet
+    /// schnell auf dem anderen Limmatufer, und eine von dort berechnete Route
+    /// führt kilometerweit über die nächste Brücke, obwohl das Ziel nebenan ist.
+    static let usableAccuracyM: CLLocationAccuracy = 50
+    /// Notfall-Schwelle: So ungenau darf ein Fix höchstens sein, wenn sonst
+    /// gar keiner vorliegt – lieber ein grober Standort als eine leere Karte.
+    private static let fallbackAccuracyM: CLLocationAccuracy = 150
+    /// Nach so langer Durststrecke ohne brauchbaren Fix wird auf die
+    /// Notfall-Schwelle gelockert.
+    private static let fallbackAfterS: TimeInterval = 20
+    /// Maximales Alter eines Fixes. CoreLocation liefert beim Start sofort den
+    /// zuletzt gespeicherten Fix – der kann Stunden alt und kilometerweit weg
+    /// sein und würde die erste Route am falschen Ort beginnen lassen.
+    private static let maxFixAgeS: TimeInterval = 15
+
+    /// Zeitpunkt des letzten übernommenen Fixes (für die Lockerung).
+    private var lastAcceptedFixAt: Date?
+
+    /// Gemeldete Genauigkeit des aktuellen Fixes in Metern (nil ohne Fix).
+    var locationAccuracyM: CLLocationAccuracy? {
+        currentLocation?.horizontalAccuracy
+    }
+
+    /// Ist der aktuelle Fix genau genug, um darauf eine Route zu berechnen?
+    var hasReliableFix: Bool {
+        guard let accuracy = locationAccuracyM else { return false }
+        return accuracy >= 0 && accuracy <= Self.usableAccuracyM
+    }
+
+    /// Entscheidet, ob ein eingehender Fix übernommen wird: gültig, aktuell
+    /// und genau genug. Ohne (oder nach längerer Zeit ohne) brauchbaren Fix
+    /// wird die Genauigkeitsschwelle gelockert, damit die App bedienbar bleibt.
+    private func isUsable(_ location: CLLocation) -> Bool {
+        guard location.horizontalAccuracy >= 0 else { return false }
+        guard abs(location.timestamp.timeIntervalSinceNow) <= Self.maxFixAgeS else { return false }
+        if location.horizontalAccuracy <= Self.usableAccuracyM { return true }
+        guard location.horizontalAccuracy <= Self.fallbackAccuracyM else { return false }
+        guard let lastAcceptedFixAt else { return true }
+        return Date().timeIntervalSince(lastAcceptedFixAt) >= Self.fallbackAfterS
+    }
+
     private let manager: CLLocationManager
     private let motionManager = CMMotionManager()
 
@@ -190,6 +235,11 @@ extension LocationService: CLLocationManagerDelegate {
     nonisolated func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         guard let latest = locations.last else { return }
         Task { @MainActor in
+            // Veraltete (Cache beim Start) und stark verrauschte Fixes
+            // verwerfen – sie sind die häufigste Ursache für Routen, die vom
+            // falschen Ort aus berechnet werden.
+            guard self.isUsable(latest) else { return }
+            self.lastAcceptedFixAt = Date()
             self.currentLocation = latest
         }
     }
