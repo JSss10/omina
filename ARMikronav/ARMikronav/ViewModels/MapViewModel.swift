@@ -103,13 +103,29 @@ final class MapViewModel: ObservableObject {
         barriers.filter { filterState.enabledTypes.contains($0.type) }
     }
 
-    /// Halbe Korridor-Breite: nur Barrieren, die höchstens so weit neben dem
-    /// Routen-Polyline liegen, gelten als "auf der Route" und werden angezeigt.
-    /// Bewusst eng (6 m), damit in der Altstadt keine Barrieren von parallelen
-    /// Gassen mitgezählt werden – Häuserblöcke sind dort nur ~20–30 m tief,
-    /// ein breiter Korridor würde die Nachbargasse einschliessen. Gilt für
-    /// Karte, Listenansicht UND Alternativroute (alle über `activeRoute`).
-    private let routeCorridorM: CLLocationDistance = 6
+    /// Halbe Korridor-Breite bei rollstuhlgerechter Route (OpenRouteService).
+    /// Deren Geometrie folgt den Gehwegen selbst, deshalb bewusst eng (6 m):
+    /// In der Altstadt sind Häuserblöcke nur ~20–30 m tief, ein breiter
+    /// Korridor würde die Barrieren der Nachbargasse mitzählen.
+    private let wheelchairCorridorM: CLLocationDistance = 6
+    /// Halbe Korridor-Breite bei der Fussgänger-Fallback-Route (MapKit).
+    /// Deren Geometrie liegt auf der Strassenachse – im Rollstuhl fährt man
+    /// aber auf dem Trottoir links oder rechts davon, und genau dort liegen
+    /// die Bordsteine, Steigungen und Oberflächen. Mit 6 m fielen sie aus dem
+    /// Korridor und die Route sähe barrierefrei aus, obwohl sie es nicht ist.
+    /// 12 m deckt Fahrbahn plus beide Trottoirs ab und bleibt unter der Tiefe
+    /// eines Altstadt-Häuserblocks.
+    private let walkingCorridorM: CLLocationDistance = 12
+
+    /// Halbe Korridor-Breite für die aktive Route – abhängig davon, ob die
+    /// Geometrie den Gehwegen (Rollstuhl-Route) oder der Strassenachse
+    /// (Fussgänger-Fallback) folgt.
+    private func corridorM(for kind: RouteKind) -> CLLocationDistance {
+        switch kind {
+        case .wheelchair:     return wheelchairCorridorM
+        case .walkingFallback: return walkingCorridorM
+        }
+    }
 
     /// Barrieren, die auf der Karte/AR angezeigt werden:
     /// – Barrieren per Toggle ausgeblendet → keine
@@ -117,9 +133,15 @@ final class MapViewModel: ObservableObject {
     ///   co-lokalisierte zu EINER Stelle zusammengefasst (siehe unten)
     /// – sonst → nur profilrelevante Barrieren im engen Umkreis des Standorts
     ///   (nearbyDisplayRadiusM), co-lokalisierte zusammengefasst
+    ///
+    /// Unabhängig davon laufen die Annäherungswarnungen (Banner und System-
+    /// Mitteilung) über `filteredBarriers`, also über ALLE profilrelevanten
+    /// Barrieren im Warnradius um den tatsächlichen Standort – auch über
+    /// solche, die hier nicht als Marker erscheinen.
     var displayedBarriers: [Barrier] {
         guard barriersVisible else { return [] }
         if let route = activeRoute {
+            let corridorM = corridorM(for: route.kind)
             let onRoute = filteredBarriers.filter { barrier in
                 RouteService.distance(
                     from: CLLocationCoordinate2D(
@@ -127,7 +149,7 @@ final class MapViewModel: ObservableObject {
                         longitude: barrier.longitude
                     ),
                     to: route
-                ) <= routeCorridorM
+                ) <= corridorM
             }
             return collapseColocated(onRoute)
         }
@@ -269,7 +291,8 @@ final class MapViewModel: ObservableObject {
     /// – POIs per Toggle ausgeblendet → keine
     /// – aktive Freitext-Suche → deren Treffer (bewusst NICHT auf den Umkreis
     ///   beschränkt: eine gezielte Suche soll auch entfernte Treffer zeigen)
-    /// – aktiver Kategorie-Chip → Kategorie-POIs im engen Umkreis
+    /// – aktiver Kategorie-Chip → die `nearestCategoryLimit` nächstgelegenen
+    ///   Orte dieser Kategorie
     /// – sonst → POIs im engen Umkreis des Standorts (nearbyDisplayRadiusM)
     var displayedPOIs: [POI] {
         if activeRoute != nil {
@@ -280,7 +303,7 @@ final class MapViewModel: ObservableObject {
             return searchResults
         }
         if let activeCategory {
-            return poisNearCurrentLocation(poisForCategory(activeCategory))
+            return poisForCategory(activeCategory, limit: AppConfig.nearestCategoryLimit)
         }
         return poisNearCurrentLocation(altstadtPOIs)
     }
@@ -294,14 +317,25 @@ final class MapViewModel: ObservableObject {
         }
     }
 
-    /// Alle Altstadt-POIs eines Kategorie-Chips (exaktes Key-Matching),
-    /// nach Distanz sortiert – auch die Datenbasis der Ergebnisliste
-    /// im SearchSheet.
-    func poisForCategory(_ label: String) -> [POI] {
+    /// Altstadt-POIs eines Kategorie-Chips (exaktes Key-Matching), nach
+    /// Luftlinie zum aktuellen Standort sortiert – die Datenbasis der
+    /// Ergebnisliste im SearchSheet, der Karten-Marker und der AR-Karten.
+    /// Ohne Standort-Fix zählt die importierte Distanz. `limit` begrenzt auf
+    /// die nächstgelegenen Treffer (nil = alle, z. B. für die Trefferzahl).
+    func poisForCategory(_ label: String, limit: Int? = nil) -> [POI] {
         guard let chip = POICategory.chip(forLabel: label) else { return [] }
-        return altstadtPOIs
-            .filter { chip.matches(category: $0.category) }
-            .sorted { $0.distanceM < $1.distanceM }
+        let matching = altstadtPOIs.filter { chip.matches(category: $0.category) }
+        let sorted: [POI]
+        if let user = locationService.currentLocation {
+            sorted = matching.sorted {
+                user.distance(from: CLLocation(latitude: $0.latitude, longitude: $0.longitude))
+                    < user.distance(from: CLLocation(latitude: $1.latitude, longitude: $1.longitude))
+            }
+        } else {
+            sorted = matching.sorted { $0.distanceM < $1.distanceM }
+        }
+        guard let limit else { return sorted }
+        return Array(sorted.prefix(limit))
     }
 
     init() {

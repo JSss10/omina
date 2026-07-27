@@ -335,10 +335,22 @@ struct SearchSheet: View {
                     .buttonStyle(.plain)
                 }
             } header: {
-                Text("\(results.count) Ergebnisse · nach Entfernung")
+                Text(resultsHeader)
             }
         }
         .listStyle(.insetGrouped)
+    }
+
+    /// Kopfzeile der Ergebnisliste. Bei einer Kategorie sind es bewusst nur
+    /// die nächstgelegenen Orte – das steht auch so da, damit niemand die
+    /// Liste für vollständig hält.
+    private var resultsHeader: String {
+        if activeChip != nil {
+            return results.count == 1
+                ? "Nächster Ort in der Umgebung"
+                : "Die \(results.count) nächsten in der Umgebung"
+        }
+        return "\(results.count) Ergebnisse · nach Entfernung"
     }
 
     // Empty-State mit Handlungs-Hinweis.
@@ -436,7 +448,9 @@ struct SearchSheet: View {
         query = chip
         searchFieldFocused = false
         viewModel.setCategory(chip)
-        results = viewModel.poisForCategory(chip)
+        // Nur die nächstgelegenen Treffer – dieselbe Auswahl, die auch als
+        // Marker auf der Karte und als Karten im AR-Bild erscheint.
+        results = viewModel.poisForCategory(chip, limit: AppConfig.nearestCategoryLimit)
         hasSearched = true
     }
 }
