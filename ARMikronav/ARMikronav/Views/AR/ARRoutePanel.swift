@@ -17,6 +17,9 @@ struct ARRoutePanel: View {
     let route: ActiveRoute
     let progress: RouteProgress?
     var maneuver: RouteManeuver? = nil
+    /// Bisher zurückgelegte Weglänge auf der Route – hält das Einrasten des
+    /// Standortpunkts auf demselben Routenast wie in der Kartenansicht.
+    var alongAnchorM: CLLocationDistance? = nil
     let onStop: () -> Void
     /// Tipp auf den Kartenstreifen → zurück zur Kartenansicht.
     var onMapTap: (() -> Void)? = nil
@@ -28,12 +31,14 @@ struct ARRoutePanel: View {
         route: ActiveRoute,
         progress: RouteProgress?,
         maneuver: RouteManeuver? = nil,
+        alongAnchorM: CLLocationDistance? = nil,
         onStop: @escaping () -> Void,
         onMapTap: (() -> Void)? = nil
     ) {
         self.route = route
         self.progress = progress
         self.maneuver = maneuver
+        self.alongAnchorM = alongAnchorM
         self.onStop = onStop
         self.onMapTap = onMapTap
         _cameraPosition = State(initialValue: .region(Self.fittedRegion(for: route)))
@@ -109,7 +114,7 @@ struct ARRoutePanel: View {
     /// Standortkoordinate für den Marker: auf die Route eingerastet, solange
     /// man nah genug an ihr ist – sonst die Rohposition.
     private func snappedCoordinate(for location: CLLocation) -> CLLocationCoordinate2D {
-        let snap = RouteService.snappedLocation(on: route, at: location)
+        let snap = RouteService.snappedLocation(on: route, at: location, alongAnchorM: alongAnchorM)
         return snap.offsetM <= Self.snapToRouteMaxOffsetM ? snap.coordinate : location.coordinate
     }
 

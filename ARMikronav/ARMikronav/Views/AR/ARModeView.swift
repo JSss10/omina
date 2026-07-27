@@ -143,6 +143,7 @@ struct ARModeView: View {
                         route: route,
                         progress: viewModel.routeProgress,
                         maneuver: viewModel.nextManeuver,
+                        alongAnchorM: viewModel.routeAnchorAlongM,
                         onStop: { viewModel.stopNavigation() },
                         onMapTap: onClose
                     )

@@ -579,4 +579,117 @@ struct RouteServiceTests {
         #expect(StepManeuver.fromText("", isFirst: true) == .depart)
         #expect(StepManeuver.fromText("Sie haben Ihr Ziel erreicht", isFirst: false) == .arrive)
     }
+
+    // MARK: - Route, die dicht an sich selbst vorbeiführt
+
+    /// Feldtest-Fall: Die Route führt 300 m nach Norden, 20 m nach Osten und
+    /// dieselbe Strecke wieder nach Süden zurück (Umweg über die nächste
+    /// Brücke). Hin- und Rückweg liegen nur 20 m auseinander – ohne
+    /// Fortschritts-Anker rastet die Verortung auf dem Rückweg ein.
+    private var doublingBackRoute: ActiveRoute {
+        let start = CLLocationCoordinate2D(latitude: 47.3700, longitude: 8.5400)
+        let north = CLLocationCoordinate2D(latitude: 47.372695, longitude: 8.5400)
+        let across = CLLocationCoordinate2D(latitude: 47.372695, longitude: 8.540265)
+        let end = CLLocationCoordinate2D(latitude: 47.3700, longitude: 8.540265)
+        return ActiveRoute(
+            destinationName: "Test-WC gegenüber",
+            destinationCoordinate: end,
+            coordinates: [start, north, across, end],
+            totalDistanceM: 620,
+            expectedTravelTimeS: 560
+        )
+    }
+
+    /// 100 m auf dem Hinweg, 12 m seitlich daneben: Der Rückweg liegt mit ~8 m
+    /// näher. Mit dem Anker (bisher 100 m zurückgelegt) bleibt die Verortung
+    /// auf dem Hinweg – der Restweg ist ~520 m, nicht ~100 m.
+    @Test func progressStaysOnOutboundLegWithAnchor() {
+        let route = doublingBackRoute
+        let location = CLLocation(latitude: 47.370898, longitude: 8.540159)
+
+        let progress = RouteService.progress(of: route, at: location, alongAnchorM: 100)
+
+        #expect(abs(progress.remainingDistanceM - 520) < 15)
+        #expect(!progress.hasArrived)
+    }
+
+    /// Dieselbe Stelle, Blick in Fahrtrichtung (Norden): Mit dem Anker kommt
+    /// die korrekte Ansage "rechts abbiegen" in ~200 m – ohne ihn läge die
+    /// Fahrtrichtung des Rückwegs (Süden) an und die App sagte "Bitte umdrehen".
+    @Test func maneuverStaysOnOutboundLegWithAnchor() {
+        let route = doublingBackRoute
+        let location = CLLocation(latitude: 47.370898, longitude: 8.540159)
+
+        let maneuver = RouteService.nextManeuver(
+            of: route,
+            at: location,
+            heading: 0,
+            alongAnchorM: 100
+        )
+
+        #expect(maneuver?.direction == .right)
+        if let maneuver {
+            #expect(abs(maneuver.distanceM - 200) < 15)
+        }
+    }
+
+    /// Auch die Fahrtrichtung (Kartendrehung) folgt dem Hinweg nach Norden.
+    @Test func travelBearingStaysOnOutboundLegWithAnchor() {
+        let route = doublingBackRoute
+        let location = CLLocation(latitude: 47.370898, longitude: 8.540159)
+
+        let bearing = RouteService.travelBearingDegrees(of: route, at: location, alongAnchorM: 100)
+
+        #expect(bearing != nil)
+        if let bearing {
+            #expect(abs(bearing) < 10 || abs(bearing - 360) < 10)
+        }
+    }
+
+    /// Der Anker lenkt nur, er verfälscht nichts: Auf einer normalen Route
+    /// liefert die Verortung mit passendem Anker dasselbe Ergebnis wie ohne.
+    @Test func anchorDoesNotChangeStraightRouteProgress() {
+        let route = straightRoute
+        let location = CLLocation(latitude: 47.370899, longitude: 8.5400)
+
+        let anchored = RouteService.progress(of: route, at: location, alongAnchorM: 100)
+        let free = RouteService.progress(of: route, at: location)
+
+        #expect(abs(anchored.remainingDistanceM - free.remainingDistanceM) < 1)
+    }
+
+    /// Verortung liefert Segment, Restweg und zurückgelegten Weg konsistent.
+    @Test func locateReportsAlongAndRemaining() {
+        let route = straightRoute
+        let location = CLLocation(latitude: 47.370899, longitude: 8.540265)
+
+        let fix = RouteService.locate(on: route, at: location)
+
+        #expect(fix != nil)
+        if let fix {
+            #expect(fix.segmentIndex == 0)
+            #expect(abs(fix.offsetM - 20) < 3)
+            #expect(abs(fix.alongM - 100) < 5)
+            #expect(abs(fix.remainingM - 100) < 5)
+        }
+    }
+
+    // MARK: - Plausibilität der berechneten Route
+
+    /// Ziel 40 m entfernt, Route 1,9 km: unplausibel (Feldtest-Screenshot).
+    @Test func implausibleDetourDetectsAbsurdRouteForNearbyDestination() {
+        #expect(RouteService.isImplausibleDetour(routeDistanceM: 1900, beelineM: 40))
+    }
+
+    /// Normale Umwege auf kurzen Strecken bleiben plausibel.
+    @Test func implausibleDetourAcceptsOrdinaryShortDetours() {
+        #expect(!RouteService.isImplausibleDetour(routeDistanceM: 200, beelineM: 40))
+        #expect(!RouteService.isImplausibleDetour(routeDistanceM: 700, beelineM: 120))
+    }
+
+    /// Auf längeren Strecken wird gar nicht geprüft – dort sind grosse Umwege
+    /// (Fluss, Bahngleise) normal und die Rollstuhl-Route bleibt gesetzt.
+    @Test func implausibleDetourIgnoresLongTrips() {
+        #expect(!RouteService.isImplausibleDetour(routeDistanceM: 3000, beelineM: 1200))
+    }
 }

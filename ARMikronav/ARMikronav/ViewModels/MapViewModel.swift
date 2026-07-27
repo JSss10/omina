@@ -54,6 +54,13 @@ final class MapViewModel: ObservableObject {
     /// Barrieren, die der User für heute als "nicht machbar" markiert hat
     /// (Tagesform, z. B. Hitze) – die Route wird um sie herum berechnet.
     @Published private(set) var avoidedBarrierIds: Set<UUID> = []
+    /// Bisher auf der aktiven Route zurückgelegte Weglänge (Meter ab Start).
+    /// Hält die Projektion des Standorts auf die Route vorwärtsgerichtet:
+    /// Läuft die Route dicht an sich selbst vorbei (Umweg über die nächste
+    /// Brücke, Parallelgassen der Altstadt), würde sonst der falsche Ast als
+    /// "nächstes Segment" gewinnen – Restweg, Kartendrehung und Abbiege-Ansage
+    /// ("Bitte umdrehen") kippen dann schlagartig. nil = noch kein Bezugspunkt.
+    @Published private(set) var routeAnchorAlongM: CLLocationDistance?
 
     /// Profil der aktiven Navigation – für die automatische Neuberechnung
     /// (Rollstuhl-Limits) gemerkt, solange eine Route läuft.
@@ -61,6 +68,9 @@ final class MapViewModel: ObservableObject {
     /// Aufeinanderfolgende Standort-Updates, in denen der User zu weit neben
     /// der Route lag (Entprellung gegen GPS-Ausreisser).
     private var offRouteUpdates = 0
+    /// Aufeinanderfolgende Updates, in denen der Fusspunkt klar neben dem
+    /// erwarteten Routenabschnitt lag – danach wird der Anker gelöst.
+    private var anchorMissUpdates = 0
     /// Zeitpunkt der letzten automatischen Neuberechnung (Sperrzeit dazwischen).
     private var lastRerouteAt: Date?
 
@@ -70,6 +80,16 @@ final class MapViewModel: ObservableObject {
     private let offRouteConfirmations = 3
     /// Mindestabstand zwischen zwei automatischen Neuberechnungen.
     private let minRerouteInterval: TimeInterval = 12
+    /// Genauigkeit, die ein Fix mindestens haben muss, damit er eine
+    /// automatische Neuberechnung auslösen darf. Ohne diese Schranke berechnet
+    /// ein einzelner GPS-Ausreisser die ganze Route neu – vom falschen Ort aus.
+    private let maxRerouteAccuracyM: CLLocationAccuracy = 25
+    /// Bis zu diesem seitlichen Abstand gilt der Fusspunkt als "auf der Route"
+    /// und schiebt den Fortschritts-Anker weiter.
+    private let routeAnchorMaxOffsetM: CLLocationDistance = 30
+    /// So viele Updates klar daneben lösen den Anker wieder (man ist wirklich
+    /// woanders, nicht nur kurz verrauscht).
+    private let routeAnchorMissLimit = 3
 
     private let locationService: LocationService
     private let repository: BarrierRepository
@@ -337,11 +357,71 @@ final class MapViewModel: ObservableObject {
         // POIs und Barrieren sind für die ganze Altstadt und standortunabhängig
         // geladen – hier nur den Routenfortschritt aktualisieren.
         if let route = activeRoute {
-            routeProgress = RouteService.progress(of: route, at: location)
-            nextManeuver = RouteService.nextManeuver(of: route, at: location, heading: locationService.viewingDirection)
+            updateRouteAnchor(for: route, at: location)
+            routeProgress = RouteService.progress(
+                of: route,
+                at: location,
+                alongAnchorM: routeAnchorAlongM
+            )
+            nextManeuver = RouteService.nextManeuver(
+                of: route,
+                at: location,
+                heading: locationService.viewingDirection,
+                alongAnchorM: routeAnchorAlongM
+            )
             lastManeuverRefresh = Date()
             considerReroute(from: location)
         }
+    }
+
+    /// Führt den Fortschritts-Anker entlang der Route nach. Solange der
+    /// Fusspunkt nah genug an der Route liegt, rückt der Anker mit; liegt er
+    /// mehrfach klar daneben, wird er gelöst, damit die Verortung wieder frei
+    /// das nächstgelegene Segment wählen kann (z. B. nach einer Abkürzung).
+    private func updateRouteAnchor(for route: ActiveRoute, at location: CLLocation) {
+        // Verrauschte Fixes den Anker nicht verschieben lassen – er soll den
+        // tatsächlichen Fortschritt abbilden, nicht das GPS-Rauschen.
+        guard location.horizontalAccuracy >= 0,
+              location.horizontalAccuracy <= LocationService.usableAccuracyM else { return }
+
+        guard let fix = RouteService.locate(
+            on: route,
+            at: location,
+            alongAnchorM: routeAnchorAlongM
+        ) else {
+            routeAnchorAlongM = nil
+            anchorMissUpdates = 0
+            return
+        }
+
+        if fix.offsetM <= routeAnchorMaxOffsetM {
+            routeAnchorAlongM = fix.alongM
+            anchorMissUpdates = 0
+            return
+        }
+
+        anchorMissUpdates += 1
+        if anchorMissUpdates >= routeAnchorMissLimit {
+            routeAnchorAlongM = nil
+            anchorMissUpdates = 0
+        }
+    }
+
+    /// Standortkoordinate für die Karten-Marker: während der Navigation auf die
+    /// Route eingerastet, solange man nah genug an ihr ist – so springt der
+    /// Punkt nicht neben der Linie herum (GPS-Rauschen in den engen Gassen).
+    /// Ohne aktive Route die Rohposition.
+    func snappedCoordinate(
+        for location: CLLocation,
+        maxOffsetM: CLLocationDistance = 12
+    ) -> CLLocationCoordinate2D {
+        guard let route = activeRoute else { return location.coordinate }
+        let snap = RouteService.snappedLocation(
+            on: route,
+            at: location,
+            alongAnchorM: routeAnchorAlongM
+        )
+        return snap.offsetM <= maxOffsetM ? snap.coordinate : location.coordinate
     }
 
     /// Zeitpunkt der letzten Manöver-Neuberechnung (leichte Drosselung, weil
@@ -361,7 +441,8 @@ final class MapViewModel: ObservableObject {
         let maneuver = RouteService.nextManeuver(
             of: route,
             at: location,
-            heading: locationService.viewingDirection
+            heading: locationService.viewingDirection,
+            alongAnchorM: routeAnchorAlongM
         )
         if maneuver != nextManeuver {
             nextManeuver = maneuver
@@ -382,8 +463,21 @@ final class MapViewModel: ObservableObject {
             return
         }
 
+        // Nur verlässliche Fixes dürfen eine Neuberechnung auslösen. In den
+        // Altstadtgassen springt der Standort sonst regelmässig auf die andere
+        // Limmatseite – die Route würde von dort aus neu berechnet und führte
+        // kilometerweit über die nächste Brücke, obwohl das Ziel nebenan liegt.
+        guard location.horizontalAccuracy >= 0,
+              location.horizontalAccuracy <= maxRerouteAccuracyM else {
+            offRouteUpdates = 0
+            return
+        }
+
+        // Schwelle mit der gemeldeten Genauigkeit skalieren: Ein Fix mit 20 m
+        // Streuung darf nicht schon als "abgekommen" zählen.
+        let threshold = max(offRouteThresholdM, location.horizontalAccuracy * 2)
         let offBy = RouteService.distance(from: location.coordinate, to: route)
-        guard offBy > offRouteThresholdM else {
+        guard offBy > threshold else {
             offRouteUpdates = 0
             isOffRoute = false
             return
@@ -395,6 +489,10 @@ final class MapViewModel: ObservableObject {
         // Bestätigt neben der Route: den Hinweis zeigen (auch offline, wenn
         // keine Neuberechnung möglich ist – dann bleibt die bisherige Route).
         isOffRoute = true
+        // Wirklich abgekommen: Der Fortschritts-Anker gilt nicht mehr, die
+        // Verortung darf wieder frei das nächstgelegene Segment wählen.
+        routeAnchorAlongM = nil
+        anchorMissUpdates = 0
 
         // Neuberechnung nur online, nicht während einer laufenden Berechnung,
         // und höchstens einmal pro Sperrzeit.
@@ -451,9 +549,16 @@ final class MapViewModel: ObservableObject {
             // Jetzt startet die Route am aktuellen Standort → wieder auf Kurs.
             isOffRoute = false
             offRouteUpdates = 0
+            routeAnchorAlongM = 0
+            anchorMissUpdates = 0
             if let latest = locationService.currentLocation {
-                routeProgress = RouteService.progress(of: newRoute, at: latest)
-                nextManeuver = RouteService.nextManeuver(of: newRoute, at: latest, heading: locationService.viewingDirection)
+                routeProgress = RouteService.progress(of: newRoute, at: latest, alongAnchorM: 0)
+                nextManeuver = RouteService.nextManeuver(
+                    of: newRoute,
+                    at: latest,
+                    heading: locationService.viewingDirection,
+                    alongAnchorM: 0
+                )
             }
         } catch {
             // Neuberechnung fehlgeschlagen – bestehende Route beibehalten.
@@ -503,10 +608,21 @@ final class MapViewModel: ObservableObject {
     /// - Returns: `true`, wenn eine Route gefunden wurde.
     @discardableResult
     func startNavigation(to poi: POI, profile: UserProfile) async -> Bool {
-        guard let start = locationService.currentLocation?.coordinate else {
+        guard let startLocation = locationService.currentLocation else {
             loadError = "Standort unbekannt – Navigation nicht möglich."
             return false
         }
+        // Mit einem stark verrauschten Fix würde die Route am falschen Ort
+        // beginnen (in der Altstadt schnell auf der anderen Limmatseite) und
+        // einen absurden Umweg vorschlagen. Dann lieber kurz warten.
+        guard locationService.hasReliableFix else {
+            loadError = "Standort noch ungenau – bitte kurz warten und erneut versuchen."
+            return false
+        }
+        let start = startLocation.coordinate
+        // Ein früherer Hinweis (z. B. "Standort noch ungenau") ist mit dem
+        // neuen Versuch überholt.
+        loadError = nil
         isCalculatingRoute = true
         defer { isCalculatingRoute = false }
 
@@ -523,12 +639,23 @@ final class MapViewModel: ObservableObject {
             offRouteUpdates = 0
             isOffRoute = false
             lastRerouteAt = nil
+            routeAnchorAlongM = 0
+            anchorMissUpdates = 0
+            // Umgangene Barrieren gelten pro Navigation – sonst würde die
+            // nächste Route ohne erkennbaren Grund um alte Sperrflächen
+            // herumgeführt (und dadurch unnötig lang).
+            avoidedBarrierIds = []
             routeProgress = RouteProgress(
                 remainingDistanceM: route.totalDistanceM,
                 remainingTimeS: route.expectedTravelTimeS
             )
             if let location = locationService.currentLocation {
-                nextManeuver = RouteService.nextManeuver(of: route, at: location, heading: locationService.viewingDirection)
+                nextManeuver = RouteService.nextManeuver(
+                    of: route,
+                    at: location,
+                    heading: locationService.viewingDirection,
+                    alongAnchorM: 0
+                )
             }
             // Ziel für die "Letzte Ziele"-Liste auf dem Homescreen merken.
             RecentDestinationsStore.shared.record(
@@ -553,6 +680,8 @@ final class MapViewModel: ObservableObject {
         offRouteUpdates = 0
         isOffRoute = false
         lastRerouteAt = nil
+        routeAnchorAlongM = nil
+        anchorMissUpdates = 0
     }
 
     /// Markiert die Barriere für heute als "nicht machbar" (Tagesform,
@@ -586,12 +715,19 @@ final class MapViewModel: ObservableObject {
                 avoiding: avoidCoordinates
             )
             activeRoute = newRoute
+            routeAnchorAlongM = 0
+            anchorMissUpdates = 0
             routeProgress = RouteProgress(
                 remainingDistanceM: newRoute.totalDistanceM,
                 remainingTimeS: newRoute.expectedTravelTimeS
             )
             if let location = locationService.currentLocation {
-                nextManeuver = RouteService.nextManeuver(of: newRoute, at: location, heading: locationService.viewingDirection)
+                nextManeuver = RouteService.nextManeuver(
+                    of: newRoute,
+                    at: location,
+                    heading: locationService.viewingDirection,
+                    alongAnchorM: 0
+                )
             }
             return true
         } catch {
