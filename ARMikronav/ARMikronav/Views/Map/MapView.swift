@@ -104,9 +104,20 @@ struct MapView: View {
                 }
             }
 
-            // Aktive Navigations-Route (geteilt mit dem AR-Modus).
+            // Aktive Navigations-Route (geteilt mit dem AR-Modus). Der bereits
+            // zurückgelegte Teil wird nur blass gezeichnet: Sonst sieht die
+            // gefahrene Schlaufe hinter einem aus wie ein Umweg, der noch
+            // bevorsteht (Feldtest-Rückmeldung).
             if let route = viewModel.activeRoute {
-                MapPolyline(coordinates: route.coordinates)
+                let parts = routeParts(of: route)
+                if parts.covered.count >= 2 {
+                    MapPolyline(coordinates: parts.covered)
+                        .stroke(
+                            AppColor.accentPrimary.opacity(0.28),
+                            style: StrokeStyle(lineWidth: 5, lineCap: .round, lineJoin: .round)
+                        )
+                }
+                MapPolyline(coordinates: parts.remaining)
                     .stroke(
                         AppColor.accentPrimary,
                         style: StrokeStyle(lineWidth: 5, lineCap: .round, lineJoin: .round)
@@ -587,6 +598,23 @@ struct MapView: View {
     /// `nil`, solange keine Richtung vorliegt.
     private var userConeHeading: CLLocationDirection? {
         locationService.viewingDirection.map { $0 - mapHeading }
+    }
+
+    /// Route aufgeteilt in "schon gefahren" und "liegt noch vor mir" – der
+    /// Standort wird dabei auf dieselbe Stelle projiziert wie für Restweg und
+    /// Abbiege-Ansage (gleicher Fortschritts-Anker). Ohne Standort-Fix gilt
+    /// die ganze Route als bevorstehend.
+    private func routeParts(
+        of route: ActiveRoute
+    ) -> (covered: [CLLocationCoordinate2D], remaining: [CLLocationCoordinate2D]) {
+        guard let location = locationService.currentLocation else {
+            return ([], route.coordinates)
+        }
+        return RouteService.split(
+            route,
+            at: location.coordinate,
+            alongAnchorM: viewModel.routeAnchorAlongM
+        )
     }
 
     /// Maximaler seitlicher Abstand (Meter), bis zu dem der Standortpunkt

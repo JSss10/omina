@@ -63,7 +63,17 @@ struct ARRoutePanel: View {
 
     private var routeMap: some View {
         Map(position: $cameraPosition) {
-            MapPolyline(coordinates: route.coordinates)
+            // Wie in der Kartenansicht: nur der Weg voraus ist kräftig, das
+            // bereits Zurückgelegte bleibt blass sichtbar.
+            let parts = routeParts
+            if parts.covered.count >= 2 {
+                MapPolyline(coordinates: parts.covered)
+                    .stroke(
+                        AppColor.accentPrimary.opacity(0.28),
+                        style: StrokeStyle(lineWidth: 5, lineCap: .round, lineJoin: .round)
+                    )
+            }
+            MapPolyline(coordinates: parts.remaining)
                 .stroke(
                     AppColor.accentPrimary,
                     style: StrokeStyle(lineWidth: 5, lineCap: .round, lineJoin: .round)
@@ -105,6 +115,17 @@ struct ARRoutePanel: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Zur Karte wechseln")
         .accessibilityAddTraits(.isButton)
+    }
+
+    /// Route aufgeteilt in "schon gefahren" und "liegt noch vor mir".
+    private var routeParts: (
+        covered: [CLLocationCoordinate2D],
+        remaining: [CLLocationCoordinate2D]
+    ) {
+        guard let location = locationService.currentLocation else {
+            return ([], route.coordinates)
+        }
+        return RouteService.split(route, at: location.coordinate, alongAnchorM: alongAnchorM)
     }
 
     /// Maximaler seitlicher Abstand (Meter), bis zu dem der Standortpunkt auf

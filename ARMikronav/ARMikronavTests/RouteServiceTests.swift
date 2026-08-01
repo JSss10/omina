@@ -989,6 +989,96 @@ struct RouteServiceTests {
         #expect(RouteService.travelTime(forMeters: 0, profile: profile(speedKmh: 4)) == 0)
     }
 
+    // MARK: - Aufteilung in zurückgelegt / bevorstehend (Kartenlinie)
+
+    /// Auf halber Strecke teilt sich die Route am eigenen Standort: Beide
+    /// Teile beginnen bzw. enden dort, ohne Lücke.
+    @Test func splitDividesRouteAtCurrentPosition() {
+        let route = straightRoute
+        let halfway = CLLocationCoordinate2D(latitude: 47.370899, longitude: 8.5400)
+
+        let parts = RouteService.split(route, at: halfway)
+
+        #expect(parts.covered.count == 2)
+        #expect(parts.remaining.count == 2)
+        // Ende des zurückgelegten Teils = Anfang des bevorstehenden.
+        guard let coveredEnd = parts.covered.last,
+              let remainingStart = parts.remaining.first else {
+            Issue.record("Aufteilung ist leer")
+            return
+        }
+        #expect(abs(coveredEnd.latitude - remainingStart.latitude) < 0.000001)
+        #expect(abs(coveredEnd.longitude - remainingStart.longitude) < 0.000001)
+        // Und beide treffen den Standort.
+        let joint = CLLocation(latitude: coveredEnd.latitude, longitude: coveredEnd.longitude)
+        #expect(joint.distance(from: CLLocation(latitude: halfway.latitude, longitude: halfway.longitude)) < 5)
+    }
+
+    /// Die Schlaufe hinter einem gehört zum zurückgelegten Teil – genau der
+    /// Fall aus dem Feldtest, in dem sie wie ein bevorstehender Umweg aussah.
+    @Test func splitKeepsPassedLoopOutOfRemainingRoute() {
+        let start = CLLocationCoordinate2D(latitude: 47.3700, longitude: 8.5400)
+        // Schlaufe: erst nach Norden, dann nach Osten, dann wieder nach Süden.
+        let loopTop = CLLocationCoordinate2D(latitude: 47.370899, longitude: 8.5400)
+        let loopEast = CLLocationCoordinate2D(latitude: 47.370899, longitude: 8.541327)
+        let end = CLLocationCoordinate2D(latitude: 47.3700, longitude: 8.541327)
+        let route = ActiveRoute(
+            destinationName: "Test-Ziel",
+            destinationCoordinate: end,
+            coordinates: [start, loopTop, loopEast, end],
+            totalDistanceM: 300,
+            expectedTravelTimeS: 270
+        )
+
+        // Standort auf dem Ost-Schenkel, also nach der Schlaufe.
+        let onEastLeg = CLLocationCoordinate2D(latitude: 47.370899, longitude: 8.540663)
+        let parts = RouteService.split(route, at: onEastLeg)
+
+        func contains(_ coordinate: CLLocationCoordinate2D, in list: [CLLocationCoordinate2D]) -> Bool {
+            list.contains {
+                abs($0.latitude - coordinate.latitude) < 0.000001
+                    && abs($0.longitude - coordinate.longitude) < 0.000001
+            }
+        }
+
+        // Der Nordschenkel liegt hinter einem …
+        #expect(parts.covered.count == 3)
+        #expect(contains(start, in: parts.covered))
+        #expect(contains(loopTop, in: parts.covered))
+        // … und taucht in der Linie voraus nicht mehr auf.
+        #expect(parts.remaining.count == 3)
+        #expect(!contains(start, in: parts.remaining))
+        #expect(!contains(loopTop, in: parts.remaining))
+        #expect(contains(end, in: parts.remaining))
+    }
+
+    /// Am Start ist noch nichts zurückgelegt.
+    @Test func splitAtStartHasNothingCovered() {
+        let route = straightRoute
+        let parts = RouteService.split(route, at: CLLocationCoordinate2D(latitude: 47.3700, longitude: 8.5400))
+
+        // Nur der (deckungsgleiche) Startpunkt, also keine sichtbare Linie.
+        #expect(parts.covered.count <= 2)
+        #expect(parts.remaining.count == 2)
+    }
+
+    /// Ohne verwertbare Geometrie bleibt die ganze Route bevorstehend.
+    @Test func splitWithoutGeometryKeepsWholeRoute() {
+        let single = CLLocationCoordinate2D(latitude: 47.3700, longitude: 8.5400)
+        let route = ActiveRoute(
+            destinationName: "Test",
+            destinationCoordinate: single,
+            coordinates: [single],
+            totalDistanceM: 0,
+            expectedTravelTimeS: 0
+        )
+
+        let parts = RouteService.split(route, at: single)
+
+        #expect(parts.covered.isEmpty)
+        #expect(parts.remaining.count == 1)
+    }
+
     // MARK: - Dargestellter Routenabschnitt (AR-Pfad)
 
     /// Der Abschnitt beginnt auf der Route unter der eigenen Position und

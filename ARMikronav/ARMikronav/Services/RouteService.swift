@@ -902,6 +902,36 @@ enum RouteService {
         )
     }
 
+    /// Teilt die Route am Fusspunkt des Standorts in den bereits zurückgelegten
+    /// und den noch bevorstehenden Teil.
+    ///
+    /// Aus dem Feldtest: Die Karte zeichnete immer die ganze Route ab dem
+    /// ursprünglichen Startpunkt. Steht man dann irgendwo in der Mitte, sieht
+    /// die schon gefahrene Schlaufe aus wie ein Umweg, den man noch vor sich
+    /// hat ("zeigt einen Umweg an, obwohl ich einfach links gehen könnte").
+    /// Mit der Aufteilung kann die Karte den Rest kräftig und das Zurückgelegte
+    /// nur blass zeichnen.
+    static func split(
+        _ route: ActiveRoute,
+        at location: CLLocationCoordinate2D,
+        alongAnchorM: CLLocationDistance? = nil
+    ) -> (covered: [CLLocationCoordinate2D], remaining: [CLLocationCoordinate2D]) {
+        let points = routePoints(of: route, relativeTo: location)
+        guard points.count >= 2,
+              let fix = project(points, alongAnchorM: alongAnchorM) else {
+            return ([], route.coordinates)
+        }
+
+        let foot = coordinate(
+            from: location,
+            east: fix.projection.x,
+            north: fix.projection.y
+        )
+        let covered = Array(route.coordinates[0...fix.segmentIndex]) + [foot]
+        let remaining = [foot] + Array(route.coordinates[(fix.segmentIndex + 1)...])
+        return (covered, remaining)
+    }
+
     /// Abschnitt der Route, der im AR-Bild dargestellt wird: beginnt am
     /// Fusspunkt des Standorts auf der Route und reicht `aheadM` Meter voraus.
     ///
