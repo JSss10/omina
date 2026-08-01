@@ -126,35 +126,8 @@ final class MapViewModel: ObservableObject {
     /// (Fussgänger-Fallback) folgt.
     private func corridorM(for kind: RouteKind) -> CLLocationDistance {
         switch kind {
-        case .wheelchair, .wheelchairRelaxed: return wheelchairCorridorM
-        case .walkingFallback:                return walkingCorridorM
-        }
-    }
-
-    /// Zählfunktion für die Routenauswahl: Wie viele Stellen entlang einer
-    /// Route sind für dieses Profil kritisch (shouldWarn)?
-    ///
-    /// Bewusst als geschlossene Funktion über eine Momentaufnahme der
-    /// Barrieren-Koordinaten – so kann RouteService die Varianten vergleichen,
-    /// ohne die Barrierendaten oder das ViewModel zu kennen. Dieselben
-    /// Korridor-Breiten wie in der Anzeige, damit die Auswahl mit dem
-    /// übereinstimmt, was das Panel danach ausweist.
-    private func criticalBarrierCounter(
-        for profile: UserProfile
-    ) -> (ActiveRoute) -> Int {
-        let criticalCoordinates = filteredBarriers
-            .filter { shouldWarn(barrier: $0, profile: profile) }
-            .map { CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude) }
-        let wheelchairCorridor = wheelchairCorridorM
-        let walkingCorridor = walkingCorridorM
-
-        return { route in
-            let corridor = route.kind.usesOSMWheelchairRouting
-                ? wheelchairCorridor
-                : walkingCorridor
-            return criticalCoordinates.filter {
-                RouteService.distance(from: $0, to: route) <= corridor
-            }.count
+        case .wheelchair: return wheelchairCorridorM
+        case .walking:    return walkingCorridorM
         }
     }
 
@@ -595,8 +568,7 @@ final class MapViewModel: ObservableObject {
                     from: location.coordinate,
                     to: destination,
                     destinationName: destinationName,
-                    profile: profile,
-                    criticalBarriers: criticalBarrierCounter(for: profile)
+                    profile: profile
                 )
             } else {
                 newRoute = try await RouteService.wheelchairRoute(
@@ -700,8 +672,7 @@ final class MapViewModel: ObservableObject {
                 from: start,
                 to: CLLocationCoordinate2D(latitude: poi.latitude, longitude: poi.longitude),
                 destinationName: poi.name,
-                profile: profile,
-                criticalBarriers: criticalBarrierCounter(for: profile)
+                profile: profile
             )
             activeRoute = route
             navigationTarget = poi

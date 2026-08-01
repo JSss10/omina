@@ -95,14 +95,15 @@ struct ARViewContainer: UIViewRepresentable {
         /// Nach so viel Eigenbewegung wird der Pfad frisch verankert: Er rückt
         /// mit (das dargestellte Fenster wandert voraus) und die aufgelaufene
         /// Abweichung zwischen AR-Tracking und GPS wird zurückgesetzt.
-        private static let reanchorDistanceM: CLLocationDistance = 12
+        /// Bewusst grosszügig – jede Neuverankerung ist ein sichtbarer Sprung,
+        /// und in den Gassen rauscht das GPS ohnehin.
+        private static let reanchorDistanceM: CLLocationDistance = 20
         /// Mindestabstand zwischen zwei Neuverankerungen – ohne ihn liesse ein
         /// springender GPS-Fix den Pfad flackern.
-        private static let reanchorIntervalS: TimeInterval = 3
-        /// So weit darf die gemessene Bodenebene von der aus der Gerätehöhe
-        /// geschätzten abweichen, bevor sie als veraltet gilt (Steigung,
-        /// fälschlich erkannte Tisch-/Mauerkante).
-        private static let groundToleranceM: Float = 0.8
+        private static let reanchorIntervalS: TimeInterval = 5
+        /// Glättung der Kamerahöhe (0–1, kleiner = träger). Hält den Pfad auf
+        /// gleicher Höhe, auch wenn das iPhone kurz gesenkt oder gekippt wird.
+        private static let cameraHeightSmoothing: Float = 0.08
 
         private let projector: ARPOIProjector
         private var projectionTask: Task<Void, Never>?
@@ -119,8 +120,7 @@ struct ARViewContainer: UIViewRepresentable {
         /// eingeschränkt zurück auf normal (Relokalisierung nach Unterbrechung)
         /// kann den Weltursprung verschoben haben → neu verankern.
         private var wasTrackingNormal = false
-        /// Erzwingt die nächste Verankerung (Tracking wiedergefunden,
-        /// Bodenhöhe erstmals gemessen).
+        /// Erzwingt die nächste Verankerung (Tracking wiedergefunden).
         private var needsReanchor = false
 
         /// Geglätteter Yaw-Korrekturwinkel (signierte Grad) der AR-Welt gegen
@@ -129,10 +129,9 @@ struct ARViewContainer: UIViewRepresentable {
         private var smoothedCorrectionDeg: Double?
         private var correctionQuat = simd_quatf(angle: 0, axis: SIMD3<Float>(0, 1, 0))
 
-        /// Von ARKit gemessene Boden-Y (Weltrahmen), sobald eine horizontale
-        /// Ebene gefunden wurde – ersetzt die reine Höhenschätzung aus dem
-        /// Profil. `nil`, solange noch keine Ebene erkannt ist.
-        private var detectedGroundY: Float?
+        /// Geglättete Kamerahöhe im Weltrahmen. Grundlage für die Bodenhöhe:
+        /// Der Boden liegt die Gerätehöhe des Profils darunter.
+        private var smoothedCameraY: Float?
 
         init(projector: ARPOIProjector) {
             self.projector = projector
@@ -158,7 +157,7 @@ struct ARViewContainer: UIViewRepresentable {
 
             updateTrackingState(frame.camera.trackingState)
             updateHeadingCorrection(frame: frame)
-            updateGroundDetection(cameraY: cameraPosition.y)
+            updateCameraHeight(cameraPosition.y)
             syncRouteEntities(cameraPosition: cameraPosition, trackingState: frame.camera.trackingState)
             projectPOIs(cameraPosition: cameraPosition)
         }
@@ -221,46 +220,30 @@ struct ARViewContainer: UIViewRepresentable {
             routeContainer?.orientation = correctionQuat
         }
 
-        /// Sucht die reale Bodenhöhe per Raycast auf eine erkannte horizontale
-        /// Ebene. Gefunden → gemerkt und Route mit der echten Bodenhöhe neu
-        /// aufbauen (statt der Höhenschätzung aus dem Profil). Die Plausibilität
-        /// wird relativ zur AKTUELLEN Kamerahöhe geprüft, damit sie auch nach
-        /// einer Steigung noch stimmt.
-        private func updateGroundDetection(cameraY: Float) {
-            guard detectedGroundY == nil,
-                  let arView,
-                  arView.bounds.width > 0, arView.bounds.height > 0
-            else { return }
-
-            let center = CGPoint(x: arView.bounds.midX, y: arView.bounds.midY)
-            guard let hit = arView.raycast(
-                from: center,
-                allowing: .estimatedPlane,
-                alignment: .horizontal
-            ).first else { return }
-
-            // Ein plausibler Boden liegt 0,3–2,5 m unter der Kamera. Ausreisser
-            // (fälschlich erkannte Tisch-/Wandebene) verwerfen und später
-            // erneut versuchen.
-            let candidate = hit.worldTransform.columns.3.y
-            guard candidate < cameraY - 0.3, candidate > cameraY - 2.5 else { return }
-
-            detectedGroundY = candidate
-            // Route mit der gemessenen Bodenhöhe neu aufbauen.
-            needsReanchor = true
+        /// Führt die geglättete Kamerahöhe nach.
+        ///
+        /// Bewusst OHNE Ebenen-Erkennung: Der frühere Raycast auf eine
+        /// horizontale Fläche hing vollständig am Untergrund – auf
+        /// Kopfsteinpflaster, nassem oder spiegelndem Belag und im Schatten
+        /// findet ARKit keine verlässliche Ebene, und was es findet, springt.
+        /// Genau daher kam der Pfad, der "mal perfekt liegt und dann weg ist".
+        ///
+        /// Die Kamerahöhe dagegen kommt aus der Gerätelage und ist an die
+        /// Schwerkraft gekoppelt – die kennt kein Wetter und keinen Belag. Der
+        /// Boden liegt die Gerätehöhe aus dem Profil darunter (Sitzhöhe +
+        /// Oberkörper), die Glättung nimmt dem Ganzen das Wippen beim Fahren.
+        private func updateCameraHeight(_ cameraY: Float) {
+            guard let previous = smoothedCameraY else {
+                smoothedCameraY = cameraY
+                return
+            }
+            smoothedCameraY = previous + (cameraY - previous) * Self.cameraHeightSmoothing
         }
 
-        /// Bodenhöhe im Weltrahmen: die gemessene Ebene, solange sie zur
-        /// aktuellen Kamerahöhe passt – sonst die Schätzung aus der Gerätehöhe
-        /// des Profils (und neu messen).
+        /// Bodenhöhe im Weltrahmen: die geglättete Kamerahöhe minus der
+        /// Gerätehöhe aus dem Profil.
         private func groundLevel(below cameraY: Float) -> Float {
-            let estimated = cameraY - deviceHeight
-            guard let detected = detectedGroundY else { return estimated }
-            guard abs(detected - estimated) <= Self.groundToleranceM else {
-                detectedGroundY = nil
-                return estimated
-            }
-            return detected
+            (smoothedCameraY ?? cameraY) - deviceHeight
         }
 
         /// Baut die Route-Entities neu auf, wenn nötig (siehe `needsRebuild`),
