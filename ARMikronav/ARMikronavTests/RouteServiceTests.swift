@@ -693,6 +693,226 @@ struct RouteServiceTests {
         #expect(!RouteService.isImplausibleDetour(routeDistanceM: 3000, beelineM: 1200))
     }
 
+    // MARK: - Auswahl unter den Routen-Kandidaten
+
+    /// Kandidatin mit vorgegebener Länge (Geometrie für die Auswahl egal).
+    private func candidate(_ distanceM: CLLocationDistance, kind: RouteKind) -> ActiveRoute {
+        ActiveRoute(
+            destinationName: "Ziel",
+            destinationCoordinate: CLLocationCoordinate2D(latitude: 47.3717, longitude: 8.5422),
+            coordinates: [
+                CLLocationCoordinate2D(latitude: 47.3700, longitude: 8.5400),
+                CLLocationCoordinate2D(latitude: 47.3717, longitude: 8.5422),
+            ],
+            totalDistanceM: distanceM,
+            expectedTravelTimeS: distanceM,
+            kind: kind
+        )
+    }
+
+    /// Normalfall: Die Route mit den eigenen Limits ist plausibel und gewinnt.
+    @Test func preferredRouteKeepsPlausibleStrictRoute() {
+        let best = RouteService.preferredRoute(
+            strict: candidate(300, kind: .wheelchair),
+            relaxed: candidate(250, kind: .wheelchairRelaxed),
+            walking: candidate(150, kind: .walkingFallback),
+            beelineM: 200
+        )
+
+        #expect(best?.kind == .wheelchair)
+    }
+
+    /// Mit den eigenen Limits kommt nur ein Umweg zustande, gelockert aber ein
+    /// normaler Weg – dann gilt die gelockerte OSM-Route.
+    @Test func preferredRouteFallsBackToRelaxedOSMRoute() {
+        let best = RouteService.preferredRoute(
+            strict: candidate(2300, kind: .wheelchair),
+            relaxed: candidate(320, kind: .wheelchairRelaxed),
+            walking: candidate(200, kind: .walkingFallback),
+            beelineM: 150
+        )
+
+        #expect(best?.kind == .wheelchairRelaxed)
+    }
+
+    /// Der Fall aus dem Feldtest-Screenshot: Ziel 150 m entfernt, beide
+    /// OSM-Routen führen 2,2–2,3 km im Kreis (über die Fähre), die
+    /// Fussgängerroute sind 200 m. Dann muss die kurze Route gewinnen –
+    /// sonst schickt die App zu einem Ziel nebenan auf einen 40-Minuten-Umweg.
+    @Test func preferredRouteUsesWalkingWhenBothOSMRoutesAreAbsurd() {
+        let best = RouteService.preferredRoute(
+            strict: candidate(2300, kind: .wheelchair),
+            relaxed: candidate(2200, kind: .wheelchairRelaxed),
+            walking: candidate(200, kind: .walkingFallback),
+            beelineM: 150
+        )
+
+        #expect(best?.kind == .walkingFallback)
+    }
+
+    /// Ist die Fussgängerroute nur unwesentlich kürzer, bleibt es bei der
+    /// OSM-Route – ein paar Meter rechtfertigen keine Route ohne
+    /// Barrieren-Berücksichtigung.
+    @Test func preferredRouteKeepsOSMRouteWhenWalkingIsBarelyShorter() {
+        let best = RouteService.preferredRoute(
+            strict: candidate(2300, kind: .wheelchair),
+            relaxed: nil,
+            walking: candidate(2000, kind: .walkingFallback),
+            beelineM: 150
+        )
+
+        #expect(best?.kind == .wheelchair)
+    }
+
+    /// Ohne OSM-Route bleibt nur die Fussgängerroute.
+    @Test func preferredRouteUsesWalkingWithoutOSMRoutes() {
+        let best = RouteService.preferredRoute(
+            strict: nil,
+            relaxed: nil,
+            walking: candidate(400, kind: .walkingFallback),
+            beelineM: 300
+        )
+
+        #expect(best?.kind == .walkingFallback)
+    }
+
+    /// Ohne Fussgängerroute (Funkloch) bleibt die kürzere OSM-Route.
+    @Test func preferredRouteUsesShorterOSMRouteWithoutWalking() {
+        let best = RouteService.preferredRoute(
+            strict: candidate(2300, kind: .wheelchair),
+            relaxed: candidate(1800, kind: .wheelchairRelaxed),
+            walking: nil,
+            beelineM: 150
+        )
+
+        #expect(best?.kind == .wheelchairRelaxed)
+    }
+
+    /// Gar keine Kandidatin – dann gibt es nichts anzuzeigen.
+    @Test func preferredRouteWithoutCandidatesIsNil() {
+        #expect(
+            RouteService.preferredRoute(
+                strict: nil, relaxed: nil, walking: nil, beelineM: 150
+            ) == nil
+        )
+    }
+
+    // MARK: - Anfrage ans OSM-Rollstuhl-Routing (ORS)
+
+    /// Baut den Anfrage-Body wie RouteService und gibt ihn als Dictionary
+    /// zurück, um die einzelnen Parameter prüfen zu können.
+    private func requestBody(
+        profile: UserProfile,
+        relaxed: Bool = false
+    ) throws -> [String: Any] {
+        let request = ORSDirectionsRequest(
+            coordinates: [[8.5400, 47.3700], [8.5422, 47.3717]],
+            options: .init(
+                profileParams: .init(
+                    restrictions: .init(profile: profile, relaxed: relaxed)
+                ),
+                avoidPolygons: nil,
+                avoidFeatures: ORSDirectionsRequest.excludedFeatures
+            )
+        )
+        let data = try JSONEncoder().encode(request)
+        let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        return json ?? [:]
+    }
+
+    private func restrictionValues(
+        profile: UserProfile,
+        relaxed: Bool = false
+    ) throws -> [String: Any] {
+        let body = try requestBody(profile: profile, relaxed: relaxed)
+        let options = body["options"] as? [String: Any]
+        let params = options?["profile_params"] as? [String: Any]
+        return params?["restrictions"] as? [String: Any] ?? [:]
+    }
+
+    /// ORS akzeptiert für `maximum_incline` nur 3, 6, 10 oder 15 und für
+    /// `maximum_sloped_kerb` nur 0.03, 0.06 oder 0.1. Persönliche Werte
+    /// dazwischen werden nach UNTEN eingerastet – lieber etwas strenger als
+    /// über eine Kante, die zu hoch ist.
+    @Test func orsRestrictionsSnapToDocumentedValues() throws {
+        var tester = profile(speedKmh: 4)
+        tester.maxIncline = 9
+        tester.maxCurbHeight = 7
+
+        let values = try restrictionValues(profile: tester)
+
+        #expect(values["maximum_incline"] as? Int == 6)
+        #expect(values["maximum_sloped_kerb"] as? Double == 0.06)
+    }
+
+    /// Liegt das eigene Limit unter der feinsten Stufe, bleibt es bei dieser –
+    /// feiner kann ORS nicht.
+    @Test func orsRestrictionsUseFinestStepBelowSmallestValue() throws {
+        var tester = profile(speedKmh: 4)
+        tester.maxIncline = 2
+        tester.maxCurbHeight = 1
+
+        let values = try restrictionValues(profile: tester)
+
+        #expect(values["maximum_incline"] as? Int == 3)
+        #expect(values["maximum_sloped_kerb"] as? Double == 0.03)
+    }
+
+    /// Die Anfrage trägt die weiteren Tags aus dem OSM-Wiki: Oberfläche,
+    /// Ebenheit, Wegequalität und Mindestbreite.
+    @Test func orsRestrictionsCarryWikiTags() throws {
+        var tester = profile(speedKmh: 4)
+        tester.surfaceTolerance = .fineCobble
+        tester.widthCm = 65
+        tester.maneuverBufferCm = 10
+
+        let values = try restrictionValues(profile: tester)
+
+        #expect(values["surface_type"] as? String == "cobblestone:flattened")
+        #expect(values["smoothness_type"] as? String == "intermediate")
+        #expect(values["track_type"] as? String == "grade1")
+        #expect(values["minimum_width"] as? Double == 0.75)
+    }
+
+    /// Die gelockerte Stufe weitet die Vorgaben und lässt die Breite ganz weg –
+    /// in der Altstadt ist `width` kaum erfasst.
+    @Test func relaxedRestrictionsWidenLimitsAndDropWidth() throws {
+        var tester = profile(speedKmh: 4)
+        tester.maxIncline = 3
+        tester.maxCurbHeight = 3
+        tester.surfaceTolerance = .smoothOnly
+
+        let values = try restrictionValues(profile: tester, relaxed: true)
+
+        #expect(values["maximum_incline"] as? Int == 6)
+        #expect(values["maximum_sloped_kerb"] as? Double == 0.06)
+        #expect(values["minimum_width"] == nil)
+        #expect(values["surface_type"] as? String == "cobblestone")
+    }
+
+    /// Die gelockerte Stufe darf nie STRENGER sein als die eigenen Werte.
+    @Test func relaxedRestrictionsNeverTightenPersonalLimits() throws {
+        var tester = profile(speedKmh: 4)
+        tester.maxIncline = 15
+        tester.maxCurbHeight = 10
+
+        let values = try restrictionValues(profile: tester, relaxed: true)
+
+        #expect(values["maximum_incline"] as? Int == 15)
+        #expect(values["maximum_sloped_kerb"] as? Double == 0.1)
+    }
+
+    /// Fähren und Treppen sind ausgeschlossen: Ohne das schickt ORS für ein
+    /// Ziel auf der anderen Uferseite gern übers Limmatschiff (Feldtest).
+    @Test func orsRequestExcludesFerriesAndSteps() throws {
+        let body = try requestBody(profile: profile(speedKmh: 4))
+        let options = body["options"] as? [String: Any]
+        let avoided = options?["avoid_features"] as? [String]
+
+        #expect(avoided?.contains("ferries") == true)
+        #expect(avoided?.contains("steps") == true)
+    }
+
     // MARK: - Fahrzeit mit eigener Geschwindigkeit
 
     /// Profil mit frei wählbarem Tempo (übrige Werte für die Zeitberechnung
