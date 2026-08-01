@@ -195,6 +195,14 @@ struct ProfileEditView: View {
     private var abilitiesSection: some View {
         Section {
             VStack(alignment: .leading) {
+                Text(String(format: "Tempo: %.1f km/h", draft.travelSpeedKmh))
+                Slider(
+                    value: $draft.travelSpeedKmh,
+                    in: UserProfile.minTravelSpeedKmh...UserProfile.maxTravelSpeedKmh,
+                    step: 0.5
+                )
+            }
+            VStack(alignment: .leading) {
                 Text("Max. Steigung: \(Int(draft.maxIncline)) %")
                 Slider(value: $draft.maxIncline, in: 0...15, step: 1)
             }
@@ -207,7 +215,7 @@ struct ProfileEditView: View {
         } header: {
             Text("Was du bewältigst")
         } footer: {
-            Text("Werte beziehen sich aufs Fahren ohne Begleitung. Mit Begleitung werden sie automatisch leicht erhöht.")
+            Text("Werte beziehen sich aufs Fahren ohne Begleitung. Mit Begleitung werden sie automatisch leicht erhöht. Das Tempo bestimmt Fahrzeit und Ankunftszeit einer Route.")
         }
     }
 

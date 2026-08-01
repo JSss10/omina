@@ -26,18 +26,39 @@ Lädt Barrieren-Daten aus OpenStreetMap (Overpass API) für die Altstadt Zürich
 python3 import_osm.py
 ```
 
+Ausgewertet werden die Tags, die das OSM-Wiki im Projekt
+[Wheelchair routing](https://wiki.openstreetmap.org/wiki/Wheelchair_routing)
+auflistet – dieselben Tags, auf denen auch das Rollstuhl-Routing der App
+(OpenRouteService, Profil `wheelchair`) rechnet.
+
 **Was wird importiert:**
 
-- Bordsteine (kerb mit Höhe oder Default-Mapping)
-- Treppen (highway=steps mit step_count)
-- Steigungen (incline mit % oder Default 8%)
-- Oberflächen (cobblestone, sett, gravel, sand, unhewn_cobblestone)
-- Engstellen (width < 200cm)
+| OSM-Tag                                    | Barriere in der App              |
+| ------------------------------------------ | -------------------------------- | ------------------- | ---------------------------------- |
+| `kerb` (+ `kerb:height`)                   | Bordstein, sonst Default-Mapping |
+| `sloped_curb`, `sloped_curb:start`/`:end`  | Bordstein am Weganfang/-ende     |
+| `highway=steps` (+ `step_count`)           | Treppe                           |
+| `incline` (% oder °, sonst Default 8 %)    | Steigung                         |
+| `surface` (Kopfsteinpflaster, Kies, Sand…) | Oberfläche                       |
+| `smoothness` (ab `intermediate`)           | Oberfläche (Ebenheit)            |
+| `tracktype` (ab `grade2`)                  | Oberfläche (Wegequalität)        |
+| `width` (< 200 cm)                         | Engstelle                        |
+| `sidewalk:left                             | right                            | both:<eigenschaft>` | dieselben Typen, seitlich versetzt |
+| `highway=crossing` + `wheelchair=no`       | fehlende Bordstein-Absenkung     |
+| `barrier=*` (Drehkreuz, Poller, Tor…)      | Engstelle bzw. Bordstein         |
+
+Gehweg-Tags hängen in OSM an der Strassenachse, gefahren wird aber auf dem
+Trottoir – sie werden deshalb 4 m quer zur Digitalisierrichtung versetzt
+(`left`/`right` beziehen sich laut Wiki genau darauf).
 
 **value_source:**
 
 - `measured`: Wert direkt aus OSM-Tag
-- `estimated`: Wert aus Default-Mapping (NFA-15: eher warnen)
+- `estimated`: Wert aus Default-Mapping (NFA-15: eher warnen). Die
+  Schätzwerte folgen DIN 18024-1, wie sie das Wiki zusammenfasst
+  (Bordstein max. 3 cm, Nebenweg min. 90 cm, Längsneigung 3 % bzw. 6 % mit
+  Verweilplätzen) – dieselben Zahlen stehen in der App unter
+  `Services/AccessibilityStandard.swift`.
 
 ### import_ginto.py
 

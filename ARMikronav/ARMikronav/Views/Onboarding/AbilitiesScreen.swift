@@ -30,6 +30,23 @@ struct Screen14_Abilities: View {
                 isInteger: false
             )
 
+            // MARK: Eigenes Tempo
+            VStack(alignment: .leading, spacing: 10) {
+                OnboardingNumberField(
+                    icon: "speedometer",
+                    label: "Dein Tempo",
+                    value: $draft.travelSpeedKmh,
+                    unit: "km/h",
+                    hint: "Wie schnell bist du normalerweise unterwegs? (Handrollstuhl ca. 3–4 km/h, Elektrorollstuhl ca. 6 km/h)",
+                    isInteger: false
+                )
+
+                Text("Fahrzeit und Ankunftszeit einer Route werden mit deinem Tempo berechnet – nicht mit dem Fussgänger-Tempo der Karten-Dienste.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 4)
+            }
+
             // MARK: Manövrier-Spielraum
             VStack(alignment: .leading, spacing: 10) {
                 OnboardingNumberField(

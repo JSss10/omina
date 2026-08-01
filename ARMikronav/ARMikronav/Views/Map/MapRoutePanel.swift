@@ -142,7 +142,7 @@ struct MapRoutePanel: View {
     private var routeIcon: String {
         if hasArrived { return "checkmark" }
         if let maneuver { return maneuver.direction.symbolName }
-        return route.kind == .wheelchair ? "figure.roll" : "figure.walk"
+        return route.kind.symbolName
     }
 
     private var headlineText: String {
@@ -264,7 +264,7 @@ struct RouteInfoBar: View {
     private var routeIcon: String {
         if hasArrived { return "checkmark.circle.fill" }
         if let maneuver { return maneuver.direction.symbolName }
-        return route.kind == .wheelchair ? "figure.roll" : "figure.walk"
+        return route.kind.symbolName
     }
 
     private var headlineText: String {

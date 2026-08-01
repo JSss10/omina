@@ -77,9 +77,13 @@ final class MapViewModel: ObservableObject {
     /// Seitlicher Abstand zur Route, ab dem als "nicht auf der Route" gilt.
     private let offRouteThresholdM: CLLocationDistance = 25
     /// So viele Updates in Folge über der Schwelle lösen die Neuberechnung aus.
-    private let offRouteConfirmations = 3
+    private let offRouteConfirmations = 2
+    /// Vielfaches der Schwelle, ab dem ein einzelnes (verlässliches) Update
+    /// genügt: Wer eine Gasse weiter fährt, ist eindeutig auf einem eigenen Weg –
+    /// darauf soll die App sofort reagieren statt erst nach mehreren Updates.
+    private let offRouteImmediateFactor: CLLocationDistance = 2
     /// Mindestabstand zwischen zwei automatischen Neuberechnungen.
-    private let minRerouteInterval: TimeInterval = 12
+    private let minRerouteInterval: TimeInterval = 8
     /// Genauigkeit, die ein Fix mindestens haben muss, damit er eine
     /// automatische Neuberechnung auslösen darf. Ohne diese Schranke berechnet
     /// ein einzelner GPS-Ausreisser die ganze Route neu – vom falschen Ort aus.
@@ -122,8 +126,8 @@ final class MapViewModel: ObservableObject {
     /// (Fussgänger-Fallback) folgt.
     private func corridorM(for kind: RouteKind) -> CLLocationDistance {
         switch kind {
-        case .wheelchair:     return wheelchairCorridorM
-        case .walkingFallback: return walkingCorridorM
+        case .wheelchair: return wheelchairCorridorM
+        case .walking:    return walkingCorridorM
         }
     }
 
@@ -518,7 +522,10 @@ final class MapViewModel: ObservableObject {
         }
 
         offRouteUpdates += 1
-        guard offRouteUpdates >= offRouteConfirmations else { return }
+        // Klar daneben (mehrfache Schwelle) → sofort reagieren, sonst erst nach
+        // mehreren Updates in Folge (Entprellung gegen GPS-Ausreisser).
+        let isUnmistakable = offBy > threshold * offRouteImmediateFactor
+        guard isUnmistakable || offRouteUpdates >= offRouteConfirmations else { return }
 
         // Bestätigt neben der Route: den Hinweis zeigen (auch offline, wenn
         // keine Neuberechnung möglich ist – dann bleibt die bisherige Route).
@@ -565,11 +572,11 @@ final class MapViewModel: ObservableObject {
                 )
             } else {
                 newRoute = try await RouteService.wheelchairRoute(
+                    avoiding: avoidCoordinates,
                     from: location.coordinate,
                     to: destination,
                     destinationName: destinationName,
-                    profile: profile,
-                    avoiding: avoidCoordinates
+                    profile: profile
                 )
             }
 
@@ -670,6 +677,10 @@ final class MapViewModel: ObservableObject {
             activeRoute = route
             navigationTarget = poi
             navigationProfile = profile
+            // Dichtere Standort-Updates während der Navigation – Fortschritt,
+            // Kartendrehung und das Erkennen eines eigenen Wegs reagieren so
+            // zeitnah.
+            locationService.setNavigationActive(true)
             offRouteUpdates = 0
             isOffRoute = false
             lastRerouteAt = nil
@@ -705,6 +716,7 @@ final class MapViewModel: ObservableObject {
     }
 
     func stopNavigation() {
+        locationService.setNavigationActive(false)
         activeRoute = nil
         navigationTarget = nil
         navigationProfile = nil
@@ -742,11 +754,11 @@ final class MapViewModel: ObservableObject {
 
         do {
             let newRoute = try await RouteService.wheelchairRoute(
+                avoiding: avoidCoordinates,
                 from: start,
                 to: route.destinationCoordinate,
                 destinationName: route.destinationName,
-                profile: profile,
-                avoiding: avoidCoordinates
+                profile: profile
             )
             activeRoute = newRoute
             routeAnchorAlongM = 0

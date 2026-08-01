@@ -4,7 +4,12 @@
 // Baut die RealityKit-Entities für die AR-Routenführung: ein halbtransparenter
 // Pfad auf Bodenhöhe entlang der Route, weisse Richtungs-Chevrons in
 // regelmässigem Abstand und ein Ziel-Marker. Die GPS-Wegpunkte werden über
-// ARGeoMapper in den AR-Raum relativ zum Session-Ursprung abgebildet.
+// ARGeoMapper in Meter Ost/Nord relativ zu `origin` abgebildet.
+//
+// Wichtig: Die erzeugte Entity ist RELATIV zum Standort aufgebaut (origin
+// liegt im Ursprung 0/0). Der Aufrufer hängt sie an einen Anker an der
+// aktuellen Kameraposition – nur so liegt der Pfad auch dann richtig, wenn
+// man sich seit dem Sessionstart fortbewegt hat (siehe ARViewContainer).
 
 import Foundation
 import RealityKit
@@ -14,7 +19,7 @@ import simd
 
 enum ARRouteRenderer {
     /// Fallback, falls kein Profil verfügbar ist: iPhone ~1.4 m über Boden.
-    /// Der Session-Ursprung (y = 0) liegt auf Gerätehöhe, der Pfad darunter.
+    /// Der Boden liegt um diesen Betrag unter der aktuellen Kamerahöhe.
     static let defaultDeviceHeight: Float = 1.4
     static let pathWidth: Float = 0.8
     static let chevronSpacing: Float = 4
@@ -28,40 +33,60 @@ enum ARRouteRenderer {
     /// kleiner Abstand verhindert lediglich Z-Fighting mit dem Teppich.
     static let chevronFloatHeight: Float = 0.03
 
-    /// Erzeugt einen Welt-Anker mit allen Route-Entities.
-    /// `deviceHeight` ist die geschätzte Höhe, in der das iPhone gehalten wird
-    /// (aus dem UserProfile: Sitzhöhe + Oberkörper). `groundHeight` ist – falls
-    /// ARKit eine horizontale Ebene gefunden hat – die gemessene Boden-Y im
-    /// Weltrahmen; ohne Messung liegt der Boden `deviceHeight` unter dem
-    /// Session-Ursprung (y = 0 = Gerätehöhe). So liegt der Pfad für jeden User
-    /// individuell auf dem realen Boden.
-    static func makeRouteAnchor(
+    /// Bis zu diesem Abstand (Meter) vom Ende des dargestellten Abschnitts gilt
+    /// das Ziel als erreicht dargestellt – nur dann wird der Ziel-Marker
+    /// gesetzt. Sonst stünde die Zielstange am willkürlichen Ende des
+    /// dargestellten Fensters statt am tatsächlichen Ziel.
+    private static let destinationVisibleToleranceM: CLLocationDistance = 25
+
+    /// Erzeugt die Entity mit allen Route-Elementen, aufgebaut RELATIV zu
+    /// `origin` (Standort im Ursprung). `coordinates` ist der darzustellende
+    /// Abschnitt der Route (siehe RouteService.upcomingCoordinates); `groundY`
+    /// ist die Höhe des Bodens im Weltrahmen – entweder von ARKit gemessen
+    /// oder aus der Gerätehöhe des Profils abgeleitet. So liegt der Pfad für
+    /// jede Person individuell auf dem realen Boden.
+    static func makeRouteEntity(
         for route: ActiveRoute,
         origin: CLLocationCoordinate2D,
-        deviceHeight: Float = defaultDeviceHeight,
-        groundHeight: Float? = nil
-    ) -> AnchorEntity {
-        let anchor = AnchorEntity(world: SIMD3<Float>.zero)
-        let groundY = groundHeight ?? -deviceHeight
+        coordinates: [CLLocationCoordinate2D],
+        groundY: Float
+    ) -> Entity {
+        let container = Entity()
 
         // Wegpunkte aus GPS verdichten (dichter Bodenpfad, gleichmässige
-        // Chevron-Abstände), dann relativ zum Session-Ursprung abbilden.
+        // Chevron-Abstände), dann relativ zum Standort abbilden.
         let densified = RouteService.densify(
-            route.coordinates,
+            coordinates,
             maxSpacingM: CLLocationDistance(waypointSpacing)
         )
         let points = densified.map {
             ARGeoMapper.arPosition(of: $0, relativeTo: origin, height: groundY)
         }
+
+        // Ziel-Marker nur, wenn der dargestellte Abschnitt bis zum Ziel reicht.
+        let showsDestination = coordinates.last.map { last in
+            CLLocation(latitude: last.latitude, longitude: last.longitude)
+                .distance(
+                    from: CLLocation(
+                        latitude: route.destinationCoordinate.latitude,
+                        longitude: route.destinationCoordinate.longitude
+                    )
+                ) <= destinationVisibleToleranceM
+        } ?? false
+
         guard points.count >= 2 else {
-            addDestinationMarker(to: anchor, for: route, origin: origin, groundY: groundY)
-            return anchor
+            if showsDestination {
+                addDestinationMarker(to: container, for: route, origin: origin, groundY: groundY)
+            }
+            return container
         }
 
-        addCarpet(to: anchor, along: points)
-        addChevrons(to: anchor, along: points, groundY: groundY)
-        addDestinationMarker(to: anchor, for: route, origin: origin, groundY: groundY)
-        return anchor
+        addCarpet(to: container, along: points)
+        addChevrons(to: container, along: points, groundY: groundY)
+        if showsDestination {
+            addDestinationMarker(to: container, for: route, origin: origin, groundY: groundY)
+        }
+        return container
     }
 
     // MARK: - Pfad
@@ -70,7 +95,7 @@ enum ARRouteRenderer {
     /// Segmente, an jeder Richtungsänderung und an beiden Enden eine runde
     /// Scheibe. So verschmelzen die Segmente ohne Lücke zu einem durchgehenden
     /// Pfad mit runden Ecken und Enden (statt eckig abgeschnittener Stücke).
-    private static func addCarpet(to anchor: AnchorEntity, along points: [SIMD3<Float>]) {
+    private static func addCarpet(to container: Entity, along points: [SIMD3<Float>]) {
         let material = unlitMaterial(color: pathColor, opacity: 0.6)
         let disc = discMesh(radius: pathWidth / 2)
 
@@ -88,7 +113,7 @@ enum ARRouteRenderer {
             )
             segment.position = (start + end) / 2
             segment.orientation = simd_quatf(angle: atan2(delta.x, delta.z), axis: [0, 1, 0])
-            anchor.addChild(segment)
+            container.addChild(segment)
         }
 
         // Runde Kappen an Start und Ziel plus runde Füllstücke an den Ecken,
@@ -97,7 +122,7 @@ enum ARRouteRenderer {
             let entity = ModelEntity(mesh: disc, materials: [material])
             // Minimal über der Teppichoberkante, um Z-Fighting zu vermeiden.
             entity.position = SIMD3(point.x, point.y + 0.012, point.z)
-            anchor.addChild(entity)
+            container.addChild(entity)
         }
 
         if let first = points.first { addDisc(at: first) }
@@ -155,7 +180,7 @@ enum ARRouteRenderer {
     // MARK: - Richtungs-Chevrons
 
     private static func addChevrons(
-        to anchor: AnchorEntity,
+        to container: Entity,
         along points: [SIMD3<Float>],
         groundY: Float
     ) {
@@ -184,7 +209,7 @@ enum ARRouteRenderer {
                 let chevron = ModelEntity(mesh: mesh, materials: [material])
                 chevron.position = SIMD3(position.x, floatY, position.z)
                 chevron.orientation = simd_quatf(angle: yaw, axis: [0, 1, 0])
-                anchor.addChild(chevron)
+                container.addChild(chevron)
                 nextChevronAt += chevronSpacing
                 count += 1
             }
@@ -225,7 +250,7 @@ enum ARRouteRenderer {
     // MARK: - Ziel-Marker
 
     private static func addDestinationMarker(
-        to anchor: AnchorEntity,
+        to container: Entity,
         for route: ActiveRoute,
         origin: CLLocationCoordinate2D,
         groundY: Float
@@ -254,7 +279,7 @@ enum ARRouteRenderer {
         head.position = [0, poleHeight + 0.16, 0]
         marker.addChild(head)
 
-        anchor.addChild(marker)
+        container.addChild(marker)
     }
 
     // MARK: - Material

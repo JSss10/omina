@@ -20,6 +20,11 @@ struct DraftProfile {
     var lengthCm: Int = 120
     var weightKg: Int = 80
 
+    // Eigenes Tempo (km/h) – Screen 1.4, vorbelegt aus wheelchairSubtype.
+    // Grundlage für Fahrzeit/Ankunft statt des Fussgänger-Tempos der
+    // Routing-Dienste.
+    var travelSpeedKmh: Double = 3.5
+
     // Fähigkeiten – werden in Screen 1.4 mit Defaults aus wheelchairSubtype vorbelegt
     var maxIncline: Double = 6.0
     var maxCurbHeight: Double = 3.0
@@ -46,6 +51,7 @@ struct DraftProfile {
         widthCm = type.defaultWidth
         seatHeightCm = type.defaultSeatHeight
         lengthCm = type.defaultLength
+        travelSpeedKmh = type.defaultSpeedKmh
         maxIncline = type.defaultMaxIncline
         maxCurbHeight = type.defaultMaxCurb
     }
@@ -70,6 +76,7 @@ struct DraftProfile {
             weightKg: weightKg,
             seatHeightCm: seatHeightCm,
             lengthCm: lengthCm,
+            travelSpeedKmh: travelSpeedKmh,
             maxIncline: maxIncline,
             maxCurbHeight: maxCurbHeight,
             surfaceTolerance: surfaceTolerance,

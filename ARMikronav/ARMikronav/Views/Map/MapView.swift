@@ -8,6 +8,17 @@
 // und ein Annäherungs-Banner. Bei aktiver Route erscheinen nur die Barrieren
 // direkt auf der Route. MapViewModel kommt vom HomeView, damit Filter-
 // und Barrieren-State mit dem AR-Modus geteilt werden.
+//
+// Kameraführung während der Navigation (Feldtest-Rückmeldung):
+// – Beim Start einer Route zeigt die Karte die GANZE Strecke (Übersicht),
+//   nicht nur den nächsten Abschnitt.
+// – Die Karte dreht sich in beiden Modi mit der EIGENEN Ausrichtung mit
+//   (Blickrichtung nach oben), statt starr der Routenrichtung zu folgen.
+// – Die Zoomstufe wird NIE automatisch verändert: Was der User mit den
+//   Fingern einstellt, bleibt stehen; ein eigener Kartengriff pausiert die
+//   automatische Führung kurz, damit sie nicht dagegenhält.
+// – Zwischen Übersicht (ganze Route) und Folgen (Standort zentriert)
+//   wechselt ein Button rechts oben.
 
 import SwiftUI
 import Combine
@@ -55,6 +66,19 @@ struct MapView: View {
     /// Aktuelle Drehung der Karte (Grad, im Uhrzeigersinn) – nötig, um den
     /// Blickrichtungs-Kegel bei gedrehter Karte richtig auszurichten.
     @State private var mapHeading: CLLocationDirection = 0
+    /// Kameramodus während einer aktiven Route: Übersicht über die ganze
+    /// Strecke oder Folgen des eigenen Standorts (mitdrehend).
+    @State private var routeCameraMode: RouteCameraMode = .overview
+    /// Laufende Zwischenwerte der Kameraführung (siehe Klasse unten).
+    @State private var navCamera = NavigationCameraState()
+
+    /// Kameramodus während der Navigation.
+    enum RouteCameraMode {
+        /// Ganze Route im Bild, Kamera bleibt stehen.
+        case overview
+        /// Kamera folgt dem Standort und dreht sich mit der eigenen Ausrichtung.
+        case following
+    }
 
     // Enger Zoom (~150 m Bildausschnitt), damit nur Barrieren in unmittelbarer
     // Nähe des aktuellen Standorts sichtbar sind.
@@ -80,9 +104,20 @@ struct MapView: View {
                 }
             }
 
-            // Aktive Navigations-Route (geteilt mit dem AR-Modus).
+            // Aktive Navigations-Route (geteilt mit dem AR-Modus). Der bereits
+            // zurückgelegte Teil wird nur blass gezeichnet: Sonst sieht die
+            // gefahrene Schlaufe hinter einem aus wie ein Umweg, der noch
+            // bevorsteht (Feldtest-Rückmeldung).
             if let route = viewModel.activeRoute {
-                MapPolyline(coordinates: route.coordinates)
+                let parts = routeParts(of: route)
+                if parts.covered.count >= 2 {
+                    MapPolyline(coordinates: parts.covered)
+                        .stroke(
+                            AppColor.accentPrimary.opacity(0.28),
+                            style: StrokeStyle(lineWidth: 5, lineCap: .round, lineJoin: .round)
+                        )
+                }
+                MapPolyline(coordinates: parts.remaining)
                     .stroke(
                         AppColor.accentPrimary,
                         style: StrokeStyle(lineWidth: 5, lineCap: .round, lineJoin: .round)
@@ -157,7 +192,20 @@ struct MapView: View {
         // Standortpunkt korrekt ausgerichtet bleibt (Navigation dreht die
         // Karte, der User kann sie zudem mit zwei Fingern drehen).
         .onMapCameraChange(frequency: .continuous) { context in
-            mapHeading = context.camera.heading
+            // Nur nennenswerte Änderungen übernehmen: Der Wert steckt in einem
+            // @State und löste sonst bei jeder Animationsstufe ein komplettes
+            // View-Update aus.
+            if abs(
+                ARHeadingCorrection.normalizedSignedDegrees(context.camera.heading - mapHeading)
+            ) >= 1 {
+                mapHeading = context.camera.heading
+            }
+            // Selbst gegriffene Karte: Zoomstufe übernehmen (sie wird danach
+            // nie automatisch verändert) und die automatische Kameraführung
+            // kurz aussetzen, damit sie nicht gegen die Geste arbeitet.
+            guard cameraPosition.positionedByUser else { return }
+            navCamera.distanceM = context.camera.distance
+            navCamera.pausedUntil = Date().addingTimeInterval(Self.userCameraGraceS)
         }
         .onAppear {
             viewModel.start()
@@ -181,12 +229,29 @@ struct MapView: View {
         .onReceive(locationService.$currentLocation) { _ in
             evaluateProximity()
         }
-        // Während der Navigation folgt die Karte dem Standort und dreht sich
-        // fortlaufend in Fahrtrichtung mit – die Anweisung im Panel ("leicht
-        // rechts halten") stimmt so mit der Kartenausrichtung überein.
-        .onReceive(locationService.$currentLocation.compactMap { $0 }) { location in
-            guard let route = viewModel.activeRoute else { return }
-            followCamera(route: route, location: location)
+        // Während der Navigation folgt die Karte dem Standort; die Drehung
+        // kommt aus der eigenen Ausrichtung (siehe updateNavigationCamera).
+        .onReceive(locationService.$currentLocation.compactMap { $0 }) { _ in
+            updateNavigationCamera(force: true)
+        }
+        // Die Karte dreht sich auch beim Drehen auf der Stelle mit – dafür
+        // genügen Standort-Updates nicht, die Blickrichtung muss die Kamera
+        // ebenfalls nachführen.
+        .onReceive(headingUpdates) { _ in
+            updateNavigationCamera()
+        }
+        // Neue Route (Start, Neuberechnung, Alternativroute): in der Übersicht
+        // den Ausschnitt auf die neue Strecke anpassen; ohne Route den
+        // Kamerazustand zurücksetzen.
+        .onChange(of: viewModel.activeRoute?.id) { _, newID in
+            guard newID != nil, let route = viewModel.activeRoute else {
+                routeCameraMode = .overview
+                navCamera.reset()
+                return
+            }
+            if routeCameraMode == .overview {
+                fitCamera(to: route)
+            }
         }
         .onReceive(barrierNotifications.$tappedBarrierId) { barrierId in
             guard let barrierId,
@@ -261,9 +326,15 @@ struct MapView: View {
         // Höhe der Suchleiste – dort, wo früher der Home-Button sass (jetzt
         // ersetzt durch die sichtbare Tab-Leiste, HomeView).
         .overlay(alignment: .topTrailing) {
-            CompassView(heading: locationService.heading, background: Self.controlBackground)
-                .padding(.trailing, 16)
-                .padding(.top, 16)
+            VStack(spacing: 12) {
+                CompassView(heading: locationService.heading, background: Self.controlBackground)
+                // Umschalter Übersicht ⇄ Folgen, nur während der Navigation.
+                if viewModel.activeRoute != nil {
+                    routeCameraButton
+                }
+            }
+            .padding(.trailing, 16)
+            .padding(.top, 16)
         }
         .overlay(alignment: .bottom) {
             if let route = viewModel.activeRoute {
@@ -391,6 +462,37 @@ struct MapView: View {
         .accessibilityLabel("Orte suchen")
     }
 
+    /// Wechselt zwischen Übersicht (ganze Route im Bild) und Folgen (Karte
+    /// folgt dem Standort und dreht sich mit der eigenen Ausrichtung mit).
+    private var routeCameraButton: some View {
+        Button {
+            switch routeCameraMode {
+            case .overview:
+                routeCameraMode = .following
+                navCamera.pausedUntil = nil
+                updateNavigationCamera(force: true)
+            case .following:
+                routeCameraMode = .overview
+                navCamera.pausedUntil = nil
+                if let route = viewModel.activeRoute {
+                    fitCamera(to: route, force: true)
+                }
+            }
+        } label: {
+            Image(systemName: routeCameraMode == .overview
+                  ? "location.fill"
+                  : "arrow.up.left.and.arrow.down.right")
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(AppColor.accentPrimary)
+                .frame(width: 44, height: 44)
+                .background(Self.controlBackground, in: Circle())
+                .shadow(color: .black.opacity(0.2), radius: 3, y: 1)
+        }
+        .accessibilityLabel(routeCameraMode == .overview
+                            ? "Standort folgen"
+                            : "Ganze Route anzeigen")
+    }
+
     /// Öffnet das Karteneinstellungs-Overlay (Kartenmodus, Darstellung).
     /// Sitzt direkt unter dem Such-Icon; der Barrierentypen-Filter und die
     /// Sichtbarkeit von Orten/Barrieren liegen jetzt im Such-Sheet.
@@ -498,6 +600,23 @@ struct MapView: View {
         locationService.viewingDirection.map { $0 - mapHeading }
     }
 
+    /// Route aufgeteilt in "schon gefahren" und "liegt noch vor mir" – der
+    /// Standort wird dabei auf dieselbe Stelle projiziert wie für Restweg und
+    /// Abbiege-Ansage (gleicher Fortschritts-Anker). Ohne Standort-Fix gilt
+    /// die ganze Route als bevorstehend.
+    private func routeParts(
+        of route: ActiveRoute
+    ) -> (covered: [CLLocationCoordinate2D], remaining: [CLLocationCoordinate2D]) {
+        guard let location = locationService.currentLocation else {
+            return ([], route.coordinates)
+        }
+        return RouteService.split(
+            route,
+            at: location.coordinate,
+            alongAnchorM: viewModel.routeAnchorAlongM
+        )
+    }
+
     /// Maximaler seitlicher Abstand (Meter), bis zu dem der Standortpunkt
     /// während der Navigation auf die Route eingerastet wird. Darüber hinaus
     /// (der User folgt der Route offenbar nicht) zeigt der Punkt die echte
@@ -515,24 +634,36 @@ struct MapView: View {
         viewModel.snappedCoordinate(for: location, maxOffsetM: Self.snapToRouteMaxOffsetM)
     }
 
-    /// "Route anzeigen" aus dem POI-Detail: Route in-App berechnen und
-    /// die Karte auf den gesamten Routenverlauf zoomen.
+    /// "Route anzeigen" aus dem POI-Detail: Route in-App berechnen und die
+    /// Karte auf den gesamten Routenverlauf zoomen – die ganze Strecke ist
+    /// damit von Anfang an ersichtlich, nicht nur der nächste Abschnitt.
     private func showRoute(to poi: POI) {
         Task {
             guard await viewModel.startNavigation(to: poi, profile: profile),
                   let route = viewModel.activeRoute else { return }
+            routeCameraMode = .overview
             fitCamera(to: route)
         }
     }
 
-    /// Zeigt die komplette Route und dreht die Karte dabei so, dass die
-    /// Fahrtrichtung nach oben zeigt – man sieht sofort, wohin man fahren
-    /// muss. Die Kamera zentriert auf die Mitte der Route; der Abstand ergibt
-    /// sich aus der Ausdehnung (Diagonale), damit die Route auch nach der
-    /// Drehung vollständig und mit Rand sichtbar bleibt. Zusätzlich wird die
+    /// Passt den Kartenausschnitt auf die KOMPLETTE Route (Start bis Ziel) ein –
+    /// man sieht sofort den ganzen Weg, nicht nur den nächsten Abschnitt. Die
+    /// Kamera zentriert auf die Mitte der Route; der Abstand ergibt sich aus
+    /// der Ausdehnung (Diagonale), damit die Route in JEDER Drehlage
+    /// vollständig und mit Rand sichtbar bleibt – die Karte dreht sich ja auch
+    /// in der Übersicht mit der eigenen Ausrichtung mit. Zusätzlich wird die
     /// Route etwas nach oben geschoben, damit sie frei zwischen der Suchleiste
     /// (oben) und dem Routen-Panel (unten, höher) liegt und nicht verdeckt wird.
-    private func fitCamera(to route: ActiveRoute) {
+    ///
+    /// Der so bestimmte Abstand wird als Zoomstufe für den Folgen-Modus
+    /// übernommen – wechselt man dorthin, springt die Karte also nicht
+    /// ungefragt näher heran.
+    private func fitCamera(to route: ActiveRoute, force: Bool = false) {
+        // Pro Route nur einmal einpassen (mehrere Auslöser: "Route anzeigen",
+        // Neuberechnung, Alternativroute); der Übersichts-Button erzwingt es.
+        guard force || navCamera.fittedRouteID != route.id else { return }
+        navCamera.fittedRouteID = route.id
+
         let coordinates = route.coordinates
         guard let first = coordinates.first else { return }
 
@@ -566,65 +697,147 @@ struct MapView: View {
 
         // Das untere Panel ist deutlich höher als die Suchleiste – der freie
         // Bereich liegt also oberhalb der geometrischen Bildmitte. Die Route
-        // deshalb entgegen der Fahrtrichtung (nach unten auf dem Schirm =
+        // deshalb entgegen der Blickrichtung (nach unten auf dem Schirm =
         // zurück) verschieben, damit sie in den freien Bereich nach oben
         // rückt. Verschiebung proportional zur Routenlänge, aber gedeckelt.
-        let bearing = RouteService.initialBearingDegrees(of: route)
-        let backwardOffsetM = min(diagonalM * 0.22, 70)
-        let center = Self.coordinate(
-            from: boundingBoxCenter,
-            distanceM: backwardOffsetM,
-            bearingDeg: (bearing + 180).truncatingRemainder(dividingBy: 360)
-        )
+        navCamera.overviewCenter = boundingBoxCenter
+        navCamera.overviewOffsetM = min(diagonalM * 0.22, 70)
+        // Zoomstufe der Übersicht auch als Folgen-Zoom übernehmen: Der Wechsel
+        // in den Folgen-Modus zoomt dadurch nicht automatisch näher heran.
+        navCamera.distanceM = distance
 
-        withAnimation(.easeInOut) {
+        applyNavigationCamera(force: true)
+    }
+
+    /// Kameraabstand, falls (noch) keine Zoomstufe bekannt ist – nur der
+    /// Startwert, danach zählt immer die zuletzt eingestellte Stufe.
+    private static let defaultRouteCameraDistanceM: CLLocationDistance = 400
+    /// So lange bleibt die automatische Kameraführung nach einer eigenen
+    /// Kartengeste stehen, damit sie nicht gegen die Hand arbeitet.
+    private static let userCameraGraceS: TimeInterval = 8
+    /// Mindestabstand zwischen zwei Kamera-Nachführungen (die Blickrichtung
+    /// kommt mit ~20 Hz).
+    private static let cameraUpdateIntervalS: TimeInterval = 0.25
+    /// Ab dieser Richtungsänderung (Grad) wird die Karte nachgedreht – kleinere
+    /// Zappler bleiben unbeachtet, damit das Bild ruhig steht.
+    private static let cameraHeadingStepDeg: Double = 2
+
+    /// Blickrichtungs-Updates (Kompass und – aufrecht gehalten – die aus der
+    /// Gerätelage bestimmte Kamerarichtung), auf die die Kartendrehung reagiert.
+    private var headingUpdates: AnyPublisher<CLLocationDirection?, Never> {
+        Publishers.Merge(locationService.$heading, locationService.$lookDirection)
+            .eraseToAnyPublisher()
+    }
+
+    /// Nachführen der Kamera während der Navigation – gedrosselt und nur bei
+    /// nennenswerter Änderung, damit das Kartenbild ruhig bleibt.
+    private func updateNavigationCamera(force: Bool = false) {
+        guard viewModel.activeRoute != nil else { return }
+        applyNavigationCamera(force: force)
+    }
+
+    /// Setzt die Kamera für den aktuellen Modus:
+    ///
+    /// – In BEIDEN Modi dreht sich die Karte mit der EIGENEN Ausrichtung mit,
+    ///   die Route liegt also immer so im Bild, wie sie vor einem liegt.
+    ///   Ohne Blickrichtung (Gerät flach) zählt ersatzweise die Fahrtrichtung
+    ///   der Route.
+    /// – Übersicht: Zentrum auf der Route, ganze Strecke im Bild.
+    /// – Folgen: Zentrum am eigenen Standort, etwas nach vorn versetzt.
+    ///
+    /// Die Zoomstufe wird dabei NIE automatisch verändert: Es zählt die zuletzt
+    /// vom User eingestellte bzw. die beim Einpassen der ganzen Route
+    /// ermittelte Stufe. `force` (Standort-Update, Moduswechsel, neues
+    /// Einpassen) übergeht die Drosselung.
+    private func applyNavigationCamera(force: Bool) {
+        let now = Date()
+        if let pausedUntil = navCamera.pausedUntil {
+            guard now >= pausedUntil else { return }
+            navCamera.pausedUntil = nil
+        }
+        if !force,
+           let last = navCamera.lastUpdateAt,
+           now.timeIntervalSince(last) < Self.cameraUpdateIntervalS { return }
+
+        let location = locationService.currentLocation
+        guard let heading = navigationHeading(at: location) else { return }
+        if !force,
+           let applied = navCamera.appliedHeadingDeg,
+           abs(ARHeadingCorrection.normalizedSignedDegrees(heading - applied))
+            < Self.cameraHeadingStepDeg { return }
+
+        let distance = navCamera.distanceM ?? Self.defaultRouteCameraDistanceM
+        guard let center = navigationCenter(heading: heading, distance: distance, at: location)
+        else { return }
+
+        navCamera.lastUpdateAt = now
+        navCamera.appliedHeadingDeg = heading
+
+        withAnimation(.easeInOut(duration: 0.35)) {
             cameraPosition = .camera(
                 MapCamera(
                     centerCoordinate: center,
                     distance: distance,
-                    heading: bearing,
+                    heading: heading,
                     pitch: 0
                 )
             )
         }
     }
 
-    /// Meter, um die das Kartenzentrum in Fahrtrichtung vor den Standort
-    /// versetzt wird – so sitzt die Position im unteren Drittel und man sieht
-    /// mehr von der Strecke voraus.
-    private static let followForwardOffsetM = 35.0
-    /// Kameraabstand im Follow-Modus (~enger Ausschnitt für die Gassen der
-    /// Altstadt, zeigt die nächsten Meter der Route).
-    private static let followDistanceM = 240.0
-
-    /// Folgt dem Standort während der Navigation und dreht die Karte in
-    /// Fahrtrichtung: Der nächste Streckenabschnitt zeigt immer nach oben,
-    /// die Karte dreht bei einer Rechtskurve nach rechts, bei einer
-    /// Linkskurve nach links. Ohne bestimmbare Fahrtrichtung (z. B. am Ziel)
-    /// bleibt die Kamera stehen.
-    private func followCamera(route: ActiveRoute, location: CLLocation) {
-        guard let bearing = RouteService.travelBearingDegrees(
-            of: route,
-            at: location,
-            alongAnchorM: viewModel.routeAnchorAlongM
-        ) else { return }
-
-        let center = Self.coordinate(
-            from: location.coordinate,
-            distanceM: Self.followForwardOffsetM,
-            bearingDeg: bearing
-        )
-
-        withAnimation(.easeInOut(duration: 0.4)) {
-            cameraPosition = .camera(
-                MapCamera(
-                    centerCoordinate: center,
-                    distance: Self.followDistanceM,
-                    heading: bearing,
-                    pitch: 0
-                )
+    /// Kartenzentrum für den aktuellen Modus (siehe `applyNavigationCamera`).
+    private func navigationCenter(
+        heading: CLLocationDirection,
+        distance: CLLocationDistance,
+        at location: CLLocation?
+    ) -> CLLocationCoordinate2D? {
+        switch routeCameraMode {
+        case .overview:
+            guard let base = navCamera.overviewCenter else { return nil }
+            // Entgegen der Blickrichtung versetzt, damit die Route über dem
+            // Routen-Panel im freien Bereich liegt.
+            return Self.coordinate(
+                from: base,
+                distanceM: navCamera.overviewOffsetM ?? 0,
+                bearingDeg: (heading + 180).truncatingRemainder(dividingBy: 360)
+            )
+        case .following:
+            guard let location else { return nil }
+            // Zentrum etwas in Blickrichtung versetzen, damit der eigene
+            // Standort im unteren Drittel sitzt und mehr Strecke voraus
+            // sichtbar ist – proportional zum Zoom, damit es in jeder Stufe passt.
+            return Self.coordinate(
+                from: snappedUserCoordinate(for: location),
+                distanceM: min(distance * 0.15, 90),
+                bearingDeg: heading
             )
         }
+    }
+
+    /// Geglättete Richtung, in die die Karte gedreht wird: bevorzugt die eigene
+    /// Blickrichtung, ersatzweise die Fahrtrichtung der Route. Die Glättung
+    /// nimmt dem Kompass die Zappler, ohne Verzögerung spürbar zu machen.
+    private func navigationHeading(at location: CLLocation?) -> CLLocationDirection? {
+        var target = locationService.viewingDirection
+        if target == nil, let location, let route = viewModel.activeRoute {
+            target = RouteService.travelBearingDegrees(
+                of: route,
+                at: location,
+                alongAnchorM: viewModel.routeAnchorAlongM
+            )
+        }
+        if target == nil, let route = viewModel.activeRoute {
+            target = RouteService.initialBearingDegrees(of: route)
+        }
+        guard let target else { return nil }
+
+        let smoothed = ARHeadingCorrection.smooth(
+            previous: navCamera.smoothedHeadingDeg,
+            new: target,
+            factor: 0.3
+        )
+        navCamera.smoothedHeadingDeg = smoothed
+        return (smoothed + 360).truncatingRemainder(dividingBy: 360)
     }
 
     /// Koordinate, die `distanceM` Meter in Kompassrichtung `bearingDeg`
@@ -678,6 +891,9 @@ struct MapView: View {
     private func findAlternativeRoute(avoiding barrier: Barrier) async -> Bool {
         let success = await viewModel.findAlternativeRoute(avoiding: barrier, profile: profile)
         if success, let route = viewModel.activeRoute {
+            // Die Alternativroute in ganzer Länge zeigen – der Umweg soll
+            // beurteilbar sein, bevor man ihm folgt.
+            routeCameraMode = .overview
             fitCamera(to: route)
         }
         return success
@@ -764,6 +980,44 @@ struct MapView: View {
             && viewModel.filteredBarriers.isEmpty
             && viewModel.displayedPOIs.isEmpty
             && locationService.currentLocation != nil
+    }
+}
+
+/// Laufende Zwischenwerte der Navigations-Kameraführung. Bewusst ein
+/// Referenztyp in `@State`: Geglättete Richtung, Drosselung und Zoomstufe
+/// ändern sich mehrmals pro Sekunde und sollen dabei KEIN SwiftUI-Update
+/// auslösen (nur die Kameraposition selbst tut das).
+final class NavigationCameraState {
+    /// Geglättete Blickrichtung (signierte Grad), Basis der Kartendrehung.
+    var smoothedHeadingDeg: CLLocationDirection?
+    /// Zuletzt an die Kamera übergebene Drehung (0–360°).
+    var appliedHeadingDeg: CLLocationDirection?
+    /// Zeitpunkt der letzten Kamera-Nachführung (Drosselung).
+    var lastUpdateAt: Date?
+    /// Bis dahin bleibt die automatische Führung nach einer eigenen
+    /// Kartengeste stehen.
+    var pausedUntil: Date?
+    /// Aktuelle Zoomstufe (Kameraabstand in Metern) – wird nur durch eigene
+    /// Gesten oder das Einpassen der ganzen Route gesetzt, nie automatisch.
+    var distanceM: CLLocationDistance?
+    /// Mittelpunkt der eingepassten Route (Übersichtsmodus).
+    var overviewCenter: CLLocationCoordinate2D?
+    /// Versatz des Übersichts-Zentrums entgegen der Blickrichtung, damit die
+    /// Route über dem Routen-Panel frei liegt.
+    var overviewOffsetM: CLLocationDistance?
+    /// Route, deren Verlauf zuletzt eingepasst wurde (verhindert doppeltes
+    /// Einpassen bei mehreren Auslösern).
+    var fittedRouteID: UUID?
+
+    func reset() {
+        smoothedHeadingDeg = nil
+        appliedHeadingDeg = nil
+        lastUpdateAt = nil
+        pausedUntil = nil
+        distanceM = nil
+        overviewCenter = nil
+        overviewOffsetM = nil
+        fittedRouteID = nil
     }
 }
 

@@ -20,6 +20,12 @@
 // Control Center) relokalisiert ARKit automatisch die bestehende Karte, statt
 // hart zurückzusetzen; wiederherstellbare Session-Fehler starten die Session
 // begrenzt oft neu, bevor der Fehler-State gezeigt wird.
+//
+// Keine Ebenen-Erkennung: Der Bodenpfad wird aus der Gerätehöhe und der
+// Schwerkraft gelegt (siehe ARViewContainer), nicht aus erkannten Flächen.
+// Auf Kopfsteinpflaster, nassem Belag oder im Schatten findet ARKit keine
+// verlässliche Ebene – der Pfad hing damit am Untergrund und verschwand.
+// Ohne planeDetection bleibt zudem mehr Rechenzeit fürs Tracking selbst.
 
 import Foundation
 import ARKit
@@ -66,8 +72,7 @@ final class ARSessionService: NSObject, ObservableObject {
             let available = await Self.geoTrackingAvailable(at: coordinate)
             if available {
                 let config = ARGeoTrackingConfiguration()
-                config.planeDetection = [.horizontal]
-                Self.applyCameraQuality(
+                        Self.applyCameraQuality(
                     to: config,
                     formats: ARGeoTrackingConfiguration.supportedVideoFormats
                 )
@@ -78,7 +83,6 @@ final class ARSessionService: NSObject, ObservableObject {
         }
 
         let config = ARWorldTrackingConfiguration()
-        config.planeDetection = [.horizontal]
         config.worldAlignment = .gravityAndHeading
         Self.applyCameraQuality(
             to: config,

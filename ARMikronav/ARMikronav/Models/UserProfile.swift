@@ -15,6 +15,11 @@ struct UserProfile: Codable {
     var seatHeightCm: Int = 50
     /// Gesamtlänge inkl. Fussstützen – relevant für Lifte und Wendeflächen.
     var lengthCm: Int = 120
+    /// Eigene Reisegeschwindigkeit in km/h. Grundlage für Fahrzeit und
+    /// Ankunftszeit einer Route: Routing-Dienste rechnen mit Fussgänger-Tempo
+    /// (~5 km/h), was für Rollstuhlnutzende je nach Antrieb deutlich zu schnell
+    /// oder zu langsam ist. Vorbelegt aus dem Rollstuhltyp, frei anpassbar.
+    var travelSpeedKmh: Double = 3.5
     var maxIncline: Double
     var maxCurbHeight: Double
     var surfaceTolerance: SurfaceTolerance
@@ -52,6 +57,23 @@ struct UserProfile: Codable {
         return hasCompanion ? base + companionCurbBonus : base
     }
 
+    /// Untere/obere Grenze der eingebbaren Geschwindigkeit (km/h) – schützt die
+    /// Zeitberechnung vor unsinnigen Werten (0 km/h ⇒ unendliche Fahrzeit).
+    static let minTravelSpeedKmh: Double = 1.0
+    static let maxTravelSpeedKmh: Double = 15.0
+
+    /// Geschwindigkeit, mit der Fahrzeit und Ankunft berechnet werden: der
+    /// eigene Wert, an wenig-Energie-Tagen um 20 % reduziert (wie die übrigen
+    /// Limits), begrenzt auf den plausiblen Bereich.
+    var effectiveTravelSpeedKmh: Double {
+        let base = lowEnergyToday ? travelSpeedKmh * 0.8 : travelSpeedKmh
+        return min(max(base, Self.minTravelSpeedKmh), Self.maxTravelSpeedKmh)
+    }
+
+    /// Dieselbe Geschwindigkeit in Meter pro Sekunde (Rechengrösse für die
+    /// Fahrzeit entlang einer Route).
+    var effectiveTravelSpeedMS: Double { effectiveTravelSpeedKmh / 3.6 }
+
     /// Nässe verschiebt die Oberflächen-Toleranz eine Stufe Richtung "nur glatt".
     var effectiveSurfaceTolerance: SurfaceTolerance {
         guard wetConditionsToday else { return surfaceTolerance }
@@ -76,13 +98,15 @@ struct UserProfile: Codable {
 }
 
 // Abwärtskompatible Dekodierung: Profile, die vor Einführung von Sitzhöhe,
-// Länge, Spielraum, Begleit-Boni sowie den Tages-Zuständen (Nässe, Energie,
-// Eurokey) gespeichert wurden (UserDefaults / Supabase user_metadata),
-// erhalten die bisherigen Fix-Werte als Default.
+// Länge, Spielraum, Begleit-Boni, eigener Geschwindigkeit sowie den
+// Tages-Zuständen (Nässe, Energie, Eurokey) gespeichert wurden
+// (UserDefaults / Supabase user_metadata), erhalten die bisherigen Fix-Werte
+// bzw. die Defaults des Rollstuhltyps.
 extension UserProfile {
     private enum LegacyKeys: String, CodingKey {
         case id, mobilityCategory, wheelchairType
         case widthCm, heightCm, weightKg, seatHeightCm, lengthCm
+        case travelSpeedKmh
         case maxIncline, maxCurbHeight, surfaceTolerance, maneuverBufferCm
         case companionStatus, companionTodayOverride
         case companionInclineBonus, companionCurbBonus
@@ -102,6 +126,8 @@ extension UserProfile {
             ?? wheelchairType.defaultSeatHeight
         lengthCm = try c.decodeIfPresent(Int.self, forKey: .lengthCm)
             ?? wheelchairType.defaultLength
+        travelSpeedKmh = try c.decodeIfPresent(Double.self, forKey: .travelSpeedKmh)
+            ?? wheelchairType.defaultSpeedKmh
         maxIncline = try c.decode(Double.self, forKey: .maxIncline)
         maxCurbHeight = try c.decode(Double.self, forKey: .maxCurbHeight)
         surfaceTolerance = try c.decode(SurfaceTolerance.self, forKey: .surfaceTolerance)
@@ -159,6 +185,19 @@ enum WheelchairType: String, Codable, CaseIterable {
         case .manual, .emotion: return 50
         case .joystick, .electric: return 55
         case .stairClimbing: return 60
+        }
+    }
+
+    /// Typische Reisegeschwindigkeit (km/h) je Rollstuhltyp als Startwert für
+    /// das Profil. Handbetrieb liegt deutlich unter Fussgänger-Tempo (~5 km/h),
+    /// motorisierte Stühle darüber; jede Person kann den Wert anpassen.
+    var defaultSpeedKmh: Double {
+        switch self {
+        case .manual:        return 3.5
+        case .emotion:       return 5.0
+        case .joystick:      return 5.0
+        case .electric:      return 6.0
+        case .stairClimbing: return 5.0
         }
     }
 
