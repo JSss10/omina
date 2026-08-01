@@ -1,12 +1,21 @@
 // RouteService.swift
 // ARMikronav
 //
-// Berechnet rollstuhlgerechte Routen via OpenRouteService (Profil
-// "wheelchair", mit den persönlichen Limits aus dem UserProfile) und
-// liefert den Fortschritt (Restdistanz/Restzeit) entlang einer aktiven
-// Route. Findet ORS keine rollstuhlgerechte Route (oder ist kein API-Key
-// konfiguriert), fällt der Service auf die MapKit-Fussgängerroute zurück –
-// gekennzeichnet über RouteKind, damit die UI den Fallback ausweist.
+// Berechnet rollstuhlgerechte Routen auf OpenStreetMap-Daten und liefert den
+// Fortschritt (Restdistanz/Restzeit) entlang einer aktiven Route.
+//
+// Grundlage ist das OSM-Rollstuhl-Routing, wie es das OSM-Wiki beschreibt
+// (https://wiki.openstreetmap.org/wiki/Wheelchair_routing): OpenRouteService
+// der GIScience-Gruppe Heidelberg, Profil "wheelchair". Es wertet genau die
+// dort gelisteten Tags aus – incline, sloped_curb/kerb:height, width, surface,
+// smoothness, tracktype, wheelchair=yes/limited/no – und bekommt die
+// persönlichen Limits aus dem UserProfile als Restriktionen mit.
+//
+// Gerechnet wird in drei Stufen (siehe `route`): eigene Limits → gelockerte
+// Vorgaben nach DIN 18024-1 (AccessibilityStandard) → erst als letzter
+// Notnagel die MapKit-Fussgängerroute. Welche Stufe gegriffen hat, steht im
+// RouteKind, damit die UI es ausweisen kann.
+//
 // Die Route wird als Wegpunkt-Liste gehalten, damit Karte (MapPolyline)
 // und AR-Rendering (ARRouteRenderer) dieselbe Geometrie verwenden.
 //
@@ -24,10 +33,27 @@ import simd
 
 /// Wie die Route berechnet wurde.
 enum RouteKind: Equatable {
-    /// Rollstuhlgerechte Route (OpenRouteService, Profil-Limits berücksichtigt).
+    /// Rollstuhlgerechte OSM-Route (OpenRouteService-Profil "wheelchair") mit
+    /// den persönlichen Limits aus dem UserProfile.
     case wheelchair
-    /// MapKit-Fussgängerroute als Fallback – Barrieren nicht berücksichtigt.
+    /// Rollstuhlgerechte OSM-Route mit gelockerten Vorgaben: Mit den eigenen
+    /// Limits fand sich kein Weg (oder nur ein absurder Umweg), deshalb wurden
+    /// die Schwellen auf die Norm-Grenzwerte geweitet und auch als
+    /// "nicht rollstuhlgerecht" getaggte Wege zugelassen. Weiterhin OSM-Routing
+    /// über Gehwege, nicht die Fussgängerroute.
+    case wheelchairRelaxed
+    /// MapKit-Fussgängerroute als letzter Notnagel – OSM-Rollstuhl-Tags
+    /// (Oberfläche, Bordstein, Breite, Steigung) fliessen nicht ein.
     case walkingFallback
+
+    /// Beruht die Route auf dem OSM-Rollstuhl-Routing (und damit auf den
+    /// Rollstuhl-Tags aus OpenStreetMap)?
+    var usesOSMWheelchairRouting: Bool { self != .walkingFallback }
+
+    /// Symbol für den Manöver-Kreis im Routen-Panel.
+    var symbolName: String {
+        usesOSMWheelchairRouting ? "figure.roll" : "figure.walk"
+    }
 }
 
 /// Eine berechnete Route zu einem Ziel (POI).
@@ -390,67 +416,100 @@ enum RouteService {
         return routeDistanceM > beelineM * implausibleDetourFactor + implausibleDetourMarginM
     }
 
-    /// Berechnet die Route zum Ziel: zuerst rollstuhlgerecht via
-    /// OpenRouteService mit den Limits aus dem Profil. Schlägt das fehl
-    /// (kein API-Key, Netzfehler, keine rollstuhlgerechte Route), kommt
-    /// die MapKit-Fussgängerroute als gekennzeichneter Fallback.
+    /// Berechnet die Route zum Ziel in drei Stufen – die Fussgängerroute ist
+    /// bewusst nur der letzte Notnagel, gefahren wird auf OSM-Rollstuhl-Daten:
     ///
-    /// Zusätzlich wird die Rollstuhl-Route auf Plausibilität geprüft: Ist sie
-    /// gegenüber der Luftlinie absurd lang (Ziel nebenan, Route kilometerweit)
-    /// und liefert die Fussgängerroute einen deutlich kürzeren Weg, wird diese
-    /// – klar als Fussgängerroute gekennzeichnet – vorgezogen. Lieber ein
-    /// sichtbar mit "Barrieren nicht berücksichtigt" markierter kurzer Weg als
-    /// ein unbrauchbarer Riesenumweg.
+    /// 1. OSM-Rollstuhl-Routing (ORS-Profil "wheelchair") mit den
+    ///    persönlichen Limits aus dem Profil.
+    /// 2. Schlägt das fehl (kein Weg innerhalb der eigenen Limits, Netzfehler)
+    ///    oder ergibt es einen absurden Umweg: dasselbe OSM-Routing mit
+    ///    gelockerten Vorgaben (Norm-Grenzwerte statt persönlicher Limits,
+    ///    auch als nicht rollstuhlgerecht getaggte Wege zugelassen). So folgt
+    ///    die Route weiterhin Gehwegen, Absenkungen und Oberflächen aus OSM.
+    /// 3. Erst wenn auch das nichts liefert (oder nur einen Riesenumweg,
+    ///    während die Fussgängerroute deutlich kürzer ist), kommt die
+    ///    MapKit-Fussgängerroute – klar als solche gekennzeichnet.
+    ///
+    /// Die Plausibilitätsprüfung stammt aus dem Feldtest: Liegt das Ziel 40 m
+    /// entfernt und führt die Route 1,9 km über die übernächste Brücke, ist
+    /// lieber ein gekennzeichneter kurzer Weg brauchbar als ein perfekter,
+    /// aber unbenutzbarer Umweg.
     static func route(
         from start: CLLocationCoordinate2D,
         to destination: CLLocationCoordinate2D,
         destinationName: String,
         profile: UserProfile
     ) async throws -> ActiveRoute {
-        let wheelchair: ActiveRoute
-        do {
-            wheelchair = try await wheelchairRoute(
-                from: start,
-                to: destination,
-                destinationName: destinationName,
-                profile: profile
-            )
-        } catch {
-            return try await walkingRoute(
-                from: start,
-                to: destination,
-                destinationName: destinationName,
-                profile: profile
-            )
-        }
-
         let beelineM = CLLocation(latitude: start.latitude, longitude: start.longitude)
             .distance(
                 from: CLLocation(latitude: destination.latitude, longitude: destination.longitude)
             )
-        guard isImplausibleDetour(
-            routeDistanceM: wheelchair.totalDistanceM,
-            beelineM: beelineM
-        ) else {
-            return wheelchair
+
+        // Stufe 1: OSM-Rollstuhl-Routing mit den eigenen Limits.
+        let strict = try? await wheelchairRoute(
+            from: start,
+            to: destination,
+            destinationName: destinationName,
+            profile: profile
+        )
+        if let strict,
+           !isImplausibleDetour(routeDistanceM: strict.totalDistanceM, beelineM: beelineM) {
+            return strict
         }
 
+        // Stufe 2: dasselbe OSM-Routing, aber mit gelockerten Vorgaben.
+        let relaxed = try? await wheelchairRoute(
+            from: start,
+            to: destination,
+            destinationName: destinationName,
+            profile: profile,
+            relaxed: true
+        )
+        if let relaxed {
+            // Mit Limits kam nur ein Riesenumweg heraus: die gelockerte Route
+            // nur nehmen, wenn sie deutlich kürzer ist – sonst bleibt die
+            // Route, die die eigenen Vorgaben einhält.
+            if let strict {
+                return relaxed.totalDistanceM < strict.totalDistanceM * plausibleFallbackFactor
+                    ? relaxed
+                    : strict
+            }
+            if !isImplausibleDetour(routeDistanceM: relaxed.totalDistanceM, beelineM: beelineM) {
+                return relaxed
+            }
+        }
+
+        // Stufe 3: Fussgängerroute als Notnagel.
+        let bestOSMRoute = strict ?? relaxed
         guard let walking = try? await walkingRoute(
             from: start,
             to: destination,
             destinationName: destinationName,
             profile: profile
-        ), walking.totalDistanceM < wheelchair.totalDistanceM * plausibleFallbackFactor else {
-            return wheelchair
+        ) else {
+            guard let bestOSMRoute else { throw RouteError.noRoute }
+            return bestOSMRoute
         }
-        return walking
+        guard let bestOSMRoute else { return walking }
+        return walking.totalDistanceM < bestOSMRoute.totalDistanceM * plausibleFallbackFactor
+            ? walking
+            : bestOSMRoute
     }
 
     // MARK: - Rollstuhl-Route (OpenRouteService)
 
-    /// Fragt das ORS-Profil "wheelchair" an. Die Restriktionen kommen aus
-    /// dem UserProfile: max. Steigung, max. Bordsteinhöhe, benötigte Breite
-    /// (inkl. Begleitungs-Bonus via effective*-Werte) und Oberflächentoleranz.
+    /// Fragt das OSM-Rollstuhl-Routing an (ORS-Profil "wheelchair", das auf den
+    /// im OSM-Wiki beschriebenen Rollstuhl-Tags aufsetzt). Die Restriktionen
+    /// kommen aus dem UserProfile: max. Steigung (`incline`), max.
+    /// Bordsteinhöhe (`sloped_curb`/`kerb:height`), benötigte Breite (`width`,
+    /// inkl. Begleitungs-Bonus via effective*-Werte), Oberfläche (`surface`),
+    /// Ebenheit (`smoothness`) und Wegequalität (`tracktype`).
+    ///
+    /// `relaxed` weitet die Vorgaben auf die Norm-Grenzwerte (DIN 18024-1,
+    /// siehe AccessibilityStandard) und lässt auch Wege zu, die OSM als nicht
+    /// rollstuhlgerecht führt – für den Fall, dass sich mit den eigenen Limits
+    /// gar kein Weg finden lässt.
+    ///
     /// `avoiding` sind Barrieren-Koordinaten, die die Route umgehen soll
     /// (Tagesform: z. B. Steigung, die bei Hitze nicht machbar ist) – sie
     /// werden als avoid_polygons an ORS übergeben.
@@ -459,7 +518,8 @@ enum RouteService {
         to destination: CLLocationCoordinate2D,
         destinationName: String,
         profile: UserProfile,
-        avoiding: [CLLocationCoordinate2D] = []
+        avoiding: [CLLocationCoordinate2D] = [],
+        relaxed: Bool = false
     ) async throws -> ActiveRoute {
         let apiKey = Secrets.openRouteServiceAPIKey
         guard !apiKey.isEmpty else { throw RouteError.orsNotConfigured }
@@ -476,7 +536,10 @@ enum RouteService {
                 [destination.longitude, destination.latitude],
             ],
             options: .init(
-                profileParams: .init(restrictions: .init(profile: profile)),
+                profileParams: .init(
+                    restrictions: .init(profile: profile, relaxed: relaxed),
+                    allowUnsuitable: relaxed ? true : nil
+                ),
                 avoidPolygons: ORSDirectionsRequest.AvoidPolygons(around: avoiding)
             )
         )
@@ -509,13 +572,44 @@ enum RouteService {
                 forMeters: feature.properties.summary.distance,
                 profile: profile
             ),
-            kind: .wheelchair,
+            kind: relaxed ? .wheelchairRelaxed : .wheelchair,
             steps: orsSteps(
                 from: feature.properties.segments,
                 coordinates: coordinates,
                 profile: profile
             )
         )
+    }
+
+    /// OSM-Rollstuhl-Route, die die übergebenen Barrieren umgeht: zuerst mit
+    /// den eigenen Limits, sonst mit gelockerten Vorgaben. Bewusst ohne
+    /// Fussgänger-Fallback – der würde die zu umgehende Barriere gar nicht
+    /// kennen und wieder direkt über sie führen.
+    static func wheelchairRoute(
+        avoiding barriers: [CLLocationCoordinate2D],
+        from start: CLLocationCoordinate2D,
+        to destination: CLLocationCoordinate2D,
+        destinationName: String,
+        profile: UserProfile
+    ) async throws -> ActiveRoute {
+        do {
+            return try await wheelchairRoute(
+                from: start,
+                to: destination,
+                destinationName: destinationName,
+                profile: profile,
+                avoiding: barriers
+            )
+        } catch {
+            return try await wheelchairRoute(
+                from: start,
+                to: destination,
+                destinationName: destinationName,
+                profile: profile,
+                avoiding: barriers,
+                relaxed: true
+            )
+        }
     }
 
     /// Baut die Turn-by-turn-Schritte aus den ORS-Segmenten. Jeder Schritt
@@ -1216,30 +1310,93 @@ private struct ORSDirectionsRequest: Encodable {
 
     struct ProfileParams: Encodable {
         let restrictions: Restrictions
+        /// Auch Wege zulassen, die OSM als nicht rollstuhlgerecht führt
+        /// (wheelchair=no/limited). Nur für die gelockerte Stufe – sonst weg-
+        /// lassen, damit ORS seine Standardbewertung anwendet.
+        let allowUnsuitable: Bool?
+
+        enum CodingKeys: String, CodingKey {
+            case restrictions
+            case allowUnsuitable = "allow_unsuitable"
+        }
+
+        func encode(to encoder: Encoder) throws {
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            try container.encode(restrictions, forKey: .restrictions)
+            try container.encodeIfPresent(allowUnsuitable, forKey: .allowUnsuitable)
+        }
     }
 
+    /// Vorgaben an das ORS-Rollstuhlprofil. Jede entspricht einem der im
+    /// OSM-Wiki (Wheelchair routing) beschriebenen Tags:
+    /// incline, sloped_curb/kerb:height, width, surface, smoothness, tracktype.
     struct Restrictions: Encodable {
-        /// Maximale Steigung in Prozent.
+        /// Maximale Steigung in Prozent (OSM `incline`).
         let maximumIncline: Int
-        /// Maximale Bordsteinhöhe in Metern.
+        /// Maximale Bordsteinhöhe in Metern (OSM `sloped_curb`, `kerb:height`).
         let maximumSlopedKerb: Double
-        /// Minimale Wegbreite in Metern.
-        let minimumWidth: Double
-        /// Schlechteste noch akzeptierte Oberfläche (OSM surface=*).
+        /// Minimale Wegbreite in Metern (OSM `width`). nil = keine Vorgabe.
+        let minimumWidth: Double?
+        /// Schlechteste noch akzeptierte Oberfläche (OSM `surface`).
         let surfaceType: String
+        /// Schlechteste noch akzeptierte Ebenheit (OSM `smoothness`).
+        let smoothnessType: String
+        /// Schlechteste noch akzeptierte Wegequalität (OSM `tracktype`).
+        let trackType: String
 
         enum CodingKeys: String, CodingKey {
             case maximumIncline = "maximum_incline"
             case maximumSlopedKerb = "maximum_sloped_kerb"
             case minimumWidth = "minimum_width"
             case surfaceType = "surface_type"
+            case smoothnessType = "smoothness_type"
+            case trackType = "track_type"
         }
 
-        init(profile: UserProfile) {
-            maximumIncline = Int(profile.effectiveMaxIncline.rounded())
-            maximumSlopedKerb = profile.effectiveMaxCurb / 100 // cm → m
-            minimumWidth = Double(profile.effectiveWidthNeeded) / 100 // cm → m
-            surfaceType = Self.surfaceType(for: profile.surfaceTolerance)
+        func encode(to encoder: Encoder) throws {
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            try container.encode(maximumIncline, forKey: .maximumIncline)
+            try container.encode(maximumSlopedKerb, forKey: .maximumSlopedKerb)
+            try container.encodeIfPresent(minimumWidth, forKey: .minimumWidth)
+            try container.encode(surfaceType, forKey: .surfaceType)
+            try container.encode(smoothnessType, forKey: .smoothnessType)
+            try container.encode(trackType, forKey: .trackType)
+        }
+
+        /// Vorgaben aus dem Profil. `relaxed` weitet sie auf die Norm-Werte
+        /// (DIN 18024-1, siehe AccessibilityStandard) und lässt die
+        /// Breitenvorgabe ganz weg – in der Altstadt ist `width` an den
+        /// wenigsten Gassen erfasst, eine strikte Mindestbreite schliesst
+        /// deshalb schnell das halbe Wegnetz aus.
+        init(profile: UserProfile, relaxed: Bool = false) {
+            // Oberflächen-Toleranz inkl. Tagesform (Nässe verschiebt sie eine
+            // Stufe Richtung "nur glatt") – dieselbe Grundlage wie die
+            // Barrieren-Bewertung.
+            let tolerance = profile.effectiveSurfaceTolerance
+
+            if relaxed {
+                maximumIncline = Int(
+                    max(
+                        profile.effectiveMaxIncline,
+                        AccessibilityStandard.maxInclineWithRestPercent
+                    ).rounded()
+                )
+                maximumSlopedKerb = max(
+                    profile.effectiveMaxCurb / 100,
+                    AccessibilityStandard.maxKerbHeightM
+                )
+                minimumWidth = nil
+                surfaceType = "cobblestone"
+                smoothnessType = "very_bad"
+                trackType = "grade3"
+            } else {
+                maximumIncline = Int(profile.effectiveMaxIncline.rounded())
+                maximumSlopedKerb = profile.effectiveMaxCurb / 100 // cm → m
+                minimumWidth = Double(profile.effectiveWidthNeeded) / 100 // cm → m
+                surfaceType = Self.surfaceType(for: tolerance)
+                smoothnessType = Self.smoothnessType(for: tolerance)
+                trackType = Self.trackType(for: tolerance)
+            }
         }
 
         private static func surfaceType(for tolerance: SurfaceTolerance) -> String {
@@ -1247,6 +1404,26 @@ private struct ORSDirectionsRequest: Encodable {
             case .smoothOnly: return "paved"
             case .fineCobble: return "cobblestone:flattened"
             case .almostAll: return "cobblestone"
+            }
+        }
+
+        /// OSM `smoothness`: Das Wiki führt für Rollstühle "intermediate" als
+        /// gerade noch nutzbar (Citybike/Rollstuhl/Kinderwagen), "bad" nur für
+        /// robuste Bereifung.
+        private static func smoothnessType(for tolerance: SurfaceTolerance) -> String {
+            switch tolerance {
+            case .smoothOnly: return "good"
+            case .fineCobble: return "intermediate"
+            case .almostAll: return "bad"
+            }
+        }
+
+        /// OSM `tracktype`: grade1 = befestigt/stark verdichtet,
+        /// grade2 = Kies oder dicht gepackter Sand (Wiki-Tabelle).
+        private static func trackType(for tolerance: SurfaceTolerance) -> String {
+            switch tolerance {
+            case .smoothOnly, .fineCobble: return "grade1"
+            case .almostAll: return "grade2"
             }
         }
     }

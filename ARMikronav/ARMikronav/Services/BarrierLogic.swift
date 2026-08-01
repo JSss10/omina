@@ -104,18 +104,14 @@ func shouldWarn(barrier: Barrier, profile: UserProfile) -> Bool {
         return incline > profile.effectiveMaxIncline
         
     case .surface:
+        // Material (surface), Ebenheit (smoothness) und Wegequalität
+        // (tracktype) aus OSM – siehe OSMSurfaceRating.
         guard let subtype = barrier.subtype else { return false }
-        switch profile.effectiveSurfaceTolerance {
-        case .smoothOnly:
-            return ["cobblestone_coarse", "cobblestone_fine", "sett",
-                    "gravel", "sand", "unhewn_cobblestone"].contains(subtype)
-        case .fineCobble:
-            return ["cobblestone_coarse", "gravel", "sand",
-                    "unhewn_cobblestone"].contains(subtype)
-        case .almostAll:
-            return ["sand", "gravel"].contains(subtype)
-        }
-        
+        return OSMSurfaceRating.isBlocking(
+            subtype: subtype,
+            tolerance: profile.effectiveSurfaceTolerance
+        )
+
     case .narrow:
         guard let width = barrier.value else { return true }
         return width < Double(profile.effectiveWidthNeeded)

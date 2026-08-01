@@ -21,15 +21,16 @@ Diese iOS-App visualisiert situative Barrieren (Stufen, Steigungen, Engstellen, 
 
 ## Tech Stack
 
-| Komponente   | Technologie                                                    |
-| ------------ | -------------------------------------------------------------- |
-| iOS App      | Swift / SwiftUI                                                |
-| AR           | ARKit + RealityKit (ARGeoTrackingConfiguration)                |
-| Karten       | MapKit                                                         |
-| Backend      | Supabase (PostgreSQL + PostGIS)                                |
-| Auth         | Supabase Auth (E-Mail, Google, Apple Sign-in)                  |
-| Datenquellen | OSM/Overpass API, ginto API (GraphQL, ganze Schweiz), Wheelmap |
-| Design       | Figma (iPhone 17, 402×874pt)                                   |
+| Komponente   | Technologie                                                                                                                    |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------ |
+| iOS App      | Swift / SwiftUI                                                                                                                |
+| AR           | ARKit + RealityKit (ARGeoTrackingConfiguration)                                                                                |
+| Karten       | MapKit                                                                                                                         |
+| Routing      | OpenRouteService, OSM-Rollstuhlprofil ([OSM-Wiki: Wheelchair routing](https://wiki.openstreetmap.org/wiki/Wheelchair_routing)) |
+| Backend      | Supabase (PostgreSQL + PostGIS)                                                                                                |
+| Auth         | Supabase Auth (E-Mail, Google, Apple Sign-in)                                                                                  |
+| Datenquellen | OSM/Overpass API, ginto API (GraphQL, ganze Schweiz), Wheelmap                                                                 |
+| Design       | Figma (iPhone 17, 402×874pt)                                                                                                   |
 
 ## Projektstruktur
 
@@ -145,11 +146,18 @@ SELECT * FROM test_event_overview WHERE test_day = '2026-07-21';
 
 ## Datenquellen
 
-| Quelle        | Typ                                              | Lizenz                    |
-| ------------- | ------------------------------------------------ | ------------------------- |
-| OpenStreetMap | Barrieren (kerb, incline, surface, width, steps) | ODbL                      |
-| ginto API     | POI-Zugänglichkeit (GraphQL, POIs ganze Schweiz) | Nutzungsbedingungen ginto |
-| Wheelmap      | POI wheelchair=yes/limited/no                    | CC-BY-SA                  |
+| Quelle           | Typ                                                                                                       | Lizenz                               |
+| ---------------- | --------------------------------------------------------------------------------------------------------- | ------------------------------------ |
+| OpenStreetMap    | Barrieren (kerb/sloped_curb, incline, surface, smoothness, tracktype, width, steps, sidewalk:\*, barrier) | ODbL                                 |
+| OpenRouteService | Rollstuhl-Routing auf OSM-Daten (Profil `wheelchair`)                                                     | ODbL (OSM) / ORS-Nutzungsbedingungen |
+| ginto API        | POI-Zugänglichkeit (GraphQL, POIs ganze Schweiz)                                                          | Nutzungsbedingungen ginto            |
+| Wheelmap         | POI wheelchair=yes/limited/no                                                                             | CC-BY-SA                             |
+
+Welche OSM-Tags ausgewertet werden und wie sie bewertet werden, richtet sich
+nach dem OSM-Wiki, Projekt
+[Wheelchair routing](https://wiki.openstreetmap.org/wiki/Wheelchair_routing);
+die Grenzwerte nach DIN 18024-1 stehen in
+`ARMikronav/Services/AccessibilityStandard.swift`.
 
 ## Commit Convention
 

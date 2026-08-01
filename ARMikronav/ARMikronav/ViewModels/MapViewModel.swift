@@ -126,8 +126,8 @@ final class MapViewModel: ObservableObject {
     /// (Fussgänger-Fallback) folgt.
     private func corridorM(for kind: RouteKind) -> CLLocationDistance {
         switch kind {
-        case .wheelchair:     return wheelchairCorridorM
-        case .walkingFallback: return walkingCorridorM
+        case .wheelchair, .wheelchairRelaxed: return wheelchairCorridorM
+        case .walkingFallback:                return walkingCorridorM
         }
     }
 
@@ -572,11 +572,11 @@ final class MapViewModel: ObservableObject {
                 )
             } else {
                 newRoute = try await RouteService.wheelchairRoute(
+                    avoiding: avoidCoordinates,
                     from: location.coordinate,
                     to: destination,
                     destinationName: destinationName,
-                    profile: profile,
-                    avoiding: avoidCoordinates
+                    profile: profile
                 )
             }
 
@@ -754,11 +754,11 @@ final class MapViewModel: ObservableObject {
 
         do {
             let newRoute = try await RouteService.wheelchairRoute(
+                avoiding: avoidCoordinates,
                 from: start,
                 to: route.destinationCoordinate,
                 destinationName: route.destinationName,
-                profile: profile,
-                avoiding: avoidCoordinates
+                profile: profile
             )
             activeRoute = newRoute
             routeAnchorAlongM = 0
