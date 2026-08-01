@@ -58,6 +58,8 @@ struct Screen16_Summary: View {
             }
 
             SummarySection(title: "Fähigkeiten") {
+                SummaryRow(label: "Tempo",
+                           value: String(format: "%.1f km/h", draft.travelSpeedKmh))
                 SummaryRow(label: "Max. Steigung", value: "\(Int(draft.maxIncline)) %")
                 SummaryRow(label: "Max. Bordsteinhöhe",
                            value: String(format: "%.1f cm", draft.maxCurbHeight))

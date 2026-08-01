@@ -228,6 +228,7 @@ struct SettingsView: View {
             row("Sitzhöhe", "\(profile.seatHeightCm) cm")
             row("Länge", "\(profile.lengthCm) cm")
             row("Gewicht", "\(profile.weightKg) kg")
+            row("Tempo", String(format: "%.1f km/h", profile.effectiveTravelSpeedKmh))
             row("Max. Steigung", "\(Int(profile.effectiveMaxIncline)) %")
             row("Max. Bordstein", "\(Int(profile.effectiveMaxCurb)) cm")
             row("Oberflächentoleranz", profile.surfaceTolerance.displayName)

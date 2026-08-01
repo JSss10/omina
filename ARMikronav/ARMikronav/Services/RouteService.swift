@@ -9,6 +9,13 @@
 // gekennzeichnet über RouteKind, damit die UI den Fallback ausweist.
 // Die Route wird als Wegpunkt-Liste gehalten, damit Karte (MapPolyline)
 // und AR-Rendering (ARRouteRenderer) dieselbe Geometrie verwenden.
+//
+// Fahrzeiten kommen NICHT von den Routing-Diensten: sowohl ORS als auch
+// MapKit rechnen mit Fussgänger-Tempo (~5 km/h). Für Rollstuhlnutzende ist
+// das je nach Antrieb deutlich zu schnell (Handrollstuhl) oder zu langsam
+// (Elektrorollstuhl). Dauer und Ankunftszeit werden deshalb aus der
+// Streckenlänge und der im Profil hinterlegten eigenen Geschwindigkeit
+// (`effectiveTravelSpeedKmh`) berechnet.
 
 import Foundation
 import MapKit
@@ -341,6 +348,20 @@ enum RouteService {
     private static let orsDirectionsURL =
         URL(string: "https://api.openrouteservice.org/v2/directions/wheelchair/geojson")!
 
+    // MARK: - Fahrzeit mit eigenem Tempo
+
+    /// Fahrzeit (Sekunden) für eine Strecke mit der eigenen Geschwindigkeit aus
+    /// dem Profil. Ersetzt die Fussgänger-Dauer der Routing-Dienste, damit
+    /// Restzeit und Ankunftszeit zum tatsächlichen Tempo im Rollstuhl passen.
+    static func travelTime(
+        forMeters meters: CLLocationDistance,
+        profile: UserProfile
+    ) -> TimeInterval {
+        let speedMS = profile.effectiveTravelSpeedMS
+        guard speedMS > 0, meters > 0 else { return 0 }
+        return meters / speedMS
+    }
+
     // MARK: - Plausibilität einer Route
 
     /// Luftlinie (Meter), unterhalb derer das Ziel als "praktisch nebenan"
@@ -398,7 +419,8 @@ enum RouteService {
             return try await walkingRoute(
                 from: start,
                 to: destination,
-                destinationName: destinationName
+                destinationName: destinationName,
+                profile: profile
             )
         }
 
@@ -416,7 +438,8 @@ enum RouteService {
         guard let walking = try? await walkingRoute(
             from: start,
             to: destination,
-            destinationName: destinationName
+            destinationName: destinationName,
+            profile: profile
         ), walking.totalDistanceM < wheelchair.totalDistanceM * plausibleFallbackFactor else {
             return wheelchair
         }
@@ -474,22 +497,34 @@ enum RouteService {
             CLLocationCoordinate2D(latitude: $0[1], longitude: $0[0])
         }
 
+        // Dauer bewusst aus der eigenen Geschwindigkeit statt aus
+        // `summary.duration` – ORS rechnet auch im Rollstuhl-Profil mit
+        // Fussgänger-Tempo.
         return ActiveRoute(
             destinationName: destinationName,
             destinationCoordinate: destination,
             coordinates: coordinates,
             totalDistanceM: feature.properties.summary.distance,
-            expectedTravelTimeS: feature.properties.summary.duration,
+            expectedTravelTimeS: travelTime(
+                forMeters: feature.properties.summary.distance,
+                profile: profile
+            ),
             kind: .wheelchair,
-            steps: orsSteps(from: feature.properties.segments, coordinates: coordinates)
+            steps: orsSteps(
+                from: feature.properties.segments,
+                coordinates: coordinates,
+                profile: profile
+            )
         )
     }
 
     /// Baut die Turn-by-turn-Schritte aus den ORS-Segmenten. Jeder Schritt
-    /// referenziert über `way_points` seinen Startpunkt in der Routengeometrie.
+    /// referenziert über `way_points` seinen Startpunkt in der Routengeometrie;
+    /// die Schrittdauer rechnet – wie die Gesamtdauer – mit dem eigenen Tempo.
     private static func orsSteps(
         from segments: [ORSDirectionsResponse.Segment]?,
-        coordinates: [CLLocationCoordinate2D]
+        coordinates: [CLLocationCoordinate2D],
+        profile: UserProfile
     ) -> [RouteStep] {
         guard let segments else { return [] }
         var steps: [RouteStep] = []
@@ -505,7 +540,7 @@ enum RouteService {
                         maneuver: StepManeuver.fromORSType(step.type),
                         streetName: cleanedStreetName(step.name),
                         distanceM: step.distance,
-                        durationS: step.duration,
+                        durationS: travelTime(forMeters: step.distance, profile: profile),
                         coordinate: coordinate
                     )
                 )
@@ -523,11 +558,14 @@ enum RouteService {
     }
 
     /// Berechnet eine Fussgänger-Route via MapKit (Fallback ohne
-    /// Barrieren-Berücksichtigung).
+    /// Barrieren-Berücksichtigung). Mit `profile` wird die Fahrzeit aus der
+    /// eigenen Geschwindigkeit gerechnet statt aus MapKits Fussgänger-Tempo;
+    /// ohne Profil bleibt es bei MapKits Schätzung.
     static func walkingRoute(
         from start: CLLocationCoordinate2D,
         to destination: CLLocationCoordinate2D,
-        destinationName: String
+        destinationName: String,
+        profile: UserProfile? = nil
     ) async throws -> ActiveRoute {
         let request = MKDirections.Request()
         request.source = MKMapItem(placemark: MKPlacemark(coordinate: start))
@@ -542,9 +580,11 @@ enum RouteService {
             destinationCoordinate: destination,
             coordinates: route.polyline.coordinateList(),
             totalDistanceM: route.distance,
-            expectedTravelTimeS: route.expectedTravelTime,
+            expectedTravelTimeS: profile.map {
+                travelTime(forMeters: route.distance, profile: $0)
+            } ?? route.expectedTravelTime,
             kind: .walkingFallback,
-            steps: walkingSteps(from: route)
+            steps: walkingSteps(from: route, profile: profile)
         )
     }
 
@@ -552,7 +592,10 @@ enum RouteService {
     /// nur Anweisungstext (keine strukturierten Manöver) – das Manöver-Icon
     /// wird best-effort aus dem Text abgeleitet, der Text selbst angezeigt.
     /// Schritte ohne Anweisung (ausser dem Start) werden übersprungen.
-    private static func walkingSteps(from route: MKRoute) -> [RouteStep] {
+    private static func walkingSteps(
+        from route: MKRoute,
+        profile: UserProfile? = nil
+    ) -> [RouteStep] {
         var steps: [RouteStep] = []
         for (index, step) in route.steps.enumerated() {
             let text = step.instructions.trimmingCharacters(in: .whitespaces)
@@ -567,6 +610,9 @@ enum RouteService {
                     maneuver: StepManeuver.fromText(text, isFirst: isFirst),
                     providedText: isFirst && text.isEmpty ? "Start" : text,
                     distanceM: step.distance,
+                    durationS: profile.map {
+                        travelTime(forMeters: step.distance, profile: $0)
+                    } ?? 0,
                     coordinate: coordinate
                 )
             )
@@ -734,6 +780,51 @@ enum RouteService {
             coordinate: coordinate(from: origin, east: fix.projection.x, north: fix.projection.y),
             offsetM: fix.offsetM
         )
+    }
+
+    /// Abschnitt der Route, der im AR-Bild dargestellt wird: beginnt am
+    /// Fusspunkt des Standorts auf der Route und reicht `aheadM` Meter voraus.
+    ///
+    /// Der AR-Pfad braucht nur den Weg, der tatsächlich vor einem liegt. Die
+    /// ganze Route zu rendern kostet – bei 2 m Stützpunktabstand – hunderte
+    /// Entities (Ruckeln, thermisches Drosseln) und legt zudem den bereits
+    /// zurückgelegten Teil hinter einem im Bild ab. Der zurückgegebene Abschnitt
+    /// startet exakt auf der Linie unter den eigenen Rädern, damit der Pfad
+    /// nahtlos an der aktuellen Position ansetzt.
+    static func upcomingCoordinates(
+        of route: ActiveRoute,
+        from location: CLLocationCoordinate2D,
+        aheadM: CLLocationDistance,
+        alongAnchorM: CLLocationDistance? = nil
+    ) -> [CLLocationCoordinate2D] {
+        let points = routePoints(of: route, relativeTo: location)
+        guard points.count >= 2,
+              let fix = project(points, alongAnchorM: alongAnchorM) else {
+            return route.coordinates
+        }
+
+        var result: [CLLocationCoordinate2D] = [
+            coordinate(from: location, east: fix.projection.x, north: fix.projection.y)
+        ]
+        var remaining = aheadM
+        var previous = fix.projection
+
+        for index in (fix.segmentIndex + 1)..<points.count {
+            let point = points[index]
+            let length = simd_distance(previous, point)
+            if length >= remaining {
+                let ratio = length > 0 ? remaining / length : 0
+                let clipped = previous + (point - previous) * ratio
+                result.append(
+                    coordinate(from: location, east: clipped.x, north: clipped.y)
+                )
+                return result
+            }
+            remaining -= length
+            result.append(route.coordinates[index])
+            previous = point
+        }
+        return result
     }
 
     /// Fügt Zwischen-Wegpunkte ein, sodass zwei aufeinanderfolgende Punkte

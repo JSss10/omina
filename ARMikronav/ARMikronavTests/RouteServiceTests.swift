@@ -692,4 +692,145 @@ struct RouteServiceTests {
     @Test func implausibleDetourIgnoresLongTrips() {
         #expect(!RouteService.isImplausibleDetour(routeDistanceM: 3000, beelineM: 1200))
     }
+
+    // MARK: - Fahrzeit mit eigener Geschwindigkeit
+
+    /// Profil mit frei wählbarem Tempo (übrige Werte für die Zeitberechnung
+    /// ohne Belang).
+    private func profile(
+        speedKmh: Double,
+        lowEnergyToday: Bool = false
+    ) -> UserProfile {
+        UserProfile(
+            id: UUID(),
+            mobilityCategory: .wheelchair,
+            wheelchairType: .manual,
+            widthCm: 65,
+            heightCm: 130,
+            weightKg: 75,
+            seatHeightCm: 50,
+            lengthCm: 110,
+            travelSpeedKmh: speedKmh,
+            maxIncline: 6,
+            maxCurbHeight: 3,
+            surfaceTolerance: .fineCobble,
+            companionStatus: .alwaysAlone,
+            companionTodayOverride: false,
+            lowEnergyToday: lowEnergyToday,
+            createdAt: Date(),
+            updatedAt: Date()
+        )
+    }
+
+    /// 3,6 km/h = 1 m/s: 600 m brauchen genau 600 s. Entscheidend ist, dass
+    /// gerechnet wird – nicht mit dem Fussgänger-Tempo der Routing-Dienste.
+    @Test func travelTimeUsesOwnSpeed() {
+        let seconds = RouteService.travelTime(
+            forMeters: 600,
+            profile: profile(speedKmh: 3.6)
+        )
+
+        #expect(abs(seconds - 600) < 1)
+    }
+
+    /// Doppeltes Tempo (Elektrorollstuhl) ⇒ halbe Zeit.
+    @Test func travelTimeHalvesAtDoubleSpeed() {
+        let slow = RouteService.travelTime(forMeters: 600, profile: profile(speedKmh: 3))
+        let fast = RouteService.travelTime(forMeters: 600, profile: profile(speedKmh: 6))
+
+        #expect(abs(slow - fast * 2) < 1)
+    }
+
+    /// An Tagen mit wenig Energie sinkt das Tempo um 20 % – die Fahrzeit
+    /// steigt entsprechend.
+    @Test func travelTimeAccountsForLowEnergyDay() {
+        let normal = RouteService.travelTime(forMeters: 600, profile: profile(speedKmh: 4))
+        let tired = RouteService.travelTime(
+            forMeters: 600,
+            profile: profile(speedKmh: 4, lowEnergyToday: true)
+        )
+
+        #expect(tired > normal)
+        #expect(abs(tired - normal / 0.8) < 1)
+    }
+
+    /// Unsinnige Eingaben (0 km/h) würden eine unendliche Fahrzeit ergeben –
+    /// das Profil klemmt auf ein Mindesttempo.
+    @Test func travelTimeClampsImplausibleSpeed() {
+        let seconds = RouteService.travelTime(forMeters: 600, profile: profile(speedKmh: 0))
+
+        #expect(seconds.isFinite)
+        #expect(seconds > 0)
+        #expect(abs(seconds - 600 / (UserProfile.minTravelSpeedKmh / 3.6)) < 1)
+    }
+
+    /// Ohne Strecke keine Zeit.
+    @Test func travelTimeIsZeroWithoutDistance() {
+        #expect(RouteService.travelTime(forMeters: 0, profile: profile(speedKmh: 4)) == 0)
+    }
+
+    // MARK: - Dargestellter Routenabschnitt (AR-Pfad)
+
+    /// Der Abschnitt beginnt auf der Route unter der eigenen Position und
+    /// endet nach der gewünschten Vorausschau.
+    @Test func upcomingCoordinatesStopsAfterRequestedDistance() {
+        let route = straightRoute
+        let start = CLLocationCoordinate2D(latitude: 47.3700, longitude: 8.5400)
+
+        let section = RouteService.upcomingCoordinates(of: route, from: start, aheadM: 100)
+
+        #expect(section.count == 2)
+        guard let first = section.first, let last = section.last else { return }
+        let sectionLength = CLLocation(latitude: first.latitude, longitude: first.longitude)
+            .distance(from: CLLocation(latitude: last.latitude, longitude: last.longitude))
+        #expect(abs(sectionLength - 100) < 5)
+    }
+
+    /// Startet man mitten auf der Route, beginnt der Abschnitt dort – der
+    /// bereits zurückgelegte Teil wird nicht mehr dargestellt.
+    @Test func upcomingCoordinatesStartsAtCurrentPosition() {
+        let route = straightRoute
+        let halfway = CLLocationCoordinate2D(latitude: 47.370899, longitude: 8.5400)
+
+        let section = RouteService.upcomingCoordinates(of: route, from: halfway, aheadM: 500)
+
+        guard let first = section.first, let last = section.last else {
+            Issue.record("Abschnitt ist leer")
+            return
+        }
+        let offsetFromUser = CLLocation(latitude: first.latitude, longitude: first.longitude)
+            .distance(from: CLLocation(latitude: halfway.latitude, longitude: halfway.longitude))
+        #expect(offsetFromUser < 5)
+        // Vorausschau länger als die Restroute ⇒ Abschnitt endet am Ziel.
+        let toDestination = CLLocation(latitude: last.latitude, longitude: last.longitude)
+            .distance(
+                from: CLLocation(
+                    latitude: route.destinationCoordinate.latitude,
+                    longitude: route.destinationCoordinate.longitude
+                )
+            )
+        #expect(toDestination < 5)
+    }
+
+    /// Auch über einen Knick hinweg folgt der Abschnitt der Geometrie und
+    /// nimmt den Eckpunkt mit.
+    @Test func upcomingCoordinatesFollowsCorner() {
+        let start = CLLocationCoordinate2D(latitude: 47.3700, longitude: 8.5400)
+        let corner = CLLocationCoordinate2D(latitude: 47.370899, longitude: 8.5400)
+        let end = CLLocationCoordinate2D(latitude: 47.370899, longitude: 8.541327)
+        let route = ActiveRoute(
+            destinationName: "Test-WC",
+            destinationCoordinate: end,
+            coordinates: [start, corner, end],
+            totalDistanceM: 200,
+            expectedTravelTimeS: 180
+        )
+
+        let section = RouteService.upcomingCoordinates(of: route, from: start, aheadM: 150)
+
+        // Startpunkt, Knick und der abgeschnittene Endpunkt.
+        #expect(section.count == 3)
+        #expect(abs(section[1].latitude - corner.latitude) < 0.00001)
+        #expect(abs(section[1].longitude - corner.longitude) < 0.00001)
+    }
 }
