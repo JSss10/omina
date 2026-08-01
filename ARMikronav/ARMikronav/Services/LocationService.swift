@@ -94,12 +94,29 @@ final class LocationService: NSObject, ObservableObject {
         super.init()
         manager.delegate = self
         manager.desiredAccuracy = kCLLocationAccuracyBest
-        manager.distanceFilter = 10
+        manager.distanceFilter = Self.browsingDistanceFilterM
         manager.headingFilter = 2
     }
 
+    /// Distanzfilter im Normalbetrieb (Karte, POIs) – spart Batterie, weil
+    /// nicht jeder GPS-Tick durch die Anzeige-Logik läuft.
+    private static let browsingDistanceFilterM: CLLocationDistance = 10
+    /// Distanzfilter während einer aktiven Navigation. Dichtere Updates, damit
+    /// Fortschritt, Kartendrehung und vor allem das Erkennen eines eigenen
+    /// Wegs (statt der vorgeschlagenen Route) zeitnah reagieren.
+    private static let navigationDistanceFilterM: CLLocationDistance = 4
+
     func requestAuthorization() {
         manager.requestWhenInUseAuthorization()
+    }
+
+    /// Schaltet die Standort-Updates auf Navigations- bzw. Normalbetrieb um
+    /// (siehe Distanzfilter oben). Wird vom MapViewModel beim Start und Stopp
+    /// einer Route aufgerufen.
+    func setNavigationActive(_ active: Bool) {
+        manager.distanceFilter = active
+            ? Self.navigationDistanceFilterM
+            : Self.browsingDistanceFilterM
     }
 
     /// Fragt die Standort-Berechtigung an und kehrt erst zurück, wenn die

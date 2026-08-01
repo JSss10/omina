@@ -56,6 +56,10 @@ enum ARHeadingCorrection {
     /// Kreisrichtung an den bisherigen herangeführt, damit der ±180°-Übergang
     /// nicht springt. `nil` als bisheriger Wert übernimmt den neuen unverändert.
     /// `factor` ∈ (0,1]: kleiner = träger/ruhiger.
+    ///
+    /// Allgemeine Winkel-Mathematik, deshalb auch ausserhalb der AR genutzt:
+    /// Die Kartendrehung während der Navigation glättet die Blickrichtung
+    /// mit derselben Funktion (siehe MapView).
     static func smooth(previous: Double?, new: Double, factor: Double) -> Double {
         guard let previous else { return normalizedSignedDegrees(new) }
         let delta = normalizedSignedDegrees(new - previous)
