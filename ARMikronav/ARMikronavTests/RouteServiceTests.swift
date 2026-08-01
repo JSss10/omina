@@ -8,6 +8,9 @@ import Testing
 import CoreLocation
 @testable import ARMikronav
 
+// Das Test-Target baut ohne MainActor-Standardisolation, die App-Typen
+// aber mit. @MainActor hier hält die Aufrufe in dieselbe Isolation.
+@MainActor
 struct RouteServiceTests {
 
     /// Gerade Route ~200 m Richtung Norden (Altstadt Zürich).

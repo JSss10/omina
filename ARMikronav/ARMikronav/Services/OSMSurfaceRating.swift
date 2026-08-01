@@ -22,7 +22,11 @@
 
 import Foundation
 
-enum OSMSurfaceRating {
+// `nonisolated`, weil das Projekt mit MainActor als Standard-Isolation baut
+// (SWIFT_DEFAULT_ACTOR_ISOLATION), diese Bewertung aber reine Rechnerei auf
+// Zeichenketten ist – ohne Zustand und ohne UI. Sie wird auch aus
+// nicht-isolierten Stellen aufgerufen, etwa aus BarrierType.localizedSurface.
+nonisolated enum OSMSurfaceRating {
     /// Präfix der Ebenheits-Subtypen (OSM `smoothness`).
     static let smoothnessPrefix = "smoothness_"
     /// Präfix der Wegequalitäts-Subtypen (OSM `tracktype`).

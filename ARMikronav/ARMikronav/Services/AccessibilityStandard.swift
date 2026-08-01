@@ -15,7 +15,10 @@
 
 import Foundation
 
-enum AccessibilityStandard {
+// `nonisolated` wie OSMSurfaceRating: reine Konstanten, die überall gelten –
+// unabhängig davon, dass das Projekt sonst mit MainActor als Standard-
+// Isolation baut.
+nonisolated enum AccessibilityStandard {
     // MARK: - Längs- und Querneigung
 
     /// Längsneigung, die ohne Einschränkung als machbar gilt (%).
