@@ -710,6 +710,60 @@ struct RouteServiceTests {
         )
     }
 
+    /// Der Fall aus dem Feldtest am Weinplatz: Zwei Varianten zum selben Ziel,
+    /// gleich viele kritische Stellen – dann muss die KÜRZERE gewinnen. Vorher
+    /// nahm die App einfach die erste, die durchkam (der Weg rundherum).
+    @Test func bestRoutePrefersShorterRouteAtEqualBarrierCount() {
+        let long = candidate(140, kind: .wheelchair)
+        let short = candidate(65, kind: .wheelchairRelaxed)
+
+        let best = RouteService.bestRoute(among: [long, short]) { _ in 2 }
+
+        #expect(best?.totalDistanceM == 65)
+    }
+
+    /// Ein Umweg, der kritische Stellen vermeidet, ist richtig: weniger
+    /// kritische Barrieren schlagen die kürzere Strecke.
+    @Test func bestRoutePrefersFewerCriticalBarriers() {
+        let long = candidate(140, kind: .wheelchair)
+        let short = candidate(65, kind: .wheelchairRelaxed)
+
+        let best = RouteService.bestRoute(among: [long, short]) { route in
+            route.totalDistanceM == 65 ? 3 : 0
+        }
+
+        #expect(best?.totalDistanceM == 140)
+    }
+
+    /// Aber nicht in jeder Grössenordnung: Ein Vielfaches der kurzen Strecke
+    /// fällt vorher aus der Auswahl, auch wenn es dort keine kritische Stelle
+    /// gibt.
+    @Test func bestRouteRejectsExcessiveDetourEvenWithoutBarriers() {
+        let veryLong = candidate(900, kind: .wheelchair)
+        let short = candidate(65, kind: .wheelchairRelaxed)
+
+        let best = RouteService.bestRoute(among: [veryLong, short]) { route in
+            route.totalDistanceM == 65 ? 3 : 0
+        }
+
+        #expect(best?.totalDistanceM == 65)
+    }
+
+    /// Ohne Barrierendaten bleibt es bei der Reihenfolge der Kandidatinnen
+    /// (Route mit den eigenen Limits zuerst).
+    @Test func bestRouteWithoutBarrierDataKeepsPreferenceOrder() {
+        let strict = candidate(140, kind: .wheelchair)
+        let relaxed = candidate(65, kind: .wheelchairRelaxed)
+
+        let best = RouteService.bestRoute(among: [strict, relaxed], criticalBarriers: nil)
+
+        #expect(best?.kind == .wheelchair)
+    }
+
+    @Test func bestRouteWithoutCandidatesIsNil() {
+        #expect(RouteService.bestRoute(among: [], criticalBarriers: nil) == nil)
+    }
+
     /// Normalfall: Die Route mit den eigenen Limits ist plausibel und gewinnt.
     @Test func preferredRouteKeepsPlausibleStrictRoute() {
         let best = RouteService.preferredRoute(

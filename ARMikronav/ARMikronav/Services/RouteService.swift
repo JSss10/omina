@@ -415,62 +415,71 @@ enum RouteService {
         return routeDistanceM > beelineM * implausibleDetourFactor + implausibleDetourMarginM
     }
 
-    /// Berechnet die Route zum Ziel in drei Stufen – die Fussgängerroute ist
-    /// bewusst nur der letzte Notnagel, gefahren wird auf OSM-Rollstuhl-Daten:
+    /// Berechnet die Route zum Ziel und wählt unter mehreren Varianten aus –
+    /// gefahren wird auf OSM-Rollstuhl-Daten, die Fussgängerroute ist nur der
+    /// letzte Notnagel:
     ///
-    /// 1. OSM-Rollstuhl-Routing (ORS-Profil "wheelchair") mit den
-    ///    persönlichen Limits aus dem Profil.
-    /// 2. Schlägt das fehl (kein Weg innerhalb der eigenen Limits, Netzfehler)
-    ///    oder ergibt es einen absurden Umweg: dasselbe OSM-Routing mit
-    ///    gelockerten Vorgaben (Norm-Grenzwerte statt persönlicher Limits).
-    ///    So folgt die Route weiterhin Gehwegen, Absenkungen und Oberflächen
-    ///    aus OSM.
-    /// 3. Sind BEIDE OSM-Routen nur Riesenumwege (oder kam gar keine zustande),
-    ///    kommt zusätzlich die MapKit-Fussgängerroute ins Rennen; welche
-    ///    Kandidatin gewinnt, entscheidet `preferredRoute`.
+    /// 1. Es werden ZWEI OSM-Rollstuhlrouten parallel angefragt (ORS-Profil
+    ///    "wheelchair"): einmal mit den persönlichen Limits aus dem Profil,
+    ///    einmal mit den auf die Norm geweiteten Vorgaben. Die zweite findet
+    ///    Wege, die die eigenen Limits knapp ausschliessen – in der Altstadt
+    ///    oft der viel direktere Weg, weil an den meisten Gassen weder
+    ///    `width` noch `surface` erfasst ist.
+    /// 2. Unter den plausiblen Varianten entscheidet `bestRoute`: möglichst
+    ///    wenige Stellen, die FÜR DIESES PROFIL kritisch sind, und bei
+    ///    gleichem Ergebnis die kürzere. Ohne `criticalBarriers` (keine
+    ///    Barrierendaten zur Hand) zählt die Reihenfolge oben.
+    /// 3. Ist keine der beiden plausibel, kommt zusätzlich die
+    ///    MapKit-Fussgängerroute ins Rennen (`preferredRoute`).
     ///
-    /// Jede Stufe wird auf Plausibilität geprüft – die Prüfung stammt aus dem
-    /// Feldtest: Liegt das Ziel 40 m entfernt und führt die Route 1,9 km über
-    /// die übernächste Brücke, ist lieber ein gekennzeichneter kurzer Weg
-    /// brauchbar als ein perfekter, aber unbenutzbarer Umweg.
+    /// Die Plausibilitätsprüfung stammt aus dem Feldtest: Liegt das Ziel 40 m
+    /// entfernt und führt die Route 1,9 km über die übernächste Brücke, ist
+    /// lieber ein gekennzeichneter kurzer Weg brauchbar als ein perfekter,
+    /// aber unbenutzbarer Umweg.
+    ///
+    /// - Parameter criticalBarriers: Zählt die für das Profil kritischen
+    ///   Barrieren entlang einer Route. Reicht der Aufrufer sie herein, statt
+    ///   dass der Service sie kennt – die Barrierenbewertung liegt im
+    ///   ViewModel, das die geladenen Barrieren hält.
     static func route(
         from start: CLLocationCoordinate2D,
         to destination: CLLocationCoordinate2D,
         destinationName: String,
-        profile: UserProfile
+        profile: UserProfile,
+        criticalBarriers: ((ActiveRoute) -> Int)? = nil
     ) async throws -> ActiveRoute {
         let beelineM = CLLocation(latitude: start.latitude, longitude: start.longitude)
             .distance(
                 from: CLLocation(latitude: destination.latitude, longitude: destination.longitude)
             )
 
-        // Stufe 1: OSM-Rollstuhl-Routing mit den eigenen Limits.
-        let strict = try? await wheelchairRoute(
+        // Beide OSM-Varianten gleichzeitig anfragen – nacheinander wäre die
+        // Wartezeit beim Routenstart doppelt so lang.
+        async let strictRequest = wheelchairRoute(
             from: start,
             to: destination,
             destinationName: destinationName,
             profile: profile
         )
-        if let strict,
-           !isImplausibleDetour(routeDistanceM: strict.totalDistanceM, beelineM: beelineM) {
-            return strict
-        }
-
-        // Stufe 2: dasselbe OSM-Routing, aber mit gelockerten Vorgaben.
-        let relaxed = try? await wheelchairRoute(
+        async let relaxedRequest = wheelchairRoute(
             from: start,
             to: destination,
             destinationName: destinationName,
             profile: profile,
             relaxed: true
         )
-        if let relaxed,
-           !isImplausibleDetour(routeDistanceM: relaxed.totalDistanceM, beelineM: beelineM) {
-            return relaxed
+        let strict = try? await strictRequest
+        let relaxed = try? await relaxedRequest
+
+        let plausible = [strict, relaxed].compactMap { $0 }.filter {
+            !isImplausibleDetour(routeDistanceM: $0.totalDistanceM, beelineM: beelineM)
+        }
+        if let best = bestRoute(among: plausible, criticalBarriers: criticalBarriers) {
+            return best
         }
 
-        // Stufe 3: Beide OSM-Routen sind Riesenumwege (oder gar keine kam
-        // zustande) – jetzt zählt auch die Fussgängerroute als Kandidatin.
+        // Beide OSM-Routen sind Riesenumwege (oder gar keine kam zustande) –
+        // jetzt zählt auch die Fussgängerroute als Kandidatin.
         let walking = try? await walkingRoute(
             from: start,
             to: destination,
@@ -486,6 +495,38 @@ enum RouteService {
             throw RouteError.noRoute
         }
         return best
+    }
+
+    /// Um wie viel länger eine Route höchstens sein darf als die kürzeste
+    /// Variante, um überhaupt noch in Frage zu kommen. Ein Umweg, um kritische
+    /// Stellen zu meiden, ist richtig – aber nicht in jeder Grössenordnung.
+    private static let maxBarrierDetourFactor = 2.5
+
+    /// Wählt unter gleichwertigen Varianten die beste für dieses Profil:
+    /// zuerst möglichst wenige kritische Stellen, bei Gleichstand die kürzere.
+    /// Varianten, die mehr als `maxBarrierDetourFactor` mal so lang sind wie
+    /// die kürzeste, fallen vorher raus.
+    ///
+    /// Aus dem Feldtest: Für ein Ziel schräg gegenüber schickte die App einmal
+    /// rundherum, obwohl der direkte Weg dieselben Stellen hatte – schlicht
+    /// weil nur EINE Variante berechnet und ungeprüft übernommen wurde.
+    static func bestRoute(
+        among candidates: [ActiveRoute],
+        criticalBarriers: ((ActiveRoute) -> Int)?
+    ) -> ActiveRoute? {
+        guard let shortest = candidates.min(by: { $0.totalDistanceM < $1.totalDistanceM })
+        else { return nil }
+        guard let criticalBarriers else { return candidates.first }
+
+        let limit = shortest.totalDistanceM * maxBarrierDetourFactor
+        let scored = candidates
+            .filter { $0.totalDistanceM <= limit }
+            .map { (route: $0, critical: criticalBarriers($0)) }
+
+        return scored.min { lhs, rhs in
+            if lhs.critical != rhs.critical { return lhs.critical < rhs.critical }
+            return lhs.route.totalDistanceM < rhs.route.totalDistanceM
+        }?.route
     }
 
     /// Wählt aus den vorliegenden Kandidaten die Route, die angeboten wird.
