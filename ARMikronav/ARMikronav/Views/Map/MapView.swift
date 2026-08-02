@@ -10,8 +10,10 @@
 // und Barrieren-State mit dem AR-Modus geteilt werden.
 //
 // Kameraführung während der Navigation (Feldtest-Rückmeldung):
-// – Beim Start einer Route zoomt die Karte auf den eigenen STANDORT und
-//   folgt ihm; die ganze Strecke zeigt der Button rechts oben (Übersicht).
+// – Beim Start einer Route zeigt die Karte die GANZE Strecke – vom eigenen
+//   Standort bis zum Ziel – im freien Bereich zwischen den Bedienelementen
+//   oben und dem Routen-Panel unten. Der Button rechts oben wechselt auf
+//   "dem Standort folgen" und zurück.
 // – Die Karte dreht sich in beiden Modi mit der EIGENEN Ausrichtung mit
 //   (Blickrichtung nach oben), statt starr der Routenrichtung zu folgen.
 // – Danach wird die Zoomstufe NIE automatisch verändert: Was der User mit
@@ -65,9 +67,9 @@ struct MapView: View {
     /// Aktuelle Drehung der Karte (Grad, im Uhrzeigersinn) – nötig, um den
     /// Blickrichtungs-Kegel bei gedrehter Karte richtig auszurichten.
     @State private var mapHeading: CLLocationDirection = 0
-    /// Kameramodus während einer aktiven Route: Folgen des eigenen Standorts
-    /// (mitdrehend, Startzustand) oder Übersicht über die ganze Strecke.
-    @State private var routeCameraMode: RouteCameraMode = .following
+    /// Kameramodus während einer aktiven Route: Übersicht über die ganze
+    /// Strecke (Startzustand) oder Folgen des eigenen Standorts.
+    @State private var routeCameraMode: RouteCameraMode = .overview
     /// Laufende Zwischenwerte der Kameraführung (siehe Klasse unten).
     @State private var navCamera = NavigationCameraState()
 
@@ -245,7 +247,7 @@ struct MapView: View {
         // Ohne Route den Kamerazustand zurücksetzen.
         .onChange(of: viewModel.activeRoute?.id) { _, newID in
             guard newID != nil, let route = viewModel.activeRoute else {
-                routeCameraMode = .following
+                routeCameraMode = .overview
                 navCamera.reset()
                 return
             }
@@ -637,34 +639,51 @@ struct MapView: View {
         viewModel.snappedCoordinate(for: location, maxOffsetM: Self.snapToRouteMaxOffsetM)
     }
 
-    /// "Route anzeigen" aus dem POI-Detail: Route in-App berechnen und auf den
-    /// eigenen Standort zoomen, von dem aus es losgeht.
+    /// "Route anzeigen" aus dem POI-Detail: Route in-App berechnen und den
+    /// ganzen Weg zeigen – vom eigenen Standort bis zum Ziel.
     private func showRoute(to poi: POI) {
         Task {
-            guard await viewModel.startNavigation(to: poi, profile: profile) else { return }
-            startRouteCamera()
+            guard await viewModel.startNavigation(to: poi, profile: profile),
+                  let route = viewModel.activeRoute else { return }
+            startRouteCamera(for: route)
         }
     }
 
-    /// Kamerazustand für eine frisch gestartete Route: auf den eigenen
-    /// Standort zoomen und ihm folgen. Bewusst nur bei einer vom User
-    /// gestarteten Route – eine automatische Neuberechnung soll die
-    /// Zoomstufe nicht zurücksetzen, die er inzwischen selbst gewählt hat.
-    private func startRouteCamera() {
-        routeCameraMode = .following
+    /// Kamerazustand für eine frisch gestartete Route: die ganze Strecke im
+    /// freien Bereich zwischen den Bedienelementen und dem Routen-Panel.
+    /// Bewusst nur bei einer vom User gestarteten Route – eine automatische
+    /// Neuberechnung soll den Ausschnitt nicht zurücksetzen, den er
+    /// inzwischen selbst gewählt hat.
+    private func startRouteCamera(for route: ActiveRoute) {
+        routeCameraMode = .overview
         navCamera.reset()
-        navCamera.distanceM = Self.defaultRouteCameraDistanceM
-        updateNavigationCamera(force: true)
+        fitCamera(to: route, force: true)
     }
 
-    /// Passt den Kartenausschnitt auf die KOMPLETTE Route (Start bis Ziel) ein –
-    /// man sieht sofort den ganzen Weg, nicht nur den nächsten Abschnitt. Die
-    /// Kamera zentriert auf die Mitte der Route; der Abstand ergibt sich aus
-    /// der Ausdehnung (Diagonale), damit die Route in JEDER Drehlage
-    /// vollständig und mit Rand sichtbar bleibt – die Karte dreht sich ja auch
-    /// in der Übersicht mit der eigenen Ausrichtung mit. Zusätzlich wird die
-    /// Route etwas nach oben geschoben, damit sie frei zwischen der Suchleiste
-    /// (oben) und dem Routen-Panel (unten, höher) liegt und nicht verdeckt wird.
+    /// Kameraabstand je Meter Ausdehnung der Route. Sichtbar ist nur der freie
+    /// Streifen zwischen den Bedienelementen oben und dem Routen-Panel plus
+    /// Tab-Leiste unten – gut die Hälfte der Bildhöhe. Der Faktor sorgt dafür,
+    /// dass die Route in DIESEN Streifen passt, nicht bloss auf den Schirm,
+    /// und zwar in jeder Drehlage (die Karte dreht sich ja mit).
+    private static let routeOverviewDistanceFactor = 3.8
+    /// Untergrenze des Kameraabstands, damit sehr kurze Routen nicht
+    /// übermässig herangezoomt werden.
+    private static let routeOverviewMinDistanceM: CLLocationDistance = 320
+    /// Anteil des Kameraabstands, um den der Ausschnitt entgegen der
+    /// Blickrichtung verschoben wird. Das Panel unten ist deutlich höher als
+    /// die Bedienzeile oben, der freie Bereich liegt also über der Bildmitte;
+    /// die Verschiebung rückt die Route dort hinein. Bewusst am Kameraabstand
+    /// bemessen und nicht an der Routenlänge – verdeckt wird immer derselbe
+    /// ANTEIL des Bildes, unabhängig davon, wie lang die Strecke ist.
+    private static let routeOverviewBottomBias = 0.10
+
+    /// Passt den Kartenausschnitt auf die KOMPLETTE Route ein – vom eigenen
+    /// Standort bis zum Ziel, im freien Bereich zwischen den Bedienelementen
+    /// oben und dem Routen-Panel unten.
+    ///
+    /// Der eigene Standort geht bewusst in den Ausschnitt ein: Steht man neben
+    /// der Route (oder ist sie noch vom alten Startpunkt gerechnet), soll man
+    /// trotzdem sehen, wo man selbst ist.
     ///
     /// Der so bestimmte Abstand wird als Zoomstufe für den Folgen-Modus
     /// übernommen – wechselt man dorthin, springt die Karte also nicht
@@ -675,16 +694,19 @@ struct MapView: View {
         guard force || navCamera.fittedRouteID != route.id else { return }
         navCamera.fittedRouteID = route.id
 
-        let coordinates = route.coordinates
-        guard let first = coordinates.first else { return }
+        var points = route.coordinates
+        if let location = locationService.currentLocation {
+            points.append(location.coordinate)
+        }
+        guard let first = points.first else { return }
 
         var minLat = first.latitude, maxLat = first.latitude
         var minLng = first.longitude, maxLng = first.longitude
-        for coordinate in coordinates {
-            minLat = min(minLat, coordinate.latitude)
-            maxLat = max(maxLat, coordinate.latitude)
-            minLng = min(minLng, coordinate.longitude)
-            maxLng = max(maxLng, coordinate.longitude)
+        for point in points {
+            minLat = min(minLat, point.latitude)
+            maxLat = max(maxLat, point.latitude)
+            minLng = min(minLng, point.longitude)
+            maxLng = max(maxLng, point.longitude)
         }
 
         let boundingBoxCenter = CLLocationCoordinate2D(
@@ -692,27 +714,21 @@ struct MapView: View {
             longitude: (minLng + maxLng) / 2
         )
 
-        // Ausdehnung der Route in Metern (Diagonale der Bounding-Box), damit
-        // der gewählte Abstand die Route in jeder Drehlage abdeckt.
+        // Ausdehnung in Metern (Diagonale der Bounding-Box), damit der
+        // gewählte Abstand die Route in jeder Drehlage abdeckt.
         let metersPerDegreeLatitude = 111_320.0
         let metersPerDegreeLongitude = metersPerDegreeLatitude * cos(boundingBoxCenter.latitude * .pi / 180)
         let widthM = (maxLng - minLng) * metersPerDegreeLongitude
         let heightM = (maxLat - minLat) * metersPerDegreeLatitude
         let diagonalM = (widthM * widthM + heightM * heightM).squareRoot()
 
-        // Kameraabstand ~ Diagonale mit grosszügigem Rand, damit die ganze
-        // Route auch neben der Suchleiste und dem Routen-Panel Platz hat;
-        // Untergrenze, damit sehr kurze Routen nicht übermässig herangezoomt
-        // werden.
-        let distance = max(diagonalM * 2.8, 320)
+        let distance = max(
+            diagonalM * Self.routeOverviewDistanceFactor,
+            Self.routeOverviewMinDistanceM
+        )
 
-        // Das untere Panel ist deutlich höher als die Suchleiste – der freie
-        // Bereich liegt also oberhalb der geometrischen Bildmitte. Die Route
-        // deshalb entgegen der Blickrichtung (nach unten auf dem Schirm =
-        // zurück) verschieben, damit sie in den freien Bereich nach oben
-        // rückt. Verschiebung proportional zur Routenlänge, aber gedeckelt.
         navCamera.overviewCenter = boundingBoxCenter
-        navCamera.overviewOffsetM = min(diagonalM * 0.22, 70)
+        navCamera.overviewOffsetM = distance * Self.routeOverviewBottomBias
         // Zoomstufe der Übersicht auch als Folgen-Zoom übernehmen: Der Wechsel
         // in den Folgen-Modus zoomt dadurch nicht automatisch näher heran.
         navCamera.distanceM = distance
@@ -720,9 +736,9 @@ struct MapView: View {
         applyNavigationCamera(force: true)
     }
 
-    /// Zoomstufe beim Start einer Route (Kameraabstand in Metern): nah genug
-    /// für die nächsten Gassen, weit genug für den übernächsten Abbieger.
-    /// Danach zählt immer die zuletzt eingestellte Stufe.
+    /// Zoomstufe im Folgen-Modus (Kameraabstand in Metern): nah genug für die
+    /// nächsten Gassen, weit genug für den übernächsten Abbieger. Danach
+    /// zählt immer die zuletzt eingestellte Stufe.
     private static let defaultRouteCameraDistanceM: CLLocationDistance = 250
     /// So lange bleibt die automatische Kameraführung nach einer eigenen
     /// Kartengeste stehen, damit sie nicht gegen die Hand arbeitet.
@@ -902,10 +918,10 @@ struct MapView: View {
     @MainActor
     private func findAlternativeRoute(avoiding barrier: Barrier) async -> Bool {
         let success = await viewModel.findAlternativeRoute(avoiding: barrier, profile: profile)
-        if success {
-            // Wie beim Routenstart: auf den Standort zoomen, von dem aus der
-            // neue Weg losgeht.
-            startRouteCamera()
+        if success, let route = viewModel.activeRoute {
+            // Wie beim Routenstart: den neuen Weg in ganzer Länge zeigen –
+            // der Umweg soll beurteilbar sein, bevor man ihm folgt.
+            startRouteCamera(for: route)
         }
         return success
     }
