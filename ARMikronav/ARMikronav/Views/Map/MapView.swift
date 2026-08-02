@@ -10,15 +10,14 @@
 // und Barrieren-State mit dem AR-Modus geteilt werden.
 //
 // Kameraführung während der Navigation (Feldtest-Rückmeldung):
-// – Beim Start einer Route zeigt die Karte die GANZE Strecke (Übersicht),
-//   nicht nur den nächsten Abschnitt.
+// – Beim Start einer Route zoomt die Karte auf den eigenen STANDORT und
+//   folgt ihm; die ganze Strecke zeigt der Button rechts oben (Übersicht).
 // – Die Karte dreht sich in beiden Modi mit der EIGENEN Ausrichtung mit
 //   (Blickrichtung nach oben), statt starr der Routenrichtung zu folgen.
-// – Die Zoomstufe wird NIE automatisch verändert: Was der User mit den
-//   Fingern einstellt, bleibt stehen; ein eigener Kartengriff pausiert die
-//   automatische Führung kurz, damit sie nicht dagegenhält.
-// – Zwischen Übersicht (ganze Route) und Folgen (Standort zentriert)
-//   wechselt ein Button rechts oben.
+// – Danach wird die Zoomstufe NIE automatisch verändert: Was der User mit
+//   den Fingern einstellt, bleibt stehen; ein eigener Kartengriff pausiert
+//   die automatische Führung kurz, damit sie nicht dagegenhält. Auch eine
+//   automatische Neuberechnung lässt den Zoom in Ruhe.
 
 import SwiftUI
 import Combine
@@ -66,9 +65,9 @@ struct MapView: View {
     /// Aktuelle Drehung der Karte (Grad, im Uhrzeigersinn) – nötig, um den
     /// Blickrichtungs-Kegel bei gedrehter Karte richtig auszurichten.
     @State private var mapHeading: CLLocationDirection = 0
-    /// Kameramodus während einer aktiven Route: Übersicht über die ganze
-    /// Strecke oder Folgen des eigenen Standorts (mitdrehend).
-    @State private var routeCameraMode: RouteCameraMode = .overview
+    /// Kameramodus während einer aktiven Route: Folgen des eigenen Standorts
+    /// (mitdrehend, Startzustand) oder Übersicht über die ganze Strecke.
+    @State private var routeCameraMode: RouteCameraMode = .following
     /// Laufende Zwischenwerte der Kameraführung (siehe Klasse unten).
     @State private var navCamera = NavigationCameraState()
 
@@ -240,12 +239,13 @@ struct MapView: View {
         .onReceive(headingUpdates) { _ in
             updateNavigationCamera()
         }
-        // Neue Route (Start, Neuberechnung, Alternativroute): in der Übersicht
-        // den Ausschnitt auf die neue Strecke anpassen; ohne Route den
-        // Kamerazustand zurücksetzen.
+        // Neue Route (auch nach automatischer Neuberechnung): in der Übersicht
+        // den Ausschnitt auf die neue Strecke anpassen, im Folgen-Modus
+        // einfach weiterlaufen lassen – dort bleibt die Zoomstufe stehen.
+        // Ohne Route den Kamerazustand zurücksetzen.
         .onChange(of: viewModel.activeRoute?.id) { _, newID in
             guard newID != nil, let route = viewModel.activeRoute else {
-                routeCameraMode = .overview
+                routeCameraMode = .following
                 navCamera.reset()
                 return
             }
@@ -468,8 +468,11 @@ struct MapView: View {
         Button {
             switch routeCameraMode {
             case .overview:
+                // Zurück aus der Übersicht: wieder auf den Standort zoomen,
+                // sonst bliebe der weite Übersichts-Zoom stehen.
                 routeCameraMode = .following
                 navCamera.pausedUntil = nil
+                navCamera.distanceM = Self.defaultRouteCameraDistanceM
                 updateNavigationCamera(force: true)
             case .following:
                 routeCameraMode = .overview
@@ -634,16 +637,24 @@ struct MapView: View {
         viewModel.snappedCoordinate(for: location, maxOffsetM: Self.snapToRouteMaxOffsetM)
     }
 
-    /// "Route anzeigen" aus dem POI-Detail: Route in-App berechnen und die
-    /// Karte auf den gesamten Routenverlauf zoomen – die ganze Strecke ist
-    /// damit von Anfang an ersichtlich, nicht nur der nächste Abschnitt.
+    /// "Route anzeigen" aus dem POI-Detail: Route in-App berechnen und auf den
+    /// eigenen Standort zoomen, von dem aus es losgeht.
     private func showRoute(to poi: POI) {
         Task {
-            guard await viewModel.startNavigation(to: poi, profile: profile),
-                  let route = viewModel.activeRoute else { return }
-            routeCameraMode = .overview
-            fitCamera(to: route)
+            guard await viewModel.startNavigation(to: poi, profile: profile) else { return }
+            startRouteCamera()
         }
+    }
+
+    /// Kamerazustand für eine frisch gestartete Route: auf den eigenen
+    /// Standort zoomen und ihm folgen. Bewusst nur bei einer vom User
+    /// gestarteten Route – eine automatische Neuberechnung soll die
+    /// Zoomstufe nicht zurücksetzen, die er inzwischen selbst gewählt hat.
+    private func startRouteCamera() {
+        routeCameraMode = .following
+        navCamera.reset()
+        navCamera.distanceM = Self.defaultRouteCameraDistanceM
+        updateNavigationCamera(force: true)
     }
 
     /// Passt den Kartenausschnitt auf die KOMPLETTE Route (Start bis Ziel) ein –
@@ -709,9 +720,10 @@ struct MapView: View {
         applyNavigationCamera(force: true)
     }
 
-    /// Kameraabstand, falls (noch) keine Zoomstufe bekannt ist – nur der
-    /// Startwert, danach zählt immer die zuletzt eingestellte Stufe.
-    private static let defaultRouteCameraDistanceM: CLLocationDistance = 400
+    /// Zoomstufe beim Start einer Route (Kameraabstand in Metern): nah genug
+    /// für die nächsten Gassen, weit genug für den übernächsten Abbieger.
+    /// Danach zählt immer die zuletzt eingestellte Stufe.
+    private static let defaultRouteCameraDistanceM: CLLocationDistance = 250
     /// So lange bleibt die automatische Kameraführung nach einer eigenen
     /// Kartengeste stehen, damit sie nicht gegen die Hand arbeitet.
     private static let userCameraGraceS: TimeInterval = 8
@@ -890,11 +902,10 @@ struct MapView: View {
     @MainActor
     private func findAlternativeRoute(avoiding barrier: Barrier) async -> Bool {
         let success = await viewModel.findAlternativeRoute(avoiding: barrier, profile: profile)
-        if success, let route = viewModel.activeRoute {
-            // Die Alternativroute in ganzer Länge zeigen – der Umweg soll
-            // beurteilbar sein, bevor man ihm folgt.
-            routeCameraMode = .overview
-            fitCamera(to: route)
+        if success {
+            // Wie beim Routenstart: auf den Standort zoomen, von dem aus der
+            // neue Weg losgeht.
+            startRouteCamera()
         }
         return success
     }
