@@ -1,10 +1,22 @@
 # AR-Mikronavigation
 
-> AR-gestützte Mikronavigation für Rollstuhlnutzende – iOS-Prototyp zur Entscheidungsunterstützung in barrierekritischen urbanen Situationen.
+> AR-gestützte Mikronavigation für Rollstuhlnutzende – Entscheidungsunterstützung in barrierekritischen urbanen Situationen: iOS-Client, Web-Dashboard und eine gemeinsame Datenschicht.
 
 ## Über das Projekt
 
-Diese iOS-App visualisiert situative Barrieren (Stufen, Steigungen, Engstellen, Oberflächen) in Echtzeit über ARKit und zeigt die Zugänglichkeit von Points of Interest im Kamerabild an. Die Barrierenbewertung ist **personalisiert** – die App warnt nur, wenn eine Barriere für das individuelle Profil der Nutzer:in nicht passierbar ist.
+Die iOS-App visualisiert situative Barrieren (Stufen, Steigungen, Engstellen, Oberflächen) in Echtzeit über ARKit und zeigt die Zugänglichkeit von Points of Interest im Kamerabild an. Die Barrierenbewertung ist **personalisiert** – die App warnt nur, wenn eine Barriere für das individuelle Profil der Nutzer:in nicht passierbar ist.
+
+Das System besteht aus drei Teilen um eine gemeinsame Datenschicht:
+
+| Teil                                          | Rolle                                                                                                                  |
+| --------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| **Datenschicht** (`Database/`, `migrations/`) | PostgreSQL + PostGIS auf Supabase: Datenmodell, Geo-Abfragen als API-Endpunkte, Zugriffsregeln über Row Level Security |
+| **iOS-Client** (`ARMikronav/`)                | Karte, AR-Ansicht und personalisierte Barrierenbewertung unterwegs                                                     |
+| **Web-Dashboard** (`dashboard/`)              | Auswertung der Feldtests im Browser – zweiter Client an derselben API                                                  |
+| **Import-Pipeline** (`scripts/`)              | Python-ETL: holt Barrieren und POIs aus OSM, ginto und Wheelmap in die Datenbank                                       |
+
+Wie die Teile zusammenhängen und welche Verträge zwischen ihnen gelten, steht
+in [docs/web-architektur.md](docs/web-architektur.md).
 
 **Bachelorarbeit** | SAE Institut Zürich | BSc Web Development  
 **Studentin:** Jessica Schneiter  
@@ -21,48 +33,51 @@ Diese iOS-App visualisiert situative Barrieren (Stufen, Steigungen, Engstellen, 
 
 ## Tech Stack
 
-| Komponente   | Technologie                                                                          |
-| ------------ | ------------------------------------------------------------------------------------ |
-| iOS App      | Swift / SwiftUI                                                                      |
-| AR           | ARKit + RealityKit (ARGeoTrackingConfiguration)                                      |
-| Karten       | MapKit                                                                               |
-| Routing      | MapKit (Fussgängerroute); Barrieren werden entlang der Route personalisiert bewertet |
-| Backend      | Supabase (PostgreSQL + PostGIS)                                                      |
-| Auth         | Supabase Auth (E-Mail, Google, Apple Sign-in)                                        |
-| Datenquellen | OSM/Overpass API, ginto API (GraphQL, ganze Schweiz), Wheelmap                       |
-| Design       | Figma (iPhone 17, 402×874pt)                                                         |
+| Komponente     | Technologie                                                                          |
+| -------------- | ------------------------------------------------------------------------------------ |
+| iOS App        | Swift / SwiftUI                                                                      |
+| AR             | ARKit + RealityKit (ARGeoTrackingConfiguration)                                      |
+| Karten         | MapKit                                                                               |
+| Routing        | MapKit (Fussgängerroute); Barrieren werden entlang der Route personalisiert bewertet |
+| Backend        | Supabase (PostgreSQL + PostGIS), Zugriff über PostgREST, Regeln über RLS             |
+| Auth           | Supabase Auth (E-Mail, Google, Apple Sign-in, anonyme Sessions für den Feldtest)     |
+| Web-Dashboard  | TypeScript, Vite, Supabase JS, Vitest – ohne UI- oder Chart-Bibliothek               |
+| Import-Scripts | Python (Overpass REST, ginto GraphQL)                                                |
+| Datenquellen   | OSM/Overpass API, ginto API (GraphQL, ganze Schweiz), Wheelmap, OpenRouteService     |
+| Design         | Figma (iPhone 17, 402×874pt); Styleguide v1.0 in Swift und CSS umgesetzt             |
+| CI             | GitHub Actions (Typen, Tests und Build des Dashboards)                               |
 
 ## Projektstruktur
 
 ```
-ARMikronav/
-├── App/
-│   └── ARMikronavApp.swift
-├── Models/
-│   ├── UserProfile.swift
-│   ├── Barrier.swift
-│   ├── BarrierWarning.swift
-│   └── POIAccessibility.swift
-├── Services/
-│   ├── SupabaseService.swift
-│   ├── AuthService.swift
-│   ├── BarrierService.swift
-│   ├── LocationService.swift
-│   └── BarrierLogic.swift
-├── Views/
-│   ├── Auth/
-│   ├── Onboarding/
-│   ├── Map/
-│   ├── AR/
-│   ├── Settings/
-│   └── Shared/
-├── Resources/
-│   ├── Assets.xcassets/
-│   └── Info.plist
-└── Tests/
-    ├── BarrierLogicTests.swift
-    └── UserProfileTests.swift
+.
+├── ARMikronav/                     iOS-Client (Xcode-Projekt)
+│   ├── ARMikronav/
+│   │   ├── ARMikronavApp.swift
+│   │   ├── Config/                 AppConfig, Secrets.example.swift
+│   │   ├── DesignSystem/           AppColor, AppMetrics, AppTypography, Components/
+│   │   ├── Models/                 UserProfile, POI, TestProfile, BarrierFilter …
+│   │   ├── Services/               BarrierLogic, RouteService, SupabaseService …
+│   │   ├── ViewModels/             Onboarding, Map, HomeDashboard
+│   │   ├── Views/                  AR/, Auth/, Home/, Map/, Onboarding/,
+│   │   │                           Permissions/, SavedPlaces/, Settings/
+│   │   ├── Support/                DistanceFormatter, AsyncRetry, AppLocale
+│   │   ├── Seed/                   Offline-Startdaten (JSON)
+│   │   ├── Testing/                GPX-Dateien zum Standort-Simulieren
+│   │   └── Assets.xcassets/
+│   ├── ARMikronavTests/            Unit-Tests (Swift Testing)
+│   └── ARMikronavUITests/
+├── dashboard/                      Web-Dashboard zur Feldtest-Auswertung
+│   └── src/{lib,components,styles}
+├── Database/schema.sql             Tabellen, Indizes, RLS
+├── migrations/                     Geo-Funktionen, Feldtest-Tabellen, Seeds
+├── scripts/                        Python-Import (OSM, ginto)
+└── docs/web-architektur.md         Architektur und API-Verträge
 ```
+
+`Barrier`, `BarrierWarning` und die Funktion `shouldWarn()` liegen zusammen in
+`Services/BarrierLogic.swift` – Datentyp und Regel gehören inhaltlich zusammen
+und werden nur gemeinsam geändert.
 
 ## Setup
 
@@ -73,14 +88,39 @@ ARMikronav/
 - Supabase Account
 - macOS Sequoia+
 
-### Installation
+Für das Web-Dashboard genügt Node 22+ – Xcode und macOS braucht es dafür nicht.
+
+### iOS-Client
 
 ```bash
-git clone https://github.com/JSss10/ar-micronav-app.git
-cd ar-micronav-app
-open ARMikronav.xcodeproj
-cp Config.example.swift Config.swift
-# → Supabase URL und Anon Key eintragen
+git clone https://github.com/JSss10/ar-mikronav.git
+cd ar-mikronav
+open ARMikronav/ARMikronav.xcodeproj
+cp ARMikronav/ARMikronav/Config/Secrets.example.swift \
+   ARMikronav/ARMikronav/Config/Secrets.swift
+# → Supabase URL und Anon Key eintragen (Secrets.swift ist in .gitignore)
+```
+
+### Web-Dashboard
+
+```bash
+cd dashboard
+npm install
+cp .env.example .env     # Supabase URL und Anon Key eintragen
+npm run dev              # http://localhost:5173
+```
+
+Einrichtung und Freischaltung im Detail: [dashboard/README.md](dashboard/README.md).
+
+### Tests
+
+```bash
+# iOS: in Xcode ⌘U, oder
+xcodebuild test -project ARMikronav/ARMikronav.xcodeproj -scheme ARMikronav \
+  -destination 'platform=iOS Simulator,name=iPhone 16'
+
+# Dashboard
+cd dashboard && npm test
 ```
 
 ## Standort simulieren (Rathaus Zürich)
@@ -138,7 +178,28 @@ Computer (grösser, bessere Bedienbarkeit) ausfüllen können. So lassen sich
 Klickdaten (`test_events`) und Onboarding-Profil (`test_participants`) pro
 Testperson zusammenführen.
 
-**Auswertung:** im Supabase SQL-Editor, z. B.
+## Auswertung: Web-Dashboard
+
+Die Feldtestdaten werden im Browser ausgewertet – `dashboard/` ist ein
+zweiter Client an derselben API wie die iOS-App.
+
+Das Dashboard zeigt pro Testtag:
+
+- **Kennzahlen** – Testpersonen, Testläufe, Ereignisse, mittlere Dauer eines
+  Testlaufs, abgeschlossene Onboardings, regulär beendete Tests
+- **Nutzung** – Screen-Aufrufe, Ereignisse nach Typ, Weg durch den Testlauf
+  (wo brechen Testpersonen ab?), Verteilung der Rollstuhltypen
+- **Testpersonen** – eine Zeile je Person mit aufklappbarem Onboarding-Profil
+- **Interaktionsprotokoll** – alle Ereignisse chronologisch, filterbar
+- **CSV-Export** – Testpersonen und Ereignisse für die Weiterverarbeitung
+
+```bash
+cd dashboard && npm install && npm run dev
+```
+
+Einrichtung, Freischaltung und Deployment: [dashboard/README.md](dashboard/README.md).
+
+Wer lieber direkt abfragt, kann weiterhin den Supabase SQL-Editor benutzen:
 
 ```sql
 SELECT * FROM test_event_overview WHERE test_day = '2026-07-21';
@@ -165,6 +226,22 @@ werden, richtet sich nach dem OSM-Wiki, Projekt
 [Wheelchair routing](https://wiki.openstreetmap.org/wiki/Wheelchair_routing);
 die Grenzwerte nach DIN 18024-1 stehen in
 `ARMikronav/Services/AccessibilityStandard.swift`.
+
+## Tests
+
+Getestet wird gezielt das, was rechnet und entscheidet – nicht die Oberfläche.
+
+| Datei                                            | Prüft                                                                       |
+| ------------------------------------------------ | --------------------------------------------------------------------------- |
+| `ARMikronavTests/BarrierLogicTests.swift`        | `shouldWarn()`: alle Barrierenarten, Grenzwerte, Begleitung, Nässe, Energie |
+| `ARMikronavTests/OSMSurfaceRatingTests.swift`    | Bewertung der OSM-Tags `surface`, `smoothness`, `tracktype`                 |
+| `ARMikronavTests/RouteServiceTests.swift`        | Fortschritt entlang der Route, Fahrzeit aus eigener Geschwindigkeit         |
+| `ARMikronavTests/ARHeadingCorrectionTests.swift` | Korrektur der Blickrichtung im AR-Modus                                     |
+| `dashboard/src/lib/analytics.test.ts`            | Auswertungslogik: Zählungen, Dauern, Zuordnung Ereignis → Testperson        |
+
+Die CI ([`.github/workflows/dashboard.yml`](.github/workflows/dashboard.yml))
+prüft bei jeder Änderung am Dashboard Typen, Tests und Build. Die iOS-Tests
+laufen lokal in Xcode – ein macOS-Runner ist dafür nicht eingerichtet.
 
 ## Commit Convention
 

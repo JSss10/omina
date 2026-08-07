@@ -1,0 +1,733 @@
+/* app.css
+ * Komponenten und Layout des Feldtest-Dashboards.
+ *
+ * Alle Werte kommen aus tokens.css – kein Hex, keine Magic Numbers.
+ * Konformitätsziel wie in der App: WCAG 2.2 AAA.
+ */
+
+@import "./tokens.css";
+
+/* ===============================================================
+ * Grundlagen
+ * =============================================================== */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  /* Kein festes font-size – die Browser-Schriftgrösse der Nutzenden bleibt
+     massgeblich (WCAG 1.4.4). Alle Grössen sind rem-basiert. */
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  font: var(--font-body);
+  color: var(--text-primary);
+  background: var(--background-primary);
+  /* Der Text darf bis 200 % zoomen, ohne dass horizontal gescrollt wird
+     (WCAG 1.4.10). Breite Inhalte scrollen in ihrem eigenen Container. */
+  overflow-x: hidden;
+}
+
+h1,
+h2,
+h3 {
+  margin: 0;
+  text-wrap: balance;
+}
+
+h1 {
+  font: var(--font-large-title);
+}
+h2 {
+  font: var(--font-title-1);
+}
+h3 {
+  font: var(--font-title-2);
+}
+
+p {
+  margin: 0 0 var(--space-m);
+  max-width: var(--measure);
+  line-height: var(--line-height-body);
+}
+
+a {
+  color: var(--accent-primary);
+  text-underline-offset: 2px;
+}
+
+a:hover {
+  color: var(--accent-pressed);
+}
+
+/* Fokusindikator ist Teil jeder Komponente, nicht ein Zusatz (§4.1).
+   3-px-Ring mit 3 px Abstand – WCAG 2.4.13 AAA. */
+:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: var(--focus-ring-offset);
+  border-radius: var(--radius-chip);
+}
+
+/* Wer Bewegung reduziert haben will, bekommt keine (WCAG 2.3.3 AAA). */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Nur für Screenreader – visuell entfernt, im Accessibility-Baum vorhanden. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Sprungmarke zum Hauptinhalt (WCAG 2.4.1). */
+.skip-link {
+  position: absolute;
+  top: var(--space-s);
+  left: var(--space-s);
+  z-index: 100;
+  padding: var(--space-s) var(--space-m);
+  min-height: var(--touch-minimum);
+  display: inline-flex;
+  align-items: center;
+  font: var(--font-headline);
+  color: var(--on-accent);
+  background: var(--accent-primary);
+  border-radius: var(--radius-button);
+  text-decoration: none;
+  transform: translateY(-200%);
+}
+
+.skip-link:focus {
+  transform: translateY(0);
+}
+
+/* ===============================================================
+ * Buttons (§4.1) – Portierung von AppButtonStyles.swift
+ * =============================================================== */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-s);
+  min-height: var(--touch-primary);
+  padding: 0 var(--space-l);
+  font: var(--font-headline);
+  border: 0;
+  border-radius: var(--radius-button);
+  cursor: pointer;
+  text-decoration: none;
+  transition: background-color 120ms ease-out;
+}
+
+.btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.btn--full {
+  width: 100%;
+}
+
+/* Primäraktion: gefüllt in Akzentfarbe. Benennt immer die Aktion. */
+.btn--primary {
+  color: var(--on-accent);
+  background: var(--accent-primary);
+}
+
+.btn--primary:hover:not(:disabled),
+.btn--primary:active:not(:disabled) {
+  background: var(--accent-pressed);
+}
+
+/* Sekundäraktion: Umriss (2 px) auf transparentem Grund. */
+.btn--secondary {
+  color: var(--accent-primary);
+  background: transparent;
+  box-shadow: inset 0 0 0 2px var(--accent-primary);
+}
+
+.btn--secondary:hover:not(:disabled),
+.btn--secondary:active:not(:disabled) {
+  background: color-mix(in srgb, var(--accent-primary) 10%, transparent);
+}
+
+/* Zurückhaltende Aktion: getönte Fläche. */
+.btn--quiet {
+  color: var(--accent-primary);
+  background: var(--quiet-fill);
+}
+
+.btn--quiet:hover:not(:disabled),
+.btn--quiet:active:not(:disabled) {
+  background: var(--quiet-fill-pressed);
+}
+
+/* Kompakte Variante für Werkzeugleisten – bleibt auf dem 44-px-Minimum. */
+.btn--compact {
+  min-height: var(--touch-minimum);
+  padding: 0 var(--space-m);
+  font: var(--font-subheadline);
+  font-weight: 600;
+}
+
+/* ===============================================================
+ * Formularelemente
+ * =============================================================== */
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.field__label {
+  font: var(--font-subheadline);
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.field__hint {
+  font: var(--font-footnote);
+  color: var(--text-secondary);
+  max-width: var(--measure);
+}
+
+.input,
+.select {
+  min-height: var(--touch-minimum);
+  padding: var(--space-s) var(--space-m);
+  font: var(--font-body);
+  color: var(--text-primary);
+  background: var(--background-primary);
+  border: 1px solid var(--border-functional);
+  border-radius: var(--radius-field);
+  width: 100%;
+}
+
+.select {
+  /* Eigener Pfeil, damit die Fläche in beiden Modi zum Token passt. */
+  appearance: none;
+  padding-right: var(--space-xl);
+  background-image:
+    linear-gradient(45deg, transparent 50%, currentColor 50%),
+    linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position:
+    right var(--space-m) center,
+    right var(--space-s) center;
+  background-size:
+    6px 6px,
+    6px 6px;
+  background-repeat: no-repeat;
+}
+
+/* Fehlermeldung – nie allein über Farbe codiert, immer mit Text (WCAG 1.4.1). */
+.form-error {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-s);
+  padding: var(--space-m);
+  font: var(--font-subheadline);
+  color: var(--status-blocked-text);
+  background: var(--status-blocked-fill);
+  border-radius: var(--radius-field);
+}
+
+/* ===============================================================
+ * Kopfzeile
+ * =============================================================== */
+
+.app-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-m);
+  padding: var(--space-l) var(--space-l) var(--space-m);
+  border-bottom: 1px solid var(--border-decorative);
+}
+
+.app-header__titles h1 {
+  font: var(--font-title-1);
+}
+
+.app-header__subtitle {
+  margin: var(--space-xs) 0 0;
+  font: var(--font-subheadline);
+  color: var(--text-secondary);
+}
+
+.app-header__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-s);
+}
+
+.app-header__user {
+  font: var(--font-footnote);
+  color: var(--text-secondary);
+}
+
+/* ===============================================================
+ * Layout
+ * =============================================================== */
+
+.app-main {
+  padding: var(--space-l);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xl);
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-m);
+}
+
+.section__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-s);
+}
+
+.section__title {
+  font: var(--font-title-2);
+}
+
+.section__note {
+  font: var(--font-footnote);
+  color: var(--text-secondary);
+}
+
+.card {
+  padding: var(--space-l);
+  background: var(--surface-raised);
+  border: 1px solid var(--border-decorative);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+}
+
+/* ===============================================================
+ * Anmeldung
+ * =============================================================== */
+
+.login {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: var(--space-l);
+}
+
+.login__card {
+  width: 100%;
+  max-width: 26rem;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-m);
+}
+
+.login__title {
+  font: var(--font-title-1);
+}
+
+.login__intro {
+  font: var(--font-callout);
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+/* ===============================================================
+ * Werkzeugleiste (Filter)
+ * =============================================================== */
+
+.toolbar {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  gap: var(--space-m);
+  align-items: end;
+}
+
+.toolbar__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-s);
+  align-items: end;
+}
+
+/* ===============================================================
+ * KPI-Kacheln
+ * =============================================================== */
+
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  gap: var(--space-m);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.kpi {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  padding: var(--space-m);
+  background: var(--surface-raised);
+  border: 1px solid var(--border-decorative);
+  border-radius: var(--radius-card);
+}
+
+/* Titel-1 statt Grosstitel: Werte wie «15 min 40 s» brauchen die Zeile
+   ganz, ohne umzubrechen. */
+.kpi__value {
+  font: var(--font-title-1);
+  font-variant-numeric: tabular-nums;
+  color: var(--accent-primary);
+  text-wrap: nowrap;
+}
+
+.kpi__label {
+  text-wrap: balance;
+}
+
+.kpi__label {
+  font: var(--font-subheadline);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.kpi__hint {
+  font: var(--font-footnote);
+  color: var(--text-secondary);
+}
+
+/* ===============================================================
+ * Balkendiagramm (eigenes SVG, keine Fremdbibliothek)
+ * Die Daten stehen zusätzlich als Tabelle im DOM – das Diagramm ist
+ * aria-hidden, gelesen wird die Tabelle (WCAG 1.1.1).
+ * =============================================================== */
+
+.chart-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
+  gap: var(--space-m);
+}
+
+.chart {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-m);
+}
+
+.chart__title {
+  font: var(--font-headline);
+}
+
+/* Liste statt Grafik: Beschriftung und Wert stehen als echter Text im DOM,
+   der Balken ist nur die visuelle Zugabe (aria-hidden). Damit braucht es
+   keine Textalternative für ein Bild – die Daten sind der Inhalt. */
+.chart__rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-s);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.chart__row {
+  display: grid;
+  grid-template-columns: minmax(6rem, 11rem) 1fr auto;
+  align-items: center;
+  gap: var(--space-s);
+}
+
+.chart__label {
+  font: var(--font-subheadline);
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+.chart__track {
+  height: 1.25rem;
+  background: color-mix(in srgb, var(--border-decorative) 60%, transparent);
+  border-radius: var(--radius-chip);
+  overflow: hidden;
+}
+
+.chart__bar {
+  height: 100%;
+  background: var(--accent-primary);
+  border-radius: var(--radius-chip);
+  /* Auch bei Wert 0 bleibt eine sichtbare Spur – sonst wirkt die Zeile leer. */
+  min-width: 2px;
+}
+
+.chart__value {
+  font: var(--font-subheadline);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+  min-width: 3.5ch;
+  text-align: right;
+}
+
+/* ===============================================================
+ * Tabellen
+ * =============================================================== */
+
+/* Breite Tabellen scrollen in ihrem eigenen Container, nie die Seite. */
+.table-scroll {
+  overflow-x: auto;
+  border: 1px solid var(--border-decorative);
+  border-radius: var(--radius-card);
+  background: var(--surface-raised);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font: var(--font-subheadline);
+}
+
+.table caption {
+  padding: var(--space-m) var(--space-m) 0;
+  font: var(--font-footnote);
+  color: var(--text-secondary);
+  text-align: left;
+}
+
+.table th,
+.table td {
+  padding: var(--space-s) var(--space-m);
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid var(--border-decorative);
+}
+
+.table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  font-weight: 600;
+  color: var(--text-primary);
+  background: var(--surface-raised);
+  white-space: nowrap;
+  border-bottom: 2px solid var(--border-functional);
+}
+
+.table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.table td.td--num {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.table td.td--mono {
+  font-family: var(--font-family-mono);
+  font-size: 0.8125rem;
+}
+
+/* Aufklappbare Detailzeile (Onboarding-Profil einer Testperson). */
+.details {
+  border: 0;
+}
+
+.details__summary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-s);
+  min-height: var(--touch-minimum);
+  font: var(--font-subheadline);
+  font-weight: 600;
+  color: var(--accent-primary);
+  cursor: pointer;
+}
+
+/* `display: flex` auf <summary> entfernt das Standarddreieck – ohne Ersatz
+   fehlt die Aufklapp-Andeutung ganz. */
+.details__summary {
+  list-style: none;
+}
+
+.details__summary::-webkit-details-marker {
+  display: none;
+}
+
+.details__summary::before {
+  content: "";
+  flex: none;
+  width: 0.45em;
+  height: 0.45em;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(-45deg);
+  transition: transform 150ms ease-out;
+}
+
+.details[open] > .details__summary::before {
+  transform: rotate(45deg);
+}
+
+.profile-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: var(--space-s) var(--space-m);
+  margin: var(--space-s) 0 0;
+}
+
+.profile-grid div {
+  display: flex;
+  flex-direction: column;
+}
+
+.profile-grid dt {
+  font: var(--font-footnote);
+  color: var(--text-secondary);
+}
+
+.profile-grid dd {
+  margin: 0;
+  font: var(--font-subheadline);
+  color: var(--text-primary);
+}
+
+/* ===============================================================
+ * Badges – vierfach codiert: Farbe + Form + Symbol + Text (§2.3, P2)
+ * =============================================================== */
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-s);
+  padding: var(--space-xs) var(--space-m);
+  font: var(--font-footnote);
+  font-weight: 600;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.badge__symbol {
+  font-weight: 700;
+}
+
+.badge--open {
+  color: var(--status-open-text);
+  background: var(--status-open-fill);
+}
+
+.badge--limited {
+  color: var(--status-limited-text);
+  background: var(--status-limited-fill);
+}
+
+.badge--blocked {
+  color: var(--status-blocked-text);
+  background: var(--status-blocked-fill);
+}
+
+.badge--neutral {
+  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--border-decorative) 50%, transparent);
+}
+
+/* ===============================================================
+ * Zustände: Laden, leer, Fehler
+ * =============================================================== */
+
+.state {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-s);
+  padding: var(--space-xl) var(--space-l);
+  text-align: left;
+  color: var(--text-secondary);
+  background: var(--surface-raised);
+  border: 1px dashed var(--border-functional);
+  border-radius: var(--radius-card);
+}
+
+.state__title {
+  font: var(--font-headline);
+  color: var(--text-primary);
+}
+
+.state p {
+  margin: 0;
+  font: var(--font-callout);
+}
+
+/* ===============================================================
+ * Enge Viewports
+ * =============================================================== */
+
+@media (max-width: 40rem) {
+  .app-header,
+  .app-main {
+    padding-inline: var(--space-m);
+  }
+
+  .chart__row {
+    /* Beschriftung über den Balken statt daneben – sonst bleibt für den
+       Balken selbst zu wenig Platz. */
+    grid-template-columns: 1fr auto;
+  }
+
+  .chart__label {
+    grid-column: 1 / -1;
+  }
+
+  .btn--compact {
+    flex: 1 1 auto;
+  }
+}
+
+/* ===============================================================
+ * Druck / PDF-Export für den Anhang der Arbeit
+ * =============================================================== */
+
+@media print {
+  .app-header__actions,
+  .toolbar,
+  .skip-link {
+    display: none;
+  }
+
+  body {
+    background: #fff;
+    color: #000;
+  }
+
+  .card,
+  .kpi,
+  .table-scroll {
+    box-shadow: none;
+    break-inside: avoid;
+  }
+}

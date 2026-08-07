@@ -1,0 +1,176 @@
+/* tokens.css
+ * Design-Tokens des Styleguide v1.0 für das Web.
+ *
+ * Eins-zu-eins-Portierung der iOS-Tokens aus
+ * ARMikronav/DesignSystem/{AppColor,AppMetrics,AppTypography}.swift.
+ * Die Hex-Werte stammen aus denselben Colorsets in Assets.xcassets, damit
+ * App und Dashboard nachweislich dieselbe Palette benutzen (Styleguide §08).
+ *
+ * Komponenten referenzieren ausschliesslich diese Custom Properties,
+ * nie Hex-Werte direkt – dieselbe Regel wie im iOS-Code.
+ */
+
+:root {
+  color-scheme: light dark;
+
+  /* ---------------------------------------------------------------
+   * §2.1 Violett-Palette (Referenzstufen, modusunabhängig)
+   * --------------------------------------------------------------- */
+  --violet-50: #f5f3ff;
+  --violet-100: #ede9fe;
+  --violet-300: #c4b5fd;
+  --violet-500: #8b5cf6;
+  --violet-600: #7c3aed;
+  --violet-700: #6d28d9;
+  --violet-800: #5b21b6;
+  --violet-900: #4c1d95;
+  --violet-950: #2e1065;
+
+  /* ---------------------------------------------------------------
+   * §02 Farbsystem – Light Mode
+   * Kontrastwerte in den Kommentaren gegen BackgroundPrimary (#FFFFFF).
+   * --------------------------------------------------------------- */
+  --background-primary: #ffffff;
+  --surface-raised: #faf9fc;
+  --text-primary: #1a1523; /* 17,9:1 – AAA */
+  --text-secondary: #524a5e; /*  8,4:1 – AAA */
+
+  --accent-primary: #5b21b6; /*  9,0:1 – AAA */
+  --accent-pressed: #4c1d95; /* 10,9:1 – AAA */
+  --on-accent: #ffffff;
+  --focus-ring: #6d28d9; /*  7,1:1 – AAA */
+  --scrim-ar: #2e1065;
+
+  --border-functional: #8e8699; /* >= 3:1, WCAG 1.4.11 */
+  --border-decorative: #ddd8e4;
+
+  /* Fläche der zurückhaltenden Aktion (QuietButtonStyle, §4.1).
+   * iOS setzt hier fix Violett 100; im Web bekommt der Dark Mode eine eigene
+   * Stufe, weil AccentPrimary dort aufhellt und auf Violett 100 sonst unter
+   * das Kontrastminimum fiele. */
+  --quiet-fill: var(--violet-100);
+  --quiet-fill-pressed: #ded7fb;
+
+  /* §2.3 Status-Semantik – vierfach codiert: Farbe + Form + Symbol + Text */
+  --status-open-text: #14532d;
+  --status-open-fill: #dcfce7;
+  --status-open-icon: #15803d;
+  --status-limited-text: #78350f;
+  --status-limited-fill: #fef3c7;
+  --status-limited-icon: #b45309;
+  --status-blocked-text: #7f1d1d;
+  --status-blocked-fill: #fee2e2;
+  --status-blocked-icon: #dc2626;
+
+  /* ---------------------------------------------------------------
+   * §03 Typografie
+   * iOS nutzt SF Pro über Dynamic Type. Im Web übernimmt der
+   * System-Font-Stack dieselbe Rolle; die rem-Werte entsprechen den
+   * pt-Referenzwerten bei Standard-Textgrösse.
+   * --------------------------------------------------------------- */
+  --font-family:
+    -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui,
+    sans-serif;
+  --font-family-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
+
+  --font-large-title: 700 2.125rem / 1.21 var(--font-family); /* 34/41 Bold   */
+  --font-title-1: 700 1.75rem / 1.21 var(--font-family); /* 28/34 Bold   */
+  --font-title-2: 600 1.375rem / 1.27 var(--font-family); /* 22/28 Semib. */
+  --font-headline: 600 1.0625rem / 1.29 var(--font-family); /* 17/22 Semib. */
+  --font-body: 400 1.0625rem / 1.53 var(--font-family); /* 17/26 Regular */
+  --font-callout: 400 1rem / 1.5 var(--font-family); /* 16/24 Regular */
+  --font-subheadline: 400 0.9375rem / 1.47 var(--font-family); /* 15/22 Regular */
+  --font-footnote: 400 0.8125rem / 1.38 var(--font-family); /* 13/18 Regular */
+
+  /* Zeilenhöhe 1,5 für Fliesstext (WCAG 1.4.8 AAA) */
+  --line-height-body: 1.5;
+  /* Max. Zeilenlänge 80 Zeichen (WCAG 1.4.8 AAA) */
+  --measure: 80ch;
+
+  /* ---------------------------------------------------------------
+   * §04 / §06 Masse – 1 pt entspricht im Web 1 px
+   * --------------------------------------------------------------- */
+  --touch-minimum: 44px; /* WCAG 2.5.5 AAA          */
+  --touch-primary: 56px; /* Primäraktionen          */
+  --touch-spacing: 8px; /* Mindestabstand          */
+
+  --radius-chip: 6px;
+  --radius-field: 12px;
+  --radius-button: 14px;
+  --radius-card: 16px;
+  --radius-sheet: 18px;
+
+  --space-xs: 4px; /* 4-pt-Raster */
+  --space-s: 8px;
+  --space-m: 16px;
+  --space-l: 24px;
+  --space-xl: 32px;
+  --space-xxl: 40px;
+
+  --focus-ring-width: 3px; /* WCAG 2.4.13 AAA */
+  --focus-ring-offset: 3px;
+
+  /* Schatten bleiben dezent – die Flächentrennung trägt SurfaceRaised */
+  --shadow-card: 0 1px 2px rgb(46 16 101 / 6%), 0 4px 12px rgb(46 16 101 / 4%);
+}
+
+/* ---------------------------------------------------------------
+ * §08 Dark Mode – nie reines Schwarz (#141019 statt #000000).
+ * Zwei Wege in den Dark Mode: Systemeinstellung oder der Umschalter
+ * in der Kopfzeile (data-theme am <html>-Element).
+ * --------------------------------------------------------------- */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --background-primary: #141019;
+    --surface-raised: #1e1830;
+    --text-primary: #f4f1fa;
+    --text-secondary: #b3acc4;
+
+    --accent-primary: #c4b5fd;
+    --accent-pressed: #ddd6fe;
+    --on-accent: #2e1065;
+    --focus-ring: #c4b5fd;
+
+    --border-functional: #8a80a3;
+    --border-decorative: #3d3552;
+
+    --quiet-fill: #2e1065;
+    --quiet-fill-pressed: #3d1a7a;
+
+    --status-open-text: #bbf7d0;
+    --status-open-fill: #14532d;
+    --status-limited-text: #fde68a;
+    --status-limited-fill: #78350f;
+    --status-blocked-text: #fee2e2;
+    --status-blocked-fill: #7f1d1d;
+
+    --shadow-card: 0 1px 2px rgb(0 0 0 / 32%), 0 4px 12px rgb(0 0 0 / 24%);
+  }
+}
+
+:root[data-theme="dark"] {
+  --background-primary: #141019;
+  --surface-raised: #1e1830;
+  --text-primary: #f4f1fa;
+  --text-secondary: #b3acc4;
+
+  --accent-primary: #c4b5fd;
+  --accent-pressed: #ddd6fe;
+  --on-accent: #2e1065;
+  --focus-ring: #c4b5fd;
+
+  --border-functional: #8a80a3;
+  --border-decorative: #3d3552;
+
+  --quiet-fill: #2e1065;
+  --quiet-fill-pressed: #3d1a7a;
+
+  --status-open-text: #bbf7d0;
+  --status-open-fill: #14532d;
+  --status-limited-text: #fde68a;
+  --status-limited-fill: #78350f;
+  --status-blocked-text: #fee2e2;
+  --status-blocked-fill: #7f1d1d;
+
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 32%), 0 4px 12px rgb(0 0 0 / 24%);
+}

@@ -1,0 +1,55 @@
+name: Dashboard
+
+# Prüft das Auswertungs-Dashboard bei jeder Änderung: Typen, Tests, Build.
+# Die iOS-App wird hier nicht gebaut – dafür braucht es einen macOS-Runner
+# mit Xcode; ihre Tests laufen lokal über das Schema ARMikronav.
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - "dashboard/**"
+      - ".github/workflows/dashboard.yml"
+  pull_request:
+    paths:
+      - "dashboard/**"
+      - ".github/workflows/dashboard.yml"
+  # Erlaubt einen Lauf von Hand, ohne dass etwas gepusht werden muss.
+  workflow_dispatch:
+
+jobs:
+  check:
+    name: Typen, Tests und Build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: dashboard
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: dashboard/package-lock.json
+
+      # `npm ci` statt `npm install`: installiert exakt die Versionen aus
+      # package-lock.json, damit der Lauf reproduzierbar bleibt.
+      - name: Abhängigkeiten installieren
+        run: npm ci
+
+      - name: Typen prüfen
+        run: npm run typecheck
+
+      - name: Tests
+        run: npm test
+
+      # Der Build braucht die Supabase-Werte nicht – sie werden erst zur
+      # Laufzeit gelesen. Platzhalter genügen, damit `import.meta.env`
+      # definiert ist.
+      - name: Build
+        run: npm run build
+        env:
+          VITE_SUPABASE_URL: https://example.supabase.co
+          VITE_SUPABASE_ANON_KEY: ci-platzhalter
