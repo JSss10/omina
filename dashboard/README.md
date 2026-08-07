@@ -60,16 +60,60 @@ das Dashboard sagt das ausdrücklich, statt einen leeren Testtag zu zeigen.
 | `npm run build`     | Typprüfung + Produktions-Build nach `dist/` |
 | `npm run preview`   | Produktions-Build lokal ausliefern          |
 
-## Deployment
+## Deployment auf Vercel
 
-`npm run build` erzeugt statische Dateien in `dist/` – kein Server nötig.
-Bei Vercel, Netlify oder GitHub Pages als Projektverzeichnis `dashboard`,
-als Build-Befehl `npm run build` und als Ausgabeverzeichnis `dist` angeben.
-Die beiden `VITE_*`-Variablen müssen dort als Umgebungsvariablen hinterlegt
-sein; sie werden beim Build in das Bundle eingesetzt.
+`npm run build` erzeugt statische Dateien in `dist/` – es läuft kein Server,
+nur ausgelieferte Dateien. `vercel.json` bringt Framework-Erkennung,
+Build-Befehl und die Sicherheits-Header mit; einzustellen sind nur das
+Projektverzeichnis und die beiden Umgebungsvariablen.
 
-> Der anon Key ist öffentlich und darf das sein. Der `service_role` Key darf
-> **nie** in dieses Projekt – er umgeht RLS und läge im Browser offen.
+1. [vercel.com/new](https://vercel.com/new) → GitHub-Repository `ar-mikronav`
+   importieren.
+2. **Root Directory** auf `dashboard` setzen. Das ist der einzige Schritt,
+   den Vercel nicht erraten kann – ohne ihn sucht es im Repo-Wurzelverzeichnis
+   und findet keine `package.json`. Framework (Vite), Build-Befehl
+   (`npm run build`) und Ausgabeverzeichnis (`dist`) kommen aus `vercel.json`.
+3. **Environment Variables** hinterlegen, für alle drei Umgebungen
+   (Production, Preview, Development):
+
+   | Name                     | Wert                            |
+   | ------------------------ | ------------------------------- |
+   | `VITE_SUPABASE_URL`      | `https://<projekt>.supabase.co` |
+   | `VITE_SUPABASE_ANON_KEY` | der **anon public** Key         |
+
+4. **Deploy**. Jeder Push auf den Branch löst danach ein neues Deployment aus.
+5. In Supabase unter **Authentication → URL Configuration** die
+   Vercel-Domain zu den **Redirect URLs** hinzufügen.
+
+> `VITE_*`-Variablen werden beim Build in das Bundle eingesetzt und sind
+> im Browser lesbar. Der anon Key darf das sein – er identifiziert das
+> Projekt, nicht die Person, und gibt für sich genommen nichts frei. Der
+> `service_role` Key darf **nie** hierhin: er umgeht RLS und läge offen.
+
+### Sicherheits-Header
+
+`vercel.json` setzt sie für alle Antworten:
+
+| Header                    | Zweck                                                                             |
+| ------------------------- | --------------------------------------------------------------------------------- |
+| `Content-Security-Policy` | Skripte und Styles nur aus eigener Herkunft, Netzwerkverbindungen nur zu Supabase |
+| `X-Robots-Tag`            | Die Seite zeigt Daten von Testpersonen und gehört nicht in Suchmaschinen          |
+| `X-Frame-Options`         | Kein Einbetten in fremde Seiten (Clickjacking)                                    |
+| `X-Content-Type-Options`  | Kein Erraten des Inhaltstyps                                                      |
+| `Referrer-Policy`         | Keine URL-Weitergabe an Dritte                                                    |
+| `Permissions-Policy`      | Kamera, Mikrofon und Standort abgeschaltet                                        |
+
+Die CSP enthält `style-src 'unsafe-inline'`, weil die Balkenbreite der
+Diagramme als `style`-Attribut gesetzt wird. Skripte bleiben auf `'self'`
+beschränkt – dort wäre `'unsafe-inline'` die riskante Freigabe, nicht bei
+Styles.
+
+### Andere Anbieter
+
+Netlify oder GitHub Pages funktionieren genauso: Basisverzeichnis
+`dashboard`, Build `npm run build`, Ausgabe `dist`. `vercel.json` wird dort
+nicht gelesen – die Header müssten als `netlify.toml` bzw. über einen
+vorgelagerten Dienst gesetzt werden.
 
 ## Aufbau
 
@@ -108,6 +152,26 @@ dashboard/
 Hex-Werte stammen aus denselben Colorsets in `Assets.xcassets`, die Masse aus
 denselben Konstanten. Wie im iOS-Code gilt: Komponenten referenzieren nur
 Tokens, nie Hex-Werte.
+
+### Responsive Verhalten
+
+Ein einziges Layout von 320 px bis 1920 px, ohne separate mobile Variante.
+Die Spaltenzahl ergibt sich aus dem verfügbaren Platz
+(`repeat(auto-fit, minmax(min(100%, …), 1fr))`), nicht aus Geräteklassen:
+
+| Viewport   | KPI-Kacheln | Diagramme |
+| ---------- | ----------- | --------- |
+| 320–375 px | 1 Spalte    | 1 Spalte  |
+| 600 px     | 2 Spalten   | 1 Spalte  |
+| 768 px     | 2 Spalten   | 2 Spalten |
+| 1024 px    | 3 Spalten   | 2 Spalten |
+| 1440 px    | 5 Spalten   | 4 Spalten |
+
+Das `min(100%, …)` im `minmax()` ist der entscheidende Teil: ohne ihn
+erzwingt die Mindestspaltenbreite bei schmalen Viewports horizontales
+Scrollen der ganzen Seite. Breite Tabellen scrollen in ihrem eigenen
+Container (`.table-scroll`) – die Seite selbst nie. Geprüft bei 320, 375,
+390, 600, 768, 1024, 1440 und 1920 px sowie bei 200 % und 400 % Zoom.
 
 Konformitätsziel wie in der App – WCAG 2.2, Ziel AAA:
 

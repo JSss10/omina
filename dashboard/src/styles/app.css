@@ -365,7 +365,7 @@ a:hover {
 
 .toolbar {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
   gap: var(--space-m);
   align-items: end;
 }
@@ -383,7 +383,10 @@ a:hover {
 
 .kpi-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  /* `min(100%, …)` deckelt die Mindestspalte auf die verfügbare Breite –
+     ohne das erzwingt die Mindestbreite bei schmalen Viewports (320 px)
+     horizontales Scrollen der ganzen Seite (WCAG 1.4.10). */
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
   gap: var(--space-m);
   list-style: none;
   margin: 0;
@@ -432,7 +435,7 @@ a:hover {
 
 .chart-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
   gap: var(--space-m);
 }
 
@@ -596,7 +599,7 @@ a:hover {
 
 .profile-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 11rem), 1fr));
   gap: var(--space-s) var(--space-m);
   margin: var(--space-s) 0 0;
 }
