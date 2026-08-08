@@ -51,6 +51,9 @@ final class MapViewModel: ObservableObject {
     @Published private(set) var isOffRoute = false
     /// Ziel-POI der aktiven Navigation (nil, wenn keine Route läuft).
     @Published private(set) var navigationTarget: POI?
+    /// Letzter gescheiterter Routenstart – trägt den Zustands-Screen
+    /// "Keine Route gefunden" samt Ziel für "Erneut versuchen".
+    @Published private(set) var routeFailure: RouteFailure?
     /// Barrieren, die der User für heute als "nicht machbar" markiert hat
     /// (Tagesform, z. B. Hitze) – die Route wird um sie herum berechnet.
     @Published private(set) var avoidedBarrierIds: Set<UUID> = []
@@ -643,26 +646,42 @@ final class MapViewModel: ObservableObject {
 
     // MARK: - AR-Navigation
 
+    /// Gescheiterter Routenstart: Grund für den Zustands-Screen plus Ziel und
+    /// Profil, damit "Erneut versuchen" denselben Versuch wiederholen kann.
+    struct RouteFailure: Identifiable {
+        let id = UUID()
+        let reason: String
+        let target: POI
+        let profile: UserProfile
+    }
+
     /// Berechnet die rollstuhlgerechte Route zum POI (mit den Limits aus
     /// dem Profil) und startet die Navigation. Fällt auf die MapKit-
     /// Fussgängerroute zurück, wenn keine Rollstuhl-Route verfügbar ist.
     /// - Returns: `true`, wenn eine Route gefunden wurde.
     @discardableResult
     func startNavigation(to poi: POI, profile: UserProfile) async -> Bool {
+        // Ein früherer Fehlversuch ist mit dem neuen Versuch überholt.
+        routeFailure = nil
+
         guard let startLocation = locationService.currentLocation else {
-            loadError = "Standort unbekannt – Navigation nicht möglich."
-            return false
+            return failRoute(
+                "Dein Standort ist unbekannt – ohne Startpunkt lässt sich keine Route berechnen.",
+                to: poi,
+                profile: profile
+            )
         }
         // Mit einem stark verrauschten Fix würde die Route am falschen Ort
         // beginnen (in der Altstadt schnell auf der anderen Limmatseite) und
         // einen absurden Umweg vorschlagen. Dann lieber kurz warten.
         guard locationService.hasReliableFix else {
-            loadError = "Standort noch ungenau – bitte kurz warten und erneut versuchen."
-            return false
+            return failRoute(
+                "Dein Standort ist noch ungenau. Warte einen Moment und versuche es dann erneut.",
+                to: poi,
+                profile: profile
+            )
         }
         let start = startLocation.coordinate
-        // Ein früherer Hinweis (z. B. "Standort noch ungenau") ist mit dem
-        // neuen Versuch überholt.
         loadError = nil
         isCalculatingRoute = true
         defer { isCalculatingRoute = false }
@@ -710,9 +729,29 @@ final class MapViewModel: ObservableObject {
             )
             return true
         } catch {
-            loadError = error.localizedDescription
-            return false
+            return failRoute(error.localizedDescription, to: poi, profile: profile)
         }
+    }
+
+    /// Merkt den gescheiterten Versuch für den Zustands-Screen. Gibt immer
+    /// `false` zurück, damit die Aufrufer direkt `return failRoute(…)` können.
+    @discardableResult
+    private func failRoute(_ reason: String, to poi: POI, profile: UserProfile) -> Bool {
+        routeFailure = RouteFailure(reason: reason, target: poi, profile: profile)
+        return false
+    }
+
+    /// "Erneut versuchen" aus dem Zustands-Screen: gleicher Zielort, gleiches
+    /// Profil. Schlägt es wieder fehl, steht der Screen mit neuem Grund da.
+    @discardableResult
+    func retryFailedRoute() async -> Bool {
+        guard let failure = routeFailure else { return false }
+        return await startNavigation(to: failure.target, profile: failure.profile)
+    }
+
+    /// Schliesst den Zustands-Screen "Keine Route gefunden".
+    func clearRouteFailure() {
+        routeFailure = nil
     }
 
     func stopNavigation() {

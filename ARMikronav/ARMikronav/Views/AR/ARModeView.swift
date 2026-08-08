@@ -43,15 +43,26 @@ struct ARModeView: View {
                 cameraRequestPlaceholder
             case .denied, .restricted:
                 // Verweigert – Apples Prompt erscheint nicht erneut, daher der
-                // generische Fehler-State mit Weg in die Einstellungen.
-                ARUnavailableView(
-                    reason: "Kamera-Zugriff ist deaktiviert.\nErlaube die Kamera in den Einstellungen, um den AR-Modus zu nutzen.",
-                    onBack: onClose
-                )
+                // Zustands-Screen mit Weg in die Einstellungen.
+                AppStateScreen.cameraAccessDenied(onBack: onClose)
             case .authorized:
                 cameraContent
             @unknown default:
                 cameraContent
+            }
+        }
+        // Gescheiterter Routenstart (Suche/POI-Karte im AR-Bild): derselbe
+        // Zustands-Screen wie auf der Karte, statt eines stillen Fehlschlags.
+        .overlay {
+            if let failure = viewModel.routeFailure {
+                AppStateScreen.routeUnavailable(
+                    reason: failure.reason,
+                    onRetry: { Task { await viewModel.retryFailedRoute() } },
+                    onBack: {
+                        viewModel.clearRouteFailure()
+                        onClose()
+                    }
+                )
             }
         }
         .trackScreen("ar_mode")
@@ -65,38 +76,27 @@ struct ARModeView: View {
 
     /// Neutraler Warte-State, während Apples Kamera-Prompt beantwortet wird.
     private var cameraRequestPlaceholder: some View {
-        ZStack {
-            Color.black.ignoresSafeArea()
-            ProgressView()
-                .controlSize(.large)
-                .tint(.white)
-        }
-        .overlay(alignment: .topLeading) { dismissButton }
-        .task {
-            AVCaptureDevice.requestAccess(for: .video) { _ in
-                Task { @MainActor in
-                    cameraStatus = AVCaptureDevice.authorizationStatus(for: .video)
+        AppStateScreen.cameraPreparing()
+            .overlay(alignment: .topLeading) { dismissButton }
+            .task {
+                AVCaptureDevice.requestAccess(for: .video) { _ in
+                    Task { @MainActor in
+                        cameraStatus = AVCaptureDevice.authorizationStatus(for: .video)
+                    }
                 }
             }
-        }
     }
 
     @ViewBuilder
     private var cameraContent: some View {
         Group {
             if originCoordinate == nil {
-                ARUnavailableView(
-                    reason: "GPS-Signal zu schwach.\nGehe ins Freie für besseren Empfang.",
-                    onBack: onClose
-                )
+                AppStateScreen.locationSignalWeak(onBack: onClose)
             } else if case .failed(let message) = arService.sessionState {
-                ARUnavailableView(
-                    reason: message,
-                    onBack: onClose
-                )
+                AppStateScreen.arUnavailable(reason: message, onBack: onClose)
             } else if localizationTimedOut {
-                ARUnavailableView(
-                    reason: "Die Umgebung konnte nicht lokalisiert werden.\nVersuche es an einem anderen Ort erneut.",
+                AppStateScreen.arUnavailable(
+                    reason: "Die Umgebung liess sich nicht lokalisieren. Versuche es an einem anderen Ort noch einmal.",
                     onBack: onClose
                 )
             } else {

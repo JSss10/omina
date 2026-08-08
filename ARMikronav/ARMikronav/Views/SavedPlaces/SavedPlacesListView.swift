@@ -22,8 +22,10 @@ struct SavedPlacesListView: View {
     var body: some View {
         Group {
             if isLoading {
-                ProgressView("Orte werden geladen…")
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                AppStateScreen.syncing(
+                    title: "Orte werden geladen",
+                    message: "Deine gespeicherten Orte werden mit deinem Konto abgeglichen."
+                )
             } else if let loadError {
                 errorState(loadError)
             } else if places.isEmpty {

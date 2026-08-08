@@ -60,6 +60,10 @@ struct MapView: View {
     /// In der Barrieren-Liste angetippte Barriere: wird nach dem Schliessen
     /// der Liste als Detail-Sheet geöffnet (zwei Sheets nicht gleichzeitig).
     @State private var pendingListBarrier: Barrier?
+    /// Zustands-Screen "Standort nicht freigegeben" weggetippt: Die Karte ist
+    /// auch ohne Standort nützlich (Altstadt-Barrieren und -Orte), deshalb
+    /// bleibt sie über "Karte trotzdem ansehen" erreichbar.
+    @State private var locationStateDismissed = false
     /// Einmaliges Zentrieren auf den Standort beim ersten GPS-Fix. Danach
     /// bleibt der vom User gewählte Kartenausschnitt (Zoom/Position) stehen,
     /// bis eine Aktion (Suche, Route, Standort-Button) die Kamera bewegt.
@@ -364,6 +368,25 @@ struct MapView: View {
                 EmptyStateView { showingFilter = true }
             }
         }
+        // Ganzflächige Zustands-Screens: Ohne Standort-Freigabe steht die
+        // Karte still, ein gescheiterter Routenstart braucht eine Antwort.
+        // Beide liegen über allem – sie sind der Zustand, nicht ein Hinweis.
+        .overlay {
+            if showLocationState {
+                AppStateScreen.locationUnavailable(
+                    onShowMapAnyway: { locationStateDismissed = true }
+                )
+                .transition(.opacity)
+            } else if let failure = viewModel.routeFailure {
+                AppStateScreen.routeUnavailable(
+                    reason: failure.reason,
+                    onRetry: { Task { await viewModel.retryFailedRoute() } },
+                    onBack: { viewModel.clearRouteFailure() }
+                )
+                .transition(.opacity)
+            }
+        }
+        .animation(.easeInOut(duration: 0.2), value: viewModel.routeFailure?.id)
         .overlay(alignment: .bottom) {
             if let error = viewModel.loadError {
                 Text(error)
@@ -995,6 +1018,16 @@ struct MapView: View {
             barriers: viewModel.filteredBarriers,
             profile: profile
         )
+    }
+
+    /// Standort dauerhaft verweigert (der System-Dialog kommt nicht wieder) –
+    /// solange der Zustands-Screen nicht bewusst weggetippt wurde.
+    private var showLocationState: Bool {
+        guard !locationStateDismissed else { return false }
+        switch locationService.authorizationStatus {
+        case .denied, .restricted: return true
+        default: return false
+        }
     }
 
     private var showEmptyState: Bool {

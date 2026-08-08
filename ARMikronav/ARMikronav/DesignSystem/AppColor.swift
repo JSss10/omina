@@ -15,6 +15,10 @@ enum AppColor {
     static let backgroundPrimary = Color("BackgroundPrimary")
     /// Karten, Sheets, angehobene Flächen. Light #FAF9FC · Dark #1E1830.
     static let surfaceRaised = Color("SurfaceRaised")
+    /// Ganzflächiger, violett getönter Hintergrund für Zustands-Screens
+    /// (Leer-, Lade- und Fehlerzustände). Light #EDE9FE (Violett 100) ·
+    /// Dark #1E1830.
+    static let backgroundMuted = Color("BackgroundMuted")
     /// Fliesstext, Titel. Light #1A1523 (17,9:1) · Dark #F4F1FA.
     static let textPrimary = Color("TextPrimary")
     /// Metadaten, Hinweise. Light #524A5E (8,4:1) · Dark #B3ACC4.
