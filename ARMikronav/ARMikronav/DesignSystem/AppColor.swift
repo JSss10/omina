@@ -26,6 +26,9 @@ enum AppColor {
     static let textPrimary = Color("TextPrimary")
     /// Metadaten, Hinweise. Light #524A5E (8,4:1) · Dark #B3ACC4.
     static let textSecondary = Color("TextSecondary")
+    /// Marken-Überschriften (Splash, Intro): Titel im dunklen Violett statt
+    /// im neutralen Schwarz. Light #2E1065 (13,9:1) · Dark #DDD6FE.
+    static let textBrand = Color("TextBrand")
 
     // MARK: - Akzent (Leitfarbe Violett)
 
