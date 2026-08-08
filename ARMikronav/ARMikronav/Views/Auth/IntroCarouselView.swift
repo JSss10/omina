@@ -2,9 +2,10 @@
 // ARMikronav
 //
 // Intro vor der Registrierung: drei Illustrations-Slides und ein
-// Erklärvideo. Gewischt wird seitwärts (Punkte zeigen, wo man steht);
-// "Starte jetzt" und "Überspringen" führen von jeder Seite aus direkt zur
-// Registrierung – niemand muss sich durch das Intro arbeiten.
+// Erklärvideo. "Weiter" blättert vor (wischen geht ebenso, die Punkte
+// zeigen, wo man steht), auf dem letzten Slide steht dort "Starte jetzt".
+// "Überspringen" führt von jeder Seite aus direkt zur Registrierung –
+// niemand muss sich durch das Intro arbeiten.
 //
 // Styling gemäss Styleguide v1.0 (AppColor, AppTypography, AppMetrics) und
 // dem gemeinsamen Primär-Button. Titel und Texte stehen linksbündig, die
@@ -64,8 +65,7 @@ struct IntroCarouselView: View {
             pageIndicator
                 .padding(.bottom, AppMetrics.Space.l)
 
-            Button("Starte jetzt") { showSignUp = true }
-                .buttonStyle(.appPrimary)
+            primaryButton
                 .padding(.horizontal, AppMetrics.Space.l)
                 .padding(.bottom, AppMetrics.Space.xxl)
         }
@@ -77,6 +77,23 @@ struct IntroCarouselView: View {
     }
 
     // MARK: - Rahmen
+
+    /// Hauptaktion: blättert bis zum letzten Slide weiter, dort geht es in die
+    /// Registrierung. Wer das Intro überspringen will, nimmt "Überspringen".
+    private var primaryButton: some View {
+        Button(isLastSlide ? "Starte jetzt" : "Weiter") {
+            if isLastSlide {
+                showSignUp = true
+            } else {
+                withAnimation { page += 1 }
+            }
+        }
+        .buttonStyle(.appPrimary)
+    }
+
+    private var isLastSlide: Bool {
+        page >= slides.count - 1
+    }
 
     /// Durchgehende Akzentlinie unter der Statusleiste (Entwurf).
     private var accentBar: some View {
