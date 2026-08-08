@@ -4,8 +4,9 @@
 // Filter-Sheet, das direkt neben der Suchleiste (SearchSheet) geöffnet wird.
 // Bündelt, was vorher in den Karteneinstellungen verstreut war:
 // – Ein-/Ausblenden von Orten (POIs) und Barrieren
-// – Auswahl der auf der Karte sichtbaren Barrierentypen
-// Alle Einstellungen wirken sofort (live) auf das MapViewModel.
+// – Auswahl der auf der Karte sichtbaren Barrieretypen
+// Alle Einstellungen wirken sofort (live) auf das MapViewModel; das Häkchen
+// oben rechts schliesst nur, es gibt nichts zu bestätigen.
 
 import SwiftUI
 
@@ -14,57 +15,68 @@ struct FilterSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        NavigationStack {
-            Form {
-                Section {
-                    Toggle(isOn: $viewModel.poisVisible) {
-                        Label("Orte", systemImage: "mappin.circle.fill")
-                            .foregroundStyle(.primary)
-                    }
-                    Toggle(isOn: $viewModel.barriersVisible) {
-                        Label("Barrieren", systemImage: "exclamationmark.triangle.fill")
-                            .foregroundStyle(.primary)
-                    }
-                } header: {
-                    Text("Auf der Karte anzeigen")
-                } footer: {
-                    Text("Ausgeblendete Barrieren warnen weiterhin bei Annäherung – nur die Marker auf der Karte verschwinden.")
-                }
+        VStack(spacing: 0) {
+            SheetHeader(title: "Filter", onClose: { dismiss() }, onConfirm: { dismiss() })
 
-                Section {
-                    ForEach(BarrierType.allCases, id: \.self) { type in
-                        Toggle(isOn: binding(for: type)) {
-                            Label(type.localizedLabel, systemImage: type.symbolName)
-                                .foregroundStyle(.primary)
-                        }
-                        .accessibilityLabel(type.localizedLabel)
-                    }
-                } header: {
-                    Text("Barrierentypen")
-                } footer: {
-                    Text("Barrieren und Orte (POIs) decken die ganze Zürcher Altstadt ab; hier wählst du, welche Barrierentypen auf der Karte erscheinen.")
+            ScrollView {
+                VStack(alignment: .leading, spacing: AppMetrics.Space.l) {
+                    visibilitySection
+                    barrierTypeSection
                 }
-                .disabled(!viewModel.barriersVisible)
-            }
-            .navigationTitle("Filter")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button {
-                        dismiss()
-                    } label: {
-                        Image(systemName: "checkmark")
-                            .fontWeight(.semibold)
-                    }
-                    .accessibilityLabel("Fertig")
-                }
+                .padding(.horizontal, AppMetrics.Space.l)
+                .padding(.top, AppMetrics.Space.s)
+                .padding(.bottom, AppMetrics.Space.xl)
             }
         }
+        .background(AppColor.backgroundPrimary)
+        .presentationBackground(AppColor.backgroundPrimary)
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
     }
 
-    /// Ein einzelner Barrierentyp: liest/schreibt live auf den Filterzustand
+    // MARK: - Auf der Karte anzeigen
+
+    private var visibilitySection: some View {
+        SheetSection(
+            title: "Auf der Karte anzeigen",
+            footnote: "Ausgeblendete Barrieren warnen weiterhin bei Annäherung – nur die Marker auf der Karte verschwinden."
+        ) {
+            SheetToggleRow(
+                symbol: "mappin",
+                title: "Orte",
+                isOn: $viewModel.poisVisible
+            )
+            SheetToggleRow(
+                symbol: "exclamationmark.triangle.fill",
+                title: "Barrieren",
+                isOn: $viewModel.barriersVisible,
+                showsDivider: false
+            )
+        }
+    }
+
+    // MARK: - Barrieretypen
+
+    private var barrierTypeSection: some View {
+        SheetSection(
+            title: "Barrieretypen",
+            footnote: "Barrieren und Orte decken die ganze Zürcher Altstadt ab; hier wählst du, welche Barrieretypen als Marker erscheinen."
+        ) {
+            ForEach(BarrierType.allCases, id: \.self) { type in
+                SheetToggleRow(
+                    symbol: type.symbolName,
+                    title: type.localizedLabel,
+                    isOn: binding(for: type),
+                    showsDivider: type != BarrierType.allCases.last
+                )
+            }
+        }
+        // Ohne sichtbare Barrieren hat die Typenauswahl keine Wirkung.
+        .disabled(!viewModel.barriersVisible)
+        .opacity(viewModel.barriersVisible ? 1 : 0.5)
+    }
+
+    /// Ein einzelner Barrieretyp: liest/schreibt live auf den Filterzustand
     /// des MapViewModels (kein separater Draft mehr – der Filter wirkt sofort).
     private func binding(for type: BarrierType) -> Binding<Bool> {
         Binding(

@@ -693,44 +693,51 @@ final class MapViewModel: ObservableObject {
                 destinationName: poi.name,
                 profile: profile
             )
-            activeRoute = route
-            navigationTarget = poi
-            navigationProfile = profile
-            // Dichtere Standort-Updates während der Navigation – Fortschritt,
-            // Kartendrehung und das Erkennen eines eigenen Wegs reagieren so
-            // zeitnah.
-            locationService.setNavigationActive(true)
-            offRouteUpdates = 0
-            isOffRoute = false
-            lastRerouteAt = nil
-            routeAnchorAlongM = 0
-            anchorMissUpdates = 0
-            // Umgangene Barrieren gelten pro Navigation – sonst würde die
-            // nächste Route ohne erkennbaren Grund um alte Sperrflächen
-            // herumgeführt (und dadurch unnötig lang).
-            avoidedBarrierIds = []
-            routeProgress = RouteProgress(
-                remainingDistanceM: route.totalDistanceM,
-                remainingTimeS: route.expectedTravelTimeS
-            )
-            if let location = locationService.currentLocation {
-                nextManeuver = RouteService.nextManeuver(
-                    of: route,
-                    at: location,
-                    heading: locationService.viewingDirection,
-                    alongAnchorM: 0
-                )
-            }
-            // Ziel für die "Letzte Ziele"-Liste auf dem Homescreen merken.
-            RecentDestinationsStore.shared.record(
-                name: poi.name,
-                latitude: poi.latitude,
-                longitude: poi.longitude
-            )
+            activate(route: route, to: poi, profile: profile)
             return true
         } catch {
             return failRoute(error.localizedDescription, to: poi, profile: profile)
         }
+    }
+
+    /// Übernimmt eine fertig berechnete Route als aktive Navigation. Gemeinsam
+    /// genutzt von `startNavigation(to:profile:)` und der Variantenauswahl im
+    /// Routen-Sheet, damit beide Wege denselben Startzustand herstellen.
+    private func activate(route: ActiveRoute, to poi: POI, profile: UserProfile) {
+        activeRoute = route
+        navigationTarget = poi
+        navigationProfile = profile
+        // Dichtere Standort-Updates während der Navigation – Fortschritt,
+        // Kartendrehung und das Erkennen eines eigenen Wegs reagieren so
+        // zeitnah.
+        locationService.setNavigationActive(true)
+        offRouteUpdates = 0
+        isOffRoute = false
+        lastRerouteAt = nil
+        routeAnchorAlongM = 0
+        anchorMissUpdates = 0
+        // Umgangene Barrieren gelten pro Navigation – sonst würde die
+        // nächste Route ohne erkennbaren Grund um alte Sperrflächen
+        // herumgeführt (und dadurch unnötig lang).
+        avoidedBarrierIds = []
+        routeProgress = RouteProgress(
+            remainingDistanceM: route.totalDistanceM,
+            remainingTimeS: route.expectedTravelTimeS
+        )
+        if let location = locationService.currentLocation {
+            nextManeuver = RouteService.nextManeuver(
+                of: route,
+                at: location,
+                heading: locationService.viewingDirection,
+                alongAnchorM: 0
+            )
+        }
+        // Ziel für die "Letzte Ziele"-Liste auf dem Homescreen merken.
+        RecentDestinationsStore.shared.record(
+            name: poi.name,
+            latitude: poi.latitude,
+            longitude: poi.longitude
+        )
     }
 
     /// Merkt den gescheiterten Versuch für den Zustands-Screen. Gibt immer
@@ -752,6 +759,94 @@ final class MapViewModel: ObservableObject {
     /// Schliesst den Zustands-Screen "Keine Route gefunden".
     func clearRouteFailure() {
         routeFailure = nil
+    }
+
+    // MARK: - Routen-Sheet: Varianten zur Auswahl
+
+    /// Eine wählbare Wegvariante zum Ziel, samt der Barrieren, die im Korridor
+    /// dieser Geometrie liegen – der Unterschied zwischen zwei Varianten liegt
+    /// für Rollstuhlnutzende genau dort, nicht in der Minutenzahl.
+    struct RouteOption: Identifiable {
+        let route: ActiveRoute
+        /// Barrieren im Korridor dieser Variante.
+        let barrierCount: Int
+        /// Davon fürs eigene Profil kritisch (`shouldWarn`).
+        let criticalCount: Int
+
+        var id: UUID { route.id }
+    }
+
+    /// Wegvarianten zum gewählten Ziel (leer, solange keins gewählt ist).
+    @Published private(set) var routeOptions: [RouteOption] = []
+    @Published private(set) var isLoadingRouteOptions = false
+    /// Ziel, zu dem die Varianten berechnet wurden.
+    @Published private(set) var routeOptionsTarget: POI?
+    /// Fehler der Variantenberechnung. Bewusst nicht der Vollbild-Zustand
+    /// "Keine Route gefunden": Der läge hinter dem offenen Routen-Sheet.
+    @Published private(set) var routeOptionsError: String?
+
+    /// Berechnet die Wegvarianten zum Ziel für das Routen-Sheet.
+    func loadRouteOptions(to poi: POI, profile: UserProfile) async {
+        routeOptionsTarget = poi
+        routeOptions = []
+        routeOptionsError = nil
+
+        guard let startLocation = locationService.currentLocation else {
+            routeOptionsError = "Dein Standort ist unbekannt – ohne Startpunkt lässt sich keine Route berechnen."
+            return
+        }
+
+        isLoadingRouteOptions = true
+        defer { isLoadingRouteOptions = false }
+
+        do {
+            let routes = try await RouteService.routeOptions(
+                from: startLocation.coordinate,
+                to: CLLocationCoordinate2D(latitude: poi.latitude, longitude: poi.longitude),
+                destinationName: poi.name,
+                profile: profile
+            )
+            routeOptions = routes.map { route in
+                let onRoute = barriers(on: route)
+                return RouteOption(
+                    route: route,
+                    barrierCount: onRoute.count,
+                    criticalCount: onRoute.filter { shouldWarn(barrier: $0, profile: profile) }.count
+                )
+            }
+        } catch {
+            routeOptionsError = error.localizedDescription
+        }
+    }
+
+    /// Startet die Navigation mit einer im Routen-Sheet gewählten Variante –
+    /// ohne Neuberechnung, sonst käme womöglich eine andere Strecke heraus als
+    /// die, die man ausgesucht hat.
+    func startNavigation(with option: RouteOption, to poi: POI, profile: UserProfile) {
+        activate(route: option.route, to: poi, profile: profile)
+        clearRouteOptions()
+    }
+
+    /// Leert die Variantenauswahl (Sheet geschlossen oder Ziel gewechselt).
+    func clearRouteOptions() {
+        routeOptions = []
+        routeOptionsTarget = nil
+        routeOptionsError = nil
+    }
+
+    /// Barrieren im Korridor einer beliebigen – auch noch nicht aktiven –
+    /// Route. Gleiche Korridorbreite wie bei der aktiven Navigation.
+    func barriers(on route: ActiveRoute) -> [Barrier] {
+        let corridor = corridorM(for: route.kind)
+        return filteredBarriers.filter { barrier in
+            RouteService.distance(
+                from: CLLocationCoordinate2D(
+                    latitude: barrier.latitude,
+                    longitude: barrier.longitude
+                ),
+                to: route
+            ) <= corridor
+        }
     }
 
     func stopNavigation() {

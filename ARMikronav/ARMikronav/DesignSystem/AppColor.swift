@@ -19,6 +19,9 @@ enum AppColor {
     /// (Leer-, Lade- und Fehlerzustände). Light #EDE9FE (Violett 100) ·
     /// Dark #1E1830.
     static let backgroundMuted = Color("BackgroundMuted")
+    /// Violett getönte Karten in den Sheets (Filter, Karteneinstellungen,
+    /// Routen, Suche). Light #F5F3FF (Violett 50) · Dark #241D3A.
+    static let surfaceTinted = Color("SurfaceTinted")
     /// Fliesstext, Titel. Light #1A1523 (17,9:1) · Dark #F4F1FA.
     static let textPrimary = Color("TextPrimary")
     /// Metadaten, Hinweise. Light #524A5E (8,4:1) · Dark #B3ACC4.

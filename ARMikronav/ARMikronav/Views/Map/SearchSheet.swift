@@ -1,13 +1,14 @@
 // SearchSheet.swift
 // ARMikronav
 //
-// Ortssuche als Medium-Sheet mit Grabber (Apple-Maps-Manier): oben das
-// Suchfeld und die Kategorie-Chips, darunter im Ausgangszustand die letzten
-// Orte und eine "In der Nähe"-Liste (POIs nach Distanz zum Standort). Sobald
-// getippt oder eine Kategorie gewählt wird, erscheint die Ergebnisliste
-// (sortiert nach Distanz, mit Zugänglichkeits-Status). Fokussiert man das
-// Suchfeld, wächst das Sheet auf die volle Höhe. Tap auf einen Eintrag
-// schliesst das Sheet und übergibt den POI an die Karte (zentrieren + Detail).
+// Ortssuche als Medium-Sheet mit Grabber: oben das Suchfeld mit dem
+// Filter-Icon, darunter die Kategorien als runde Icon-Buttons und im
+// Ausgangszustand die gespeicherten Orte, die letzten Ziele und die Orte in
+// der Nähe. Sobald getippt oder eine Kategorie gewählt wird, erscheint die
+// Ergebnisliste (nach Distanz sortiert, mit Zugänglichkeits-Status).
+// Fokussiert man das Suchfeld, wächst das Sheet auf die volle Höhe.
+// Tap auf einen Eintrag schliesst das Sheet und übergibt den POI an die
+// Karte (zentrieren + Detail).
 
 import SwiftUI
 
@@ -28,20 +29,29 @@ struct SearchSheet: View {
     @State private var activeChip: String?
     /// Sheet-Höhe: startet als Medium, wächst beim Tippen auf die volle Höhe.
     @State private var detent: PresentationDetent = .medium
-    /// Filter-Sheet (Sichtbarkeit von Orten/Barrieren + Barrierentypen) – jetzt
-    /// direkt neben der Suchleiste statt in den Karteneinstellungen.
+    /// Filter-Sheet (Sichtbarkeit von Orten/Barrieren + Barrieretypen) – direkt
+    /// neben der Suchleiste statt in den Karteneinstellungen.
     @State private var showingFilter = false
     @FocusState private var searchFieldFocused: Bool
 
+    /// Ein Eintrag der Listen: derselbe Zeilenaufbau für gespeicherte Orte,
+    /// letzte Ziele, Orte in der Nähe und Suchergebnisse.
+    private struct PlaceEntry: Identifiable {
+        let id: String
+        let poi: POI
+        let symbol: String
+        let subtitle: String?
+    }
+
     var body: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: AppMetrics.Space.m) {
             // Suchfeld und – direkt rechts daneben – der Filter-Button für die
-            // Barrierentypen und die Sichtbarkeit von Orten/Barrieren.
+            // Barrieretypen und die Sichtbarkeit von Orten/Barrieren.
             HStack(spacing: 12) {
                 searchField
                 filterButton
             }
-            .padding(.horizontal)
+            .padding(.horizontal, AppMetrics.Space.l)
             // Mehr Luft zwischen Grabber und Suchfeld.
             .padding(.top, 20)
 
@@ -49,11 +59,8 @@ struct SearchSheet: View {
 
             content
         }
-        // Durchgehend der gruppierte Hintergrund (wie die insetGrouped-Liste),
-        // damit Suchfeld, Kategorien und Liste auf derselben Fläche liegen –
-        // Medium- und Voll-Ansicht sehen dadurch identisch aus.
-        .background(Color(.systemGroupedBackground))
-        .presentationBackground(Color(.systemGroupedBackground))
+        .background(AppColor.backgroundPrimary)
+        .presentationBackground(AppColor.backgroundPrimary)
         .presentationDetents([.medium, .large], selection: $detent)
         .presentationDragIndicator(.visible)
         // Beim Fokussieren auf volle Höhe wachsen, damit die Tastatur die
@@ -70,19 +77,19 @@ struct SearchSheet: View {
 
     /// Icon-Button rechts neben der Suchleiste: öffnet das Filter-Sheet.
     /// Hebt sich (Akzent-Füllung) hervor, sobald ein Filter aktiv ist –
-    /// Orte/Barrieren ausgeblendet oder nicht alle Barrierentypen sichtbar.
+    /// Orte/Barrieren ausgeblendet oder nicht alle Barrieretypen sichtbar.
     private var filterButton: some View {
         Button {
             showingFilter = true
         } label: {
             Image(systemName: "line.3.horizontal.decrease")
                 .font(.system(size: 18, weight: .semibold))
-                .foregroundStyle(filtersActive ? Color.white : AppColor.accentPrimary)
-                .frame(width: 44, height: 44)
+                .foregroundStyle(filtersActive ? AppColor.onAccent : AppColor.accentPrimary)
+                .frame(width: AppMetrics.Touch.minimum, height: AppMetrics.Touch.minimum)
                 .background(
                     filtersActive
-                        ? AnyShapeStyle(Color.accentColor)
-                        : AnyShapeStyle(Color(.secondarySystemGroupedBackground)),
+                        ? AnyShapeStyle(AppColor.accentPrimary)
+                        : AnyShapeStyle(AppColor.surfaceTinted),
                     in: Circle()
                 )
         }
@@ -103,7 +110,7 @@ struct SearchSheet: View {
     private var content: some View {
         if isSearching {
             ProgressView()
-                .padding(.top, 40)
+                .padding(.top, AppMetrics.Space.xxl)
             Spacer()
         } else if hasSearched && results.isEmpty {
             emptyState
@@ -118,10 +125,12 @@ struct SearchSheet: View {
     // MARK: - Suchfeld & Kategorien
 
     private var searchField: some View {
-        HStack {
+        HStack(spacing: 10) {
             Image(systemName: "magnifyingglass")
-                .foregroundStyle(.secondary)
-            TextField("Ort suchen…", text: $query)
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(AppColor.accentPrimary)
+            TextField("Suchst du nach etwas Bestimmten?", text: $query)
+                .font(AppTypography.body)
                 .focused($searchFieldFocused)
                 .submitLabel(.search)
                 .autocorrectionDisabled()
@@ -134,32 +143,30 @@ struct SearchSheet: View {
                     resetToBrowse()
                 } label: {
                     Image(systemName: "xmark.circle.fill")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(AppColor.textSecondary)
                 }
                 .accessibilityLabel("Suche löschen")
             }
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
-        // Weisse Pille auf dem gruppierten (grauen) Sheet-Hintergrund – hebt
-        // sich wie die Listen-Karten ab (statt grau auf grau).
-        .background(Color(.secondarySystemGroupedBackground), in: Capsule())
+        .padding(.horizontal, 16)
+        .frame(minHeight: AppMetrics.Touch.minimum)
+        .background(AppColor.surfaceTinted, in: Capsule())
     }
 
-    /// Kategorie-Filter (Café, WC, Restaurant …) als kreisförmige Icon-Buttons
-    /// mit Titel darunter (Apple-Maps-Manier).
+    /// Kategorie-Filter (Restaurant, Café, WC …) als kreisförmige Icon-Buttons
+    /// mit Titel darunter.
     private var categoryFilters: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(alignment: .top, spacing: 16) {
+            HStack(alignment: .top, spacing: AppMetrics.Space.m) {
                 ForEach(POICategory.chipLabels, id: \.self) { chip in
                     categoryChip(chip)
                 }
             }
-            .padding(.horizontal)
+            .padding(.horizontal, AppMetrics.Space.l)
         }
     }
 
-    /// Ein Kategorie-Chip: farbiger Kreis mit Kategorie-Icon und Titel darunter.
+    /// Ein Kategorie-Chip: getönter Kreis mit Kategorie-Icon, Titel darunter.
     private func categoryChip(_ chip: String) -> some View {
         let isActive = activeChip == chip
         return Button {
@@ -168,14 +175,16 @@ struct SearchSheet: View {
             VStack(spacing: 6) {
                 ZStack {
                     Circle()
-                        .fill(isActive ? Color.accentColor : Color(.secondarySystemGroupedBackground))
+                        .fill(isActive
+                              ? AnyShapeStyle(AppColor.accentPrimary)
+                              : AnyShapeStyle(AppColor.surfaceTinted))
                         .frame(width: 54, height: 54)
                     Image(systemName: POICategory.symbol(forChip: chip))
                         .font(.system(size: 22, weight: .medium))
-                        .foregroundStyle(isActive ? Color.white : AppColor.accentPrimary)
+                        .foregroundStyle(isActive ? AppColor.onAccent : AppColor.accentPrimary)
                 }
                 Text(chip)
-                    .font(.caption)
+                    .font(AppTypography.footnote)
                     .foregroundStyle(isActive ? AppColor.accentPrimary : AppColor.textPrimary)
                     .lineLimit(1)
             }
@@ -186,159 +195,39 @@ struct SearchSheet: View {
         .accessibilityAddTraits(isActive ? .isSelected : [])
     }
 
-    // MARK: - Ausgangszustand: Letzte Orte + In der Nähe
+    // MARK: - Ausgangszustand: Gespeicherte, letzte und nahe Orte
 
-    /// Ohne aktive Suche: zuletzt angesteuerte Orte und die nächstgelegenen
-    /// POIs als Liste mit Icon und Name.
     private var browseList: some View {
-        List {
-            if !savedPlaces.isEmpty {
-                Section("Gespeicherte Orte") {
-                    ForEach(savedPlaces) { place in
-                        let resolved = poi(for: place)
-                        Button {
-                            select(resolved)
-                        } label: {
-                            placeRow(
-                                poi: resolved,
-                                leadingSymbol: "bookmark.fill",
-                                subtitle: resolved.address
-                            )
-                        }
-                        .buttonStyle(.plain)
-                    }
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: AppMetrics.Space.l) {
+                if !savedEntries.isEmpty {
+                    section("Gespeicherte Orte", entries: savedEntries)
+                }
+                if !recentEntries.isEmpty {
+                    section("Letzte Orte", entries: recentEntries)
+                }
+                if !nearbyEntries.isEmpty {
+                    section("In der Nähe", entries: nearbyEntries)
+                }
+                if savedEntries.isEmpty && recentEntries.isEmpty && nearbyEntries.isEmpty {
+                    emptyBrowseState
                 }
             }
-
-            if !recentPlaces.isEmpty {
-                Section("Letzte Orte") {
-                    ForEach(recentPlaces) { place in
-                        Button {
-                            select(place.poi)
-                        } label: {
-                            placeRow(
-                                poi: place.poi,
-                                leadingSymbol: "clock.arrow.circlepath",
-                                subtitle: recentSubtitle(place)
-                            )
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-            }
-
-            let nearby = viewModel.nearbyPOIs()
-            if !nearby.isEmpty {
-                Section("In der Nähe") {
-                    ForEach(nearby) { poi in
-                        Button {
-                            select(poi)
-                        } label: {
-                            placeRow(
-                                poi: poi,
-                                leadingSymbol: poi.categorySymbol,
-                                subtitle: poi.address
-                            )
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-            }
-
-            if savedPlaces.isEmpty && recentPlaces.isEmpty && nearby.isEmpty {
-                emptyBrowseState
-            }
+            .padding(.horizontal, AppMetrics.Space.l)
+            .padding(.bottom, AppMetrics.Space.xl)
         }
-        .listStyle(.insetGrouped)
-    }
-
-    /// Listenzeile mit Icon, Name, Status und Distanz zum Standort.
-    private func placeRow(poi: POI, leadingSymbol: String, subtitle: String?) -> some View {
-        HStack(spacing: AppMetrics.Space.m) {
-            ZStack {
-                Circle()
-                    .fill(AppColor.Violet.v100)
-                    .frame(width: 40, height: 40)
-                Image(systemName: leadingSymbol)
-                    .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(AppColor.accentPrimary)
-            }
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(poi.name)
-                    .font(.body.weight(.semibold))
-                    .foregroundStyle(AppColor.textPrimary)
-                    .lineLimit(1)
-                if let subtitle, !subtitle.isEmpty {
-                    Text(subtitle)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
-                HStack(spacing: 6) {
-                    Image(systemName: poi.accessStatus.symbolName)
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(poi.accessStatus.tint)
-                    Text(poi.accessStatus.shortLabel)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-
-            Spacer(minLength: 8)
-
-            Text(viewModel.userDistanceText(to: poi))
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .monospacedDigit()
-        }
-        .padding(.vertical, 8)
-        .contentShape(Rectangle())
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(poi.name), \(poi.accessStatus.shortLabel), \(viewModel.userDistanceText(to: poi))")
-        .accessibilityAddTraits(.isButton)
-    }
-
-    private var emptyBrowseState: some View {
-        VStack(spacing: 10) {
-            Image(systemName: "mappin.and.ellipse")
-                .font(.system(size: 40))
-                .foregroundStyle(.secondary)
-            Text("Noch keine Orte in der Nähe geladen.")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 24)
-        .listRowSeparator(.hidden)
     }
 
     // MARK: - Ergebnisliste (Suche / Kategorie)
 
-    /// Ergebnisliste: gleiche Zeilen-Optik und Listenform wie der
-    /// Ausgangszustand (browseList), damit Medium- und Voll-Ansicht des Sheets
-    /// einheitlich aussehen.
     private var resultsList: some View {
-        List {
-            Section {
-                ForEach(results) { poi in
-                    Button {
-                        select(poi)
-                    } label: {
-                        placeRow(
-                            poi: poi,
-                            leadingSymbol: poi.categorySymbol,
-                            subtitle: poi.address
-                        )
-                    }
-                    .buttonStyle(.plain)
-                }
-            } header: {
-                Text(resultsHeader)
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: AppMetrics.Space.l) {
+                section(resultsHeader, entries: resultEntries)
             }
+            .padding(.horizontal, AppMetrics.Space.l)
+            .padding(.bottom, AppMetrics.Space.xl)
         }
-        .listStyle(.insetGrouped)
     }
 
     /// Kopfzeile der Ergebnisliste. Bei einer Kategorie sind es bewusst nur
@@ -353,23 +242,164 @@ struct SearchSheet: View {
         return "\(results.count) Ergebnisse · nach Entfernung"
     }
 
-    // Empty-State mit Handlungs-Hinweis.
+    // MARK: - Abschnitt und Zeile
+
+    private func section(_ title: String, entries: [PlaceEntry]) -> some View {
+        SheetSection(title: title) {
+            ForEach(Array(entries.enumerated()), id: \.element.id) { index, entry in
+                placeRow(entry, showsDivider: index < entries.count - 1)
+            }
+        }
+    }
+
+    /// Listenzeile: Icon, Name, Untertitel, Zugänglichkeit für das eigene
+    /// Profil und die Distanz zum Standort.
+    private func placeRow(_ entry: PlaceEntry, showsDivider: Bool) -> some View {
+        let poi = entry.poi
+        return VStack(spacing: 0) {
+            Button {
+                select(poi)
+            } label: {
+                HStack(spacing: AppMetrics.Space.m) {
+                    SheetRowIcon(symbol: entry.symbol)
+
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(poi.name)
+                            .font(AppTypography.body.weight(.semibold))
+                            .foregroundStyle(AppColor.textPrimary)
+                            .lineLimit(1)
+
+                        if let subtitle = entry.subtitle, !subtitle.isEmpty {
+                            Text(subtitle)
+                                .font(AppTypography.footnote)
+                                .foregroundStyle(AppColor.textSecondary)
+                                .lineLimit(1)
+                        }
+
+                        // Status vierfach codiert (Symbol + Form + Farbe +
+                        // Text), damit er auch ohne Farbwahrnehmung trägt.
+                        HStack(spacing: 6) {
+                            Image(systemName: poi.accessStatus.symbolName)
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(poi.accessStatus.tint)
+                            Text(poi.accessStatus.label)
+                                .font(AppTypography.footnote)
+                                .foregroundStyle(AppColor.textSecondary)
+                                .lineLimit(1)
+                        }
+                    }
+                    .multilineTextAlignment(.leading)
+
+                    Spacer(minLength: AppMetrics.Space.s)
+
+                    Text(viewModel.userDistanceText(to: poi))
+                        .font(AppTypography.subheadline)
+                        .foregroundStyle(AppColor.textSecondary)
+                        .monospacedDigit()
+
+                    Image(systemName: "chevron.right")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(AppColor.textSecondary)
+                }
+                .padding(.horizontal, AppMetrics.Space.m)
+                .padding(.vertical, 12)
+                .frame(minHeight: AppMetrics.Touch.minimum)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("\(poi.name), \(poi.accessStatus.label), \(viewModel.userDistanceText(to: poi))")
+            .accessibilityAddTraits(.isButton)
+
+            if showsDivider {
+                Rectangle()
+                    .fill(AppColor.borderDecorative)
+                    .frame(height: 1)
+                    .padding(.leading, 36 + AppMetrics.Space.m + AppMetrics.Space.m)
+            }
+        }
+    }
+
+    // MARK: - Leerzustände
+
+    private var emptyBrowseState: some View {
+        VStack(spacing: 10) {
+            Image(systemName: "mappin.and.ellipse")
+                .font(.system(size: 40))
+                .foregroundStyle(AppColor.accentPrimary)
+            Text("Noch keine Orte in der Nähe geladen.")
+                .font(AppTypography.subheadline)
+                .foregroundStyle(AppColor.textSecondary)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, AppMetrics.Space.l)
+    }
+
     private var emptyState: some View {
         VStack(spacing: 10) {
             Image(systemName: "magnifyingglass.circle")
                 .font(.system(size: 44))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(AppColor.accentPrimary)
             Text("Keine zugänglichen Orte für \u{201E}\(query)\u{201C} in der Nähe gefunden.")
-                .font(.subheadline.weight(.semibold))
+                .font(AppTypography.subheadline.weight(.semibold))
+                .foregroundStyle(AppColor.textPrimary)
                 .multilineTextAlignment(.center)
-                .padding(.horizontal, 32)
+                .padding(.horizontal, AppMetrics.Space.xl)
             Text("Versuche einen anderen Suchbegriff oder vergrössere den Kartenausschnitt.")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
+                .font(AppTypography.footnote)
+                .foregroundStyle(AppColor.textSecondary)
                 .multilineTextAlignment(.center)
-                .padding(.horizontal, 32)
+                .padding(.horizontal, AppMetrics.Space.xl)
         }
-        .padding(.top, 40)
+        .padding(.top, AppMetrics.Space.xxl)
+    }
+
+    // MARK: - Einträge
+
+    private var savedEntries: [PlaceEntry] {
+        savedPlaces.map { place in
+            let resolved = poi(for: place)
+            return PlaceEntry(
+                id: "saved-\(place.id.uuidString)",
+                poi: resolved,
+                symbol: "bookmark.fill",
+                subtitle: resolved.address
+            )
+        }
+    }
+
+    private var recentEntries: [PlaceEntry] {
+        recentPlaces.map { place in
+            PlaceEntry(
+                id: "recent-\(place.id.uuidString)",
+                poi: place.poi,
+                symbol: "clock.arrow.circlepath",
+                subtitle: recentSubtitle(place)
+            )
+        }
+    }
+
+    private var nearbyEntries: [PlaceEntry] {
+        viewModel.nearbyPOIs().map { poi in
+            PlaceEntry(
+                id: "nearby-\(poi.id.uuidString)",
+                poi: poi,
+                symbol: poi.categorySymbol,
+                subtitle: poi.address
+            )
+        }
+    }
+
+    private var resultEntries: [PlaceEntry] {
+        results.map { poi in
+            PlaceEntry(
+                id: "result-\(poi.id.uuidString)",
+                poi: poi,
+                symbol: poi.categorySymbol,
+                subtitle: poi.address
+            )
+        }
     }
 
     // MARK: - Letzte Orte (aufgelöst auf echte POIs)
@@ -391,7 +421,9 @@ struct SearchSheet: View {
     }
 
     private func recentSubtitle(_ place: RecentPlace) -> String {
-        place.destination.visitedAt.formatted(.relative(presentation: .named).locale(.appGerman))
+        let relative = place.destination.visitedAt
+            .formatted(.relative(presentation: .named).locale(.appGerman))
+        return "\(relative) zuletzt besucht"
     }
 
     // MARK: - Aktionen

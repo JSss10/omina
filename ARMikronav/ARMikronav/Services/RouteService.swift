@@ -634,7 +634,52 @@ enum RouteService {
         let response = try await MKDirections(request: request).calculate()
         guard let route = response.routes.first else { throw RouteError.noRoute }
 
-        return ActiveRoute(
+        return activeRoute(
+            from: route,
+            to: destination,
+            destinationName: destinationName,
+            profile: profile
+        )
+    }
+
+    /// Alle Wegvarianten, die MapKit zum Ziel kennt – die Auswahlliste im
+    /// Routen-Sheet. Kürzeste zuerst; welche davon die wenigsten Barrieren
+    /// trägt, bewertet das MapViewModel entlang der fertigen Geometrie.
+    static func routeOptions(
+        from start: CLLocationCoordinate2D,
+        to destination: CLLocationCoordinate2D,
+        destinationName: String,
+        profile: UserProfile
+    ) async throws -> [ActiveRoute] {
+        let request = MKDirections.Request()
+        request.source = MKMapItem(placemark: MKPlacemark(coordinate: start))
+        request.destination = MKMapItem(placemark: MKPlacemark(coordinate: destination))
+        request.transportType = .walking
+        request.requestsAlternateRoutes = true
+
+        let response = try await MKDirections(request: request).calculate()
+        guard !response.routes.isEmpty else { throw RouteError.noRoute }
+
+        return response.routes
+            .sorted { $0.distance < $1.distance }
+            .map {
+                activeRoute(
+                    from: $0,
+                    to: destination,
+                    destinationName: destinationName,
+                    profile: profile
+                )
+            }
+    }
+
+    /// MapKit-Route in die App-Route übersetzen (Fahrzeit im eigenen Tempo).
+    private static func activeRoute(
+        from route: MKRoute,
+        to destination: CLLocationCoordinate2D,
+        destinationName: String,
+        profile: UserProfile?
+    ) -> ActiveRoute {
+        ActiveRoute(
             destinationName: destinationName,
             destinationCoordinate: destination,
             coordinates: route.polyline.coordinateList(),

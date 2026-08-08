@@ -1,13 +1,13 @@
 // MapSettingsSheet.swift
 // ARMikronav
 //
-// Karteneinstellungen als Overlay in Apple-Maps-Manier: über einen eigenen
-// Button auf der Karte geöffnet, jederzeit oben rechts (X) wieder schliessbar.
+// Karteneinstellungen als Sheet: über den Ebenen-Button links oben auf der
+// Karte geöffnet, jederzeit über X oder Häkchen wieder schliessbar.
 // Bündelt die reinen Darstellungs-Optionen:
 // – Kartenmodus (Karte/Satellit) als Auswahl-Kacheln
-// – Darstellung (Automatisch/Hell/Dunkel)
-// Sichtbarkeit von Orten/Barrieren und der Barrierentypen-Filter sind jetzt
-// im Filter-Sheet neben der Suchleiste (SearchSheet).
+// – Darstellung (Automatisch/Hell/Dunkel) als Segment-Umschalter
+// Sichtbarkeit von Orten/Barrieren und der Barrieretypen-Filter sind im
+// Filter-Sheet neben der Suchleiste.
 // Alle Einstellungen wirken sofort (live) – das Schliessen ist reines Verlassen.
 
 import SwiftUI
@@ -17,46 +17,42 @@ struct MapSettingsSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        NavigationStack {
-            Form {
-                Section("Kartenmodus") {
-                    mapModeTiles
-                        .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
-                }
+        VStack(spacing: 0) {
+            SheetHeader(
+                title: "Karteneinstellungen",
+                onClose: { dismiss() },
+                onConfirm: { dismiss() }
+            )
 
-                Section("Darstellung") {
-                    Picker("Darstellung", selection: $mapPreferences.appearance) {
-                        ForEach(MapAppearance.allCases) { appearance in
-                            Text(appearance.label).tag(appearance)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                    .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
+            ScrollView {
+                VStack(alignment: .leading, spacing: AppMetrics.Space.l) {
+                    mapModeSection
+                    appearanceSection
                 }
-            }
-            .navigationTitle("Karteneinstellungen")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button {
-                        dismiss()
-                    } label: {
-                        Image(systemName: "xmark")
-                    }
-                    .accessibilityLabel("Schliessen")
-                }
+                .padding(.horizontal, AppMetrics.Space.l)
+                .padding(.top, AppMetrics.Space.s)
+                .padding(.bottom, AppMetrics.Space.xl)
             }
         }
+        .background(AppColor.backgroundPrimary)
+        .presentationBackground(AppColor.backgroundPrimary)
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
     }
 
-    // MARK: - Kartenmodus-Kacheln
+    // MARK: - Kartenmodus
 
-    private var mapModeTiles: some View {
-        HStack(spacing: 12) {
-            ForEach(MapStyleChoice.allCases) { choice in
-                modeTile(choice)
+    private var mapModeSection: some View {
+        VStack(alignment: .leading, spacing: AppMetrics.Space.s) {
+            Text("Kartenmodus")
+                .font(AppTypography.headline)
+                .foregroundColor(AppColor.accentPrimary)
+                .accessibilityAddTraits(.isHeader)
+
+            HStack(spacing: AppMetrics.Space.m) {
+                ForEach(MapStyleChoice.allCases) { choice in
+                    modeTile(choice)
+                }
             }
         }
     }
@@ -66,28 +62,50 @@ struct MapSettingsSheet: View {
         return Button {
             mapPreferences.style = choice
         } label: {
-            VStack(spacing: 8) {
+            VStack(spacing: AppMetrics.Space.s) {
                 Image(systemName: choice.symbol)
-                    .font(.system(size: 26))
-                    .foregroundStyle(isSelected ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(.secondary))
+                    .font(.system(size: 26, weight: .regular))
+                    .foregroundColor(AppColor.accentPrimary)
                 Text(choice.label)
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(.primary)
+                    .font(AppTypography.subheadline)
+                    .foregroundColor(AppColor.textPrimary)
             }
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 16)
+            .padding(.vertical, AppMetrics.Space.l)
             .background(
-                isSelected ? AnyShapeStyle(Color.accentColor.opacity(0.15)) : AnyShapeStyle(Color(.tertiarySystemGroupedBackground)),
-                in: RoundedRectangle(cornerRadius: AppMetrics.Radius.card)
+                AppColor.surfaceTinted,
+                in: RoundedRectangle(cornerRadius: AppMetrics.Radius.card, style: .continuous)
             )
+            // Die Auswahl trägt nicht die Farbe allein: Der gewählte Modus
+            // bekommt zusätzlich einen Rahmen (Styleguide §2.3, P2).
             .overlay(
-                RoundedRectangle(cornerRadius: AppMetrics.Radius.card)
-                    .stroke(isSelected ? Color.accentColor : Color(.separator), lineWidth: isSelected ? 2 : 1)
+                RoundedRectangle(cornerRadius: AppMetrics.Radius.card, style: .continuous)
+                    .strokeBorder(
+                        isSelected ? AppColor.accentPrimary : Color.clear,
+                        lineWidth: 2
+                    )
             )
         }
         .buttonStyle(.plain)
         .accessibilityLabel(choice.label)
-        .accessibilityAddTraits(.isButton)
-        .accessibilityAddTraits(isSelected ? .isSelected : [])
+        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
+    }
+
+    // MARK: - Darstellung
+
+    private var appearanceSection: some View {
+        VStack(alignment: .leading, spacing: AppMetrics.Space.s) {
+            Text("Darstellung")
+                .font(AppTypography.headline)
+                .foregroundColor(AppColor.accentPrimary)
+                .accessibilityAddTraits(.isHeader)
+
+            SegmentedBar(
+                segments: MapAppearance.allCases.map {
+                    SegmentedBar<MapAppearance>.Segment(value: $0, label: $0.label)
+                },
+                selection: $mapPreferences.appearance
+            )
+        }
     }
 }

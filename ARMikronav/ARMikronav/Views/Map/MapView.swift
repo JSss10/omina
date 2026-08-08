@@ -46,13 +46,15 @@ struct MapView: View {
     /// angezeigten POIs in der Nähe ist.
     @State private var focusedPOI: POI?
     @State private var showingSearch = false
-    /// Karteneinstellungen-Overlay (Kartenmodus, Darstellung) – schlank in
-    /// Apple-Maps-Manier. Sichtbarkeit und Barrierentypen-Filter liegen im
-    /// Filter-Sheet (neben der Suchleiste bzw. über den Empty-State).
+    /// Karteneinstellungen (Kartenmodus, Darstellung) – über den Ebenen-Button
+    /// links oben. Sichtbarkeit und Barrieretypen liegen im Filter-Sheet
+    /// (Icon in der Suchleiste bzw. über den Empty-State).
     @State private var showingMapSettings = false
-    /// Filter-Sheet (Sichtbarkeit von Orten/Barrieren + Barrierentypen), auch
+    /// Filter-Sheet (Sichtbarkeit von Orten/Barrieren + Barrieretypen), auch
     /// direkt aus dem Empty-State heraus erreichbar.
     @State private var showingFilter = false
+    /// Routenplanung (Bedienstapel rechts auf der Karte).
+    @State private var showingRoutes = false
     /// Listenansicht der Barrieren entlang der aktiven Route.
     @State private var showingRouteBarriers = false
     /// Turn-by-turn-Listenansicht der aktiven Route.
@@ -266,21 +268,18 @@ struct MapView: View {
             barrierNotifications.tappedBarrierId = nil
             selectedBarrier = barrier
         }
-        // Suche als kompaktes Icon (Apple-Maps-Manier) links oben – der frühere
-        // breite Suchbalken entfällt. Direkt darunter der Einstellungs-Button
-        // (während der Navigation ausgeblendet). Rechts oben sitzt der Kompass.
+        // Links oben der Ebenen-Button (Kartenmodus und Darstellung), rechts
+        // oben der Kompass. Die Suche sitzt als Leiste unten am Bildschirmrand
+        // – in Daumenreichweite, statt als Icon in der oberen Ecke.
         .overlay(alignment: .topLeading) {
-            VStack(spacing: 12) {
-                searchButton
-                if viewModel.activeRoute == nil {
-                    mapSettingsButton
-                }
+            if viewModel.activeRoute == nil {
+                mapLayersButton
+                    .padding(.leading, 16)
+                    .padding(.top, 16)
             }
-            .padding(.leading, 16)
-            .padding(.top, 16)
         }
-        // Banner sitzen unterhalb der Bedienzeile (Such-Icon links, Kompass
-        // rechts), damit sie die Ecken-Buttons nicht verdecken.
+        // Banner sitzen unterhalb der Bedienzeile (Ebenen-Button links,
+        // Kompass rechts), damit sie die Ecken-Buttons nicht verdecken.
         .overlay(alignment: .top) {
             VStack(spacing: 8) {
                 // Fallback-Banner nur ohne Mitteilungs-Berechtigung; sonst
@@ -320,17 +319,15 @@ struct MapView: View {
                     .background(.thinMaterial, in: Capsule())
                 }
             }
-            // Unterhalb der Bedienelemente oben links, damit Banner sie nicht
-            // überdecken: ohne Navigation stehen Such- und Einstellungs-Icon
-            // untereinander (höher), während der Navigation nur das Such-Icon.
-            .padding(.top, viewModel.activeRoute == nil ? 124 : 68)
+            // Unterhalb der Bedienelemente oben (Ebenen-Button links, Kompass
+            // rechts), damit die Banner sie nicht überdecken.
+            .padding(.top, 68)
             .animation(.easeInOut(duration: 0.25), value: connectivity.isOnline)
             .animation(.spring(duration: 0.35), value: proximityService.activeWarning?.barrier.id)
             .animation(.spring(duration: 0.35), value: viewModel.isOffRoute)
         }
         // Persistenter Kompass (Blickrichtung des Geräts), rechts oben auf
-        // Höhe der Suchleiste – dort, wo früher der Home-Button sass (jetzt
-        // ersetzt durch die sichtbare Tab-Leiste, HomeView).
+        // Höhe des Ebenen-Buttons.
         .overlay(alignment: .topTrailing) {
             VStack(spacing: 12) {
                 CompassView(heading: locationService.heading, background: Self.controlBackground)
@@ -341,6 +338,24 @@ struct MapView: View {
             }
             .padding(.trailing, 16)
             .padding(.top, 16)
+        }
+        // Bedienstapel rechts über der Suchleiste: Routen planen und zurück
+        // zum eigenen Standort. Während der Navigation übernimmt das
+        // Routen-Panel unten, der Stapel verschwindet.
+        .overlay(alignment: .trailing) {
+            if viewModel.activeRoute == nil {
+                mapControlStack
+                    .padding(.trailing, 16)
+            }
+        }
+        // Suchleiste unten – der Einstieg in Suche und Filter.
+        .overlay(alignment: .bottom) {
+            if viewModel.activeRoute == nil {
+                mapSearchBar
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 12)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
         }
         .overlay(alignment: .bottom) {
             if let route = viewModel.activeRoute {
@@ -462,6 +477,14 @@ struct MapView: View {
             FilterSheet(viewModel: viewModel)
                 .trackScreen("filter")
         }
+        // Routenplanung (Verkehrsmittel, Ziel, Wegvarianten). Eine gewählte
+        // Variante startet die Navigation und zeigt die ganze Strecke.
+        .sheet(isPresented: $showingRoutes) {
+            RoutesSheet(viewModel: viewModel, profile: profile) { route in
+                startRouteCamera(for: route)
+            }
+            .trackScreen("routes")
+        }
     }
 
     // MARK: - Components
@@ -471,20 +494,128 @@ struct MapView: View {
     /// Material, mit dezentem Schatten zur Abhebung von der Karte.
     private static let controlBackground = AnyShapeStyle(Color(.systemBackground))
 
-    /// Kompaktes Such-Icon (öffnet das SearchSheet) – ersetzt den früheren
-    /// breiten Suchbalken. Gleiche Grösse/Optik wie der Einstellungs-Button.
-    private var searchButton: some View {
+    /// Suchleiste unten auf der Karte: Der Balken öffnet die Ortssuche, das
+    /// Icon rechts den Barrierefilter. Beide Ziele sind eigene Trefferflächen,
+    /// damit man den Filter nicht versehentlich mit der Suche erwischt.
+    private var mapSearchBar: some View {
+        HStack(spacing: 12) {
+            Button {
+                showingSearch = true
+            } label: {
+                HStack(spacing: 10) {
+                    Image(systemName: "magnifyingglass")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(AppColor.accentPrimary)
+                    Text("Wohin möchtest du?")
+                        .font(AppTypography.body)
+                        .foregroundStyle(AppColor.textSecondary)
+                        .lineLimit(1)
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 16)
+                .frame(height: AppMetrics.Touch.primary)
+                .background(AppColor.surfaceTinted, in: Capsule())
+                .contentShape(Capsule())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Orte suchen")
+
+            Button {
+                showingFilter = true
+            } label: {
+                Image(systemName: "line.3.horizontal.decrease")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(filtersActive ? AppColor.onAccent : AppColor.accentPrimary)
+                    .frame(width: AppMetrics.Touch.primary, height: AppMetrics.Touch.primary)
+                    .background(
+                        filtersActive
+                            ? AnyShapeStyle(AppColor.accentPrimary)
+                            : AnyShapeStyle(AppColor.surfaceTinted),
+                        in: Circle()
+                    )
+            }
+            .accessibilityLabel("Filter")
+            .accessibilityAddTraits(filtersActive ? .isSelected : [])
+        }
+        .padding(8)
+        .background(
+            Self.controlBackground,
+            in: RoundedRectangle(cornerRadius: AppMetrics.Radius.sheet + 12, style: .continuous)
+        )
+        .shadow(color: .black.opacity(0.18), radius: 8, y: 2)
+    }
+
+    /// Ob aktuell ein Filter greift (für die Hervorhebung des Filter-Icons):
+    /// Orte oder Barrieren ausgeblendet, oder nicht alle Barrieretypen aktiv.
+    private var filtersActive: Bool {
+        !viewModel.poisVisible
+            || !viewModel.barriersVisible
+            || viewModel.filterState.enabledTypes.count != BarrierType.allCases.count
+    }
+
+    /// Bedienstapel rechts: Routen planen und auf den eigenen Standort
+    /// zentrieren – die zwei Aktionen, die man ohne laufende Route braucht.
+    private var mapControlStack: some View {
+        VStack(spacing: 0) {
+            Button {
+                showingRoutes = true
+            } label: {
+                Image(systemName: "point.topleft.down.to.point.bottomright.curvepath")
+                    .font(.system(size: 19, weight: .semibold))
+                    .foregroundStyle(AppColor.accentPrimary)
+                    .frame(width: 48, height: 48)
+                    .contentShape(Rectangle())
+            }
+            .accessibilityLabel("Route planen")
+
+            Divider().frame(width: 30)
+
+            Button {
+                centerOnUser()
+            } label: {
+                Image(systemName: "location.fill")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(
+                        locationService.currentLocation == nil
+                            ? AppColor.textSecondary
+                            : AppColor.accentPrimary
+                    )
+                    .frame(width: 48, height: 48)
+                    .contentShape(Rectangle())
+            }
+            .disabled(locationService.currentLocation == nil)
+            .accessibilityLabel("Auf meinen Standort zentrieren")
+        }
+        .background(
+            Self.controlBackground,
+            in: RoundedRectangle(cornerRadius: AppMetrics.Radius.card, style: .continuous)
+        )
+        .shadow(color: .black.opacity(0.18), radius: 6, y: 2)
+    }
+
+    /// Ebenen-Button links oben: öffnet Kartenmodus und Darstellung.
+    private var mapLayersButton: some View {
         Button {
-            showingSearch = true
+            showingMapSettings = true
         } label: {
-            Image(systemName: "magnifyingglass")
-                .font(.title2.weight(.semibold))
-                .foregroundStyle(AppColor.textPrimary)
+            Image(systemName: "square.3.layers.3d")
+                .font(.system(size: 19, weight: .semibold))
+                .foregroundStyle(AppColor.accentPrimary)
                 .frame(width: 44, height: 44)
                 .background(Self.controlBackground, in: Circle())
                 .shadow(color: .black.opacity(0.2), radius: 3, y: 1)
         }
-        .accessibilityLabel("Orte suchen")
+        .accessibilityLabel("Karteneinstellungen")
+    }
+
+    /// Karte zurück auf den eigenen Standort holen (Bedienstapel rechts).
+    private func centerOnUser() {
+        guard let location = locationService.currentLocation else { return }
+        withAnimation(.easeInOut) {
+            cameraPosition = .region(
+                MKCoordinateRegion(center: location.coordinate, span: Self.closeUpSpan)
+            )
+        }
     }
 
     /// Wechselt zwischen Übersicht (ganze Route im Bild) und Folgen (Karte
@@ -521,22 +652,6 @@ struct MapView: View {
                             : "Ganze Route anzeigen")
     }
 
-    /// Öffnet das Karteneinstellungs-Overlay (Kartenmodus, Darstellung).
-    /// Sitzt direkt unter dem Such-Icon; der Barrierentypen-Filter und die
-    /// Sichtbarkeit von Orten/Barrieren liegen jetzt im Such-Sheet.
-    private var mapSettingsButton: some View {
-        Button {
-            showingMapSettings = true
-        } label: {
-            Image(systemName: "gearshape.fill")
-                .font(.title2.weight(.semibold))
-                .foregroundStyle(AppColor.textPrimary)
-                .frame(width: 44, height: 44)
-                .background(Self.controlBackground, in: Circle())
-                .shadow(color: .black.opacity(0.2), radius: 3, y: 1)
-        }
-        .accessibilityLabel("Karteneinstellungen")
-    }
 
     // Banner ~30 m vor profilrelevanter Barriere.
     // Tap → Detail-Sheet, X oder Wegswipen → dismiss. Bleibt bewusst stehen,
