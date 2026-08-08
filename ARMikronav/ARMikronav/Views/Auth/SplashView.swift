@@ -26,7 +26,7 @@ struct SplashView: View {
                 .accessibilityHidden(true)
                 .ignoresSafeArea(edges: .bottom)
 
-            VStack {
+            VStack(spacing: AppMetrics.Space.xl) {
                 Spacer()
 
                 HStack(spacing: AppMetrics.Space.l) {
@@ -39,6 +39,12 @@ struct SplashView: View {
                 .padding(.horizontal, AppMetrics.Space.l)
                 .accessibilityElement(children: .combine)
                 .accessibilityLabel("AR-Mikronavigation")
+
+                // Der Splash steht auch, während das Profil vom Server kommt –
+                // ohne Indikator sähe das nach eingefrorener App aus.
+                ProgressView()
+                    .tint(AppColor.accentPrimary)
+                    .accessibilityLabel("App wird geladen")
 
                 Spacer()
             }
