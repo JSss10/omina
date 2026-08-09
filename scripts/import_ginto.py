@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-ginto API Import Script - AR-Mikronavigation
+ginto API Import Script - Omina
 Laedt alle verfuegbaren POIs aus der ginto GraphQL API fuer die ganze
 Schweiz und schreibt sie in die Supabase poi_accessibility Tabelle.
 
@@ -286,7 +286,7 @@ def import_to_supabase(pois):
 # ============================================================
 def main():
     print("=" * 60)
-    print("ginto Import - AR-Mikronavigation")
+    print("ginto Import - Omina")
     print("Gebiet: ganze Schweiz (" + str(CH_LAT) + ", " + str(CH_LNG) + ")")
     print("Radius: " + str(RADIUS_KM) + "km")
     print("=" * 60)

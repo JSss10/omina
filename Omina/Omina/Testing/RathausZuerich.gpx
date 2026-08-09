@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Simulierter Standort für Tests: Rathaus Zürich (Limmatquai 55, 8001 Zürich).
+
+  Verwendung in Xcode (Simulator UND echtes iPhone):
+  1. Datei per Drag & Drop ins Xcode-Projekt ziehen (Target-Membership egal).
+  2. App starten, dann in der Debug-Leiste unten das Pfeil-Symbol
+     ("Simulate Location") anklicken und "RathausZuerich" wählen.
+  Oder als Standard: Product > Scheme > Edit Scheme… > Run > Options >
+  Core Location > Default Location > RathausZuerich.
+-->
+<gpx version="1.1" creator="Omina" xmlns="http://www.topografix.com/GPX/1/1">
+    <wpt lat="47.37172" lon="8.54222">
+        <name>Rathaus Zürich</name>
+    </wpt>
+</gpx>

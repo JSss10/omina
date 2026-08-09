@@ -1,4 +1,4 @@
--- AR-Mikronavigation – Stored Function für gespeicherte Orte des Users
+-- Omina – Stored Function für gespeicherte Orte des Users
 -- Erwartet das Schema aus Database/schema.sql (Tabelle saved_places, RLS user-owned).
 --
 -- Aufruf vom Client (Supabase RPC):

@@ -1,4 +1,4 @@
--- AR-Mikronavigation – Seed: Barrieren (OSM-Import, Altstadt Zürich)
+-- Omina – Seed: Barrieren (OSM-Import, Altstadt Zürich)
 -- Quelle: barriers_osm_20260407_142701.json (Overpass-Export vom 07.04.2026, 997 Einträge)
 -- Für den Supabase SQL Editor: gesamtes Script einfügen und ausführen.
 -- Erwartet das Schema aus Database/schema.sql (Tabelle `barriers`, PostGIS aktiviert).

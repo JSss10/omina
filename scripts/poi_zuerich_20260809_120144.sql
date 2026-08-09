@@ -1,4 +1,4 @@
--- AR-Mikronavigation - POI-Angaben aus dem Zuerich-Tourismus-API
+-- Omina - POI-Angaben aus dem Zuerich-Tourismus-API
 -- Quelle: https://www.zuerich.com/en/api/v2/data (Open Data 2.0, Zürich Tourismus (zuerich.com))
 -- Erzeugt: 2026-08-09T12:01:44
 -- Setzt in accessibility_details: images, opening_hours, phone,

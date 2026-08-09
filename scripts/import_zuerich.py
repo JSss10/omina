@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Zuerich-Tourismus Import - AR-Mikronavigation
+Zuerich-Tourismus Import - Omina
 
 Prueft fuer jeden bestehenden POI (ginto/OSM), ob es ihn im Open-Data-API
 von Zuerich Tourismus gibt (Version 2.0,
@@ -44,7 +44,7 @@ Verwendung:
     python3 import_zuerich.py --dry-run        # nur Vorschau
     python3 import_zuerich.py --pois-file ../pois_ginto_20260407_142744.json
                                                # Vorschau ohne Supabase
-    python3 import_zuerich.py --seed-file ../ARMikronav/ARMikronav/Seed/seed_pois.json
+    python3 import_zuerich.py --seed-file ../Omina/Omina/Seed/seed_pois.json
                                                # Offline-Seed der App mitpflegen
 
 Voraussetzungen:
@@ -112,7 +112,7 @@ GENERIC_TOKENS = {
 
 HEADERS = {
     "Accept": "application/json",
-    "User-Agent": "AR-Mikronavigation/1.0 (Bachelorarbeit; Open-Data-Import)",
+    "User-Agent": "Omina/1.0 (Bachelorarbeit; Open-Data-Import)",
 }
 
 
@@ -760,7 +760,7 @@ def write_sql(matches, path):
     """Idempotentes SQL fuer den Supabase-SQL-Editor (ohne Service-Key).
     `||` merged in das bestehende JSONB, alle anderen Felder bleiben."""
     lines = [
-        "-- AR-Mikronavigation - POI-Angaben aus dem Zuerich-Tourismus-API",
+        "-- Omina - POI-Angaben aus dem Zuerich-Tourismus-API",
         "-- Quelle: " + BASE_URL + DATA_PATH + " (Open Data 2.0, " + INFO_SOURCE + ")",
         "-- Erzeugt: " + datetime.now().isoformat(timespec="seconds"),
         "-- Setzt in accessibility_details: images, opening_hours, phone,",
@@ -866,7 +866,7 @@ def parse_args():
                              "(Vorschau ohne Zugangsdaten)")
     parser.add_argument("--seed-file",
                         help="zusaetzlich den Offline-Seed der App aktualisieren "
-                             "(ARMikronav/ARMikronav/Seed/seed_pois.json)")
+                             "(Omina/Omina/Seed/seed_pois.json)")
     parser.add_argument("--categories",
                         help="nur diese Kategorie-IDs abfragen, kommagetrennt "
                              "(z. B. 72,101 fuer Sehenswuerdigkeiten und Gastronomie)")
@@ -888,7 +888,7 @@ def main():
     args = parse_args()
 
     print("=" * 60)
-    print("Zuerich-Tourismus Import - AR-Mikronavigation")
+    print("Zuerich-Tourismus Import - Omina")
     print("API: " + BASE_URL + DATA_PATH)
     print("=" * 60)
 

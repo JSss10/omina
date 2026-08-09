@@ -1,4 +1,4 @@
--- AR-Mikronavigation – Seed: POIs (ginto-Import, Altstadt Zürich)
+-- Omina – Seed: POIs (ginto-Import, Altstadt Zürich)
 -- Quelle: pois_ginto_20260407_142744.json (ginto-Export vom 07.04.2026, 439 Einträge)
 -- Für den Supabase SQL Editor: gesamtes Script einfügen und ausführen.
 -- Erwartet das Schema aus Database/schema.sql (Tabelle `poi_accessibility`, PostGIS aktiviert).

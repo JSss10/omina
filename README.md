@@ -1,4 +1,4 @@
-# AR-Mikronavigation
+# Omina
 
 > AR-gestützte Mikronavigation für Rollstuhlnutzende – iOS-Prototyp zur Entscheidungsunterstützung in barrierekritischen urbanen Situationen.
 
@@ -35,9 +35,9 @@ Diese iOS-App visualisiert situative Barrieren (Stufen, Steigungen, Engstellen, 
 ## Projektstruktur
 
 ```
-ARMikronav/
+Omina/
 ├── App/
-│   └── ARMikronavApp.swift
+│   └── OminaApp.swift
 ├── Models/
 │   ├── UserProfile.swift
 │   ├── Barrier.swift
@@ -76,17 +76,17 @@ ARMikronav/
 ### Installation
 
 ```bash
-git clone https://github.com/JSss10/ar-micronav-app.git
-cd ar-micronav-app
-open ARMikronav.xcodeproj
-cp Config.example.swift Config.swift
+git clone https://github.com/JSss10/ar-mikronav.git
+cd ar-mikronav
+open Omina/Omina.xcodeproj
+cp Omina/Omina/Config/Secrets.example.swift Omina/Omina/Config/Secrets.swift
 # → Supabase URL und Anon Key eintragen
 ```
 
 ## Standort simulieren (Rathaus Zürich)
 
 Zum Testen ohne vor Ort zu sein lässt sich der GPS-Standort faken –
-die GPX-Datei `ARMikronav/Testing/RathausZuerich.gpx` enthält das
+die GPX-Datei `Omina/Testing/RathausZuerich.gpx` enthält das
 Rathaus Zürich (47.37172, 8.54222) als Wegpunkt.
 
 **Simulator oder echtes iPhone (via Xcode):**
@@ -173,7 +173,7 @@ Welche OSM-Tags für die Barrieren ausgewertet werden und wie sie bewertet
 werden, richtet sich nach dem OSM-Wiki, Projekt
 [Wheelchair routing](https://wiki.openstreetmap.org/wiki/Wheelchair_routing);
 die Grenzwerte nach DIN 18024-1 stehen in
-`ARMikronav/Services/AccessibilityStandard.swift`.
+`Omina/Services/AccessibilityStandard.swift`.
 
 ## Commit Convention
 
