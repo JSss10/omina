@@ -39,7 +39,7 @@ Omina visualisiert situative Barrieren (Stufen, Steigungen, Engstellen, Oberflä
 | AR           | ARKit + RealityKit, Nordkorrektur über CoreMotion                                    |
 | Karten       | MapKit                                                                               |
 | Routing      | MapKit (Fussgängerroute); Barrieren werden entlang der Route personalisiert bewertet |
-| Alternativen | OpenRouteService (Profil `wheelchair`, `avoid_polygons`)                              |
+| Alternativen | OpenRouteService (Profil `wheelchair`, `avoid_polygons`)                             |
 | Backend      | Supabase (PostgreSQL + PostGIS, RLS)                                                 |
 | Auth         | Supabase Auth (E-Mail + Einmalcode, anonym im Feldtest)                              |
 | Datenquellen | OSM/Overpass, ginto API (GraphQL), Zürich Tourismus Open Data, Wheelmap, Open-Meteo  |
@@ -111,14 +111,14 @@ xcodebuild test -scheme Omina -destination 'platform=iOS Simulator,name=iPhone 1
 Die Unit-Tests decken die fachlich heiklen Stellen ab – dort, wo ein Fehler zu
 einer falschen Aussage über Zugänglichkeit führen würde:
 
-| Suite                       | Prüft                                                                     |
-| --------------------------- | ------------------------------------------------------------------------- |
-| `OminaTests`                | `shouldWarn()` je Barrierentyp, Profil-Grenzwerte, Begleitungs-Bonus      |
-| `RouteServiceTests`         | ORS-Anfrageformat, Fortschritt, Manöver, Umweg-Plausibilität              |
-| `OSMSurfaceRatingTests`     | `surface`/`smoothness`/`tracktype` gegen die Oberflächen-Toleranz         |
-| `ARHeadingCorrectionTests`  | Nordkorrektur der AR-Welt, wrap-sichere Winkelglättung                    |
-| `POIImageTests`             | Bild- und Quellenangaben aus `accessibility_details`                       |
-| `POIPlaceInfoTests`         | Öffnungszeiten, Kontakt und Platzhalter im POI-Detail                     |
+| Suite                      | Prüft                                                                |
+| -------------------------- | -------------------------------------------------------------------- |
+| `OminaTests`               | `shouldWarn()` je Barrierentyp, Profil-Grenzwerte, Begleitungs-Bonus |
+| `RouteServiceTests`        | ORS-Anfrageformat, Fortschritt, Manöver, Umweg-Plausibilität         |
+| `OSMSurfaceRatingTests`    | `surface`/`smoothness`/`tracktype` gegen die Oberflächen-Toleranz    |
+| `ARHeadingCorrectionTests` | Nordkorrektur der AR-Welt, wrap-sichere Winkelglättung               |
+| `POIImageTests`            | Bild- und Quellenangaben aus `accessibility_details`                 |
+| `POIPlaceInfoTests`        | Öffnungszeiten, Kontakt und Platzhalter im POI-Detail                |
 
 ## Standort simulieren (Rathaus Zürich)
 
@@ -157,7 +157,7 @@ Danach durchlaufen sie das normale Onboarding mit ihren eigenen Angaben.
 2. Supabase Dashboard → Authentication → Sign In / Providers → **„Allow anonymous sign-ins"** aktivieren.
 3. In `Config/AppConfig.swift` muss `fieldTestModeEnabled = true` stehen (nach den Testtagen wieder auf `false`).
 
-**Ablauf pro Testperson:** Profil antippen → Consent → Onboarding → App testen.
+**Ablauf pro Testperson:** Profil antippen → Datenschutz → Zugriff erlauben → Onboarding → App testen.
 Danach oben rechts **„Test beenden"**: lädt offene Tracking-Events hoch und setzt
 das Gerät für die nächste Person zurück. Die Abschluss-Umfrage wird separat
 zugestellt, damit sie auf einem grösseren Gerät ausgefüllt werden kann.
@@ -199,14 +199,14 @@ omina/
 
 ## Datenquellen
 
-| Quelle           | Typ                                                                                                      | Lizenz                                     |
-| ---------------- | -------------------------------------------------------------------------------------------------------- | ------------------------------------------ |
+| Quelle           | Typ                                                                                                       | Lizenz                                     |
+| ---------------- | --------------------------------------------------------------------------------------------------------- | ------------------------------------------ |
 | OpenStreetMap    | Barrieren (kerb/sloped_curb, incline, surface, smoothness, tracktype, width, steps, sidewalk:\*, barrier) | ODbL                                       |
-| OpenRouteService | Alternativroute um eine einzelne Barriere (Profil `wheelchair`, avoid_polygons)                          | ODbL (OSM) / ORS-Nutzungsbedingungen       |
-| ginto API        | POI-Zugänglichkeit (GraphQL, POIs ganze Schweiz)                                                         | Nutzungsbedingungen ginto                  |
-| Zürich Tourismus | POI-Fotos, Öffnungszeiten, Kontakt (Open Data 2.0, `/en/api/v2/data`)                                    | Open Data Zürich Tourismus, Quellennennung |
-| Wheelmap         | POI wheelchair=yes/limited/no                                                                            | CC BY-SA                                   |
-| Open-Meteo       | Wetter für die Tagesform-Anpassung                                                                       | CC BY 4.0                                  |
+| OpenRouteService | Alternativroute um eine einzelne Barriere (Profil `wheelchair`, avoid_polygons)                           | ODbL (OSM) / ORS-Nutzungsbedingungen       |
+| ginto API        | POI-Zugänglichkeit (GraphQL, POIs ganze Schweiz)                                                          | Nutzungsbedingungen ginto                  |
+| Zürich Tourismus | POI-Fotos, Öffnungszeiten, Kontakt (Open Data 2.0, `/en/api/v2/data`)                                     | Open Data Zürich Tourismus, Quellennennung |
+| Wheelmap         | POI wheelchair=yes/limited/no                                                                             | CC BY-SA                                   |
+| Open-Meteo       | Wetter für die Tagesform-Anpassung                                                                        | CC BY 4.0                                  |
 
 Die Standardroute ist die Fussgängerroute – sie nimmt den Weg, den man auch selbst
 nehmen würde. Die Rollstuhl-Perspektive steckt in der personalisierten Bewertung
@@ -223,7 +223,7 @@ nicht, zeigt das Detail-Sheet Platzhalter statt leerer Flächen. Die Quellenanga
 steht unter den Fotos und den übernommenen Angaben; die Lizenz verlangt die Nennung.
 
 Welche OSM-Tags für die Barrieren ausgewertet und wie sie bewertet werden, richtet
-sich nach dem OSM-Wiki, Projekt *Wheelchair routing*; die Grenzwerte nach
+sich nach dem OSM-Wiki, Projekt _Wheelchair routing_; die Grenzwerte nach
 DIN 18024-1 stehen in `Omina/Omina/Services/AccessibilityStandard.swift`.
 
 ## Commit Convention
@@ -257,36 +257,36 @@ Normen, Schnittstellen-Dokumentationen und Datenquellen, die im Code, in den
 Import-Scripts oder im Design-System referenziert werden. Die Literatur der
 schriftlichen Arbeit steht dort in eigenem Verzeichnis.
 
-Apple Inc., 2026a. *ARKit | Apple Developer Documentation*. [online] Verfügbar unter: https://developer.apple.com/documentation/arkit [Zugegriffen 12. April 2026].
+Apple Inc., 2026a. _ARKit | Apple Developer Documentation_. [online] Verfügbar unter: https://developer.apple.com/documentation/arkit [Zugegriffen 12. April 2026].
 
-Apple Inc., 2026b. *Core Motion | Apple Developer Documentation*. [online] Verfügbar unter: https://developer.apple.com/documentation/coremotion [Zugegriffen 24. Juli 2026].
+Apple Inc., 2026b. _Core Motion | Apple Developer Documentation_. [online] Verfügbar unter: https://developer.apple.com/documentation/coremotion [Zugegriffen 24. Juli 2026].
 
-Apple Inc., 2026c. *MapKit for SwiftUI | Apple Developer Documentation*. [online] Verfügbar unter: https://developer.apple.com/documentation/mapkit/mapkit-for-swiftui [Zugegriffen 20. Juli 2026].
+Apple Inc., 2026c. _MapKit for SwiftUI | Apple Developer Documentation_. [online] Verfügbar unter: https://developer.apple.com/documentation/mapkit/mapkit-for-swiftui [Zugegriffen 20. Juli 2026].
 
-Apple Inc., 2026d. *Licensed Application End User License Agreement*. [online] Verfügbar unter: https://www.apple.com/legal/internet-services/itunes/dev/stdeula/ [Zugegriffen 26. Juli 2026].
+Apple Inc., 2026d. _Licensed Application End User License Agreement_. [online] Verfügbar unter: https://www.apple.com/legal/internet-services/itunes/dev/stdeula/ [Zugegriffen 26. Juli 2026].
 
-Deutsches Institut für Normung, 1998. *DIN 18024-1: Barrierefreies Bauen – Teil 1: Strassen, Plätze, Wege, öffentliche Verkehrs- und Grünanlagen sowie Spielplätze; Planungsgrundlagen*. Berlin: Beuth Verlag.
+Deutsches Institut für Normung, 1998. _DIN 18024-1: Barrierefreies Bauen – Teil 1: Strassen, Plätze, Wege, öffentliche Verkehrs- und Grünanlagen sowie Spielplätze; Planungsgrundlagen_. Berlin: Beuth Verlag.
 
-ginto guide AG, 2026. *ginto – Zugänglichkeit finden*. [online] Verfügbar unter: https://ginto.guide [Zugegriffen 28. März 2026].
+ginto guide AG, 2026. _ginto – Zugänglichkeit finden_. [online] Verfügbar unter: https://ginto.guide [Zugegriffen 28. März 2026].
 
-HeiGIT gGmbH, 2026. *openrouteservice API Documentation – Directions Service*. [online] Verfügbar unter: https://openrouteservice.org/dev/#/api-docs/v2/directions [Zugegriffen 18. Juni 2026].
+HeiGIT gGmbH, 2026. _openrouteservice API Documentation – Directions Service_. [online] Verfügbar unter: https://openrouteservice.org/dev/#/api-docs/v2/directions [Zugegriffen 18. Juni 2026].
 
-Open-Meteo, 2026. *Free Weather API*. [online] Verfügbar unter: https://open-meteo.com/ [Zugegriffen 14. Juli 2026].
+Open-Meteo, 2026. _Free Weather API_. [online] Verfügbar unter: https://open-meteo.com/ [Zugegriffen 14. Juli 2026].
 
-OpenStreetMap Foundation, 2026. *Copyright and Licence*. [online] Verfügbar unter: https://www.openstreetmap.org/copyright [Zugegriffen 7. April 2026].
+OpenStreetMap Foundation, 2026. _Copyright and Licence_. [online] Verfügbar unter: https://www.openstreetmap.org/copyright [Zugegriffen 7. April 2026].
 
-OpenStreetMap Wiki, 2026a. *Wheelchair routing*. [online] Verfügbar unter: https://wiki.openstreetmap.org/wiki/Wheelchair_routing [Zugegriffen 7. April 2026].
+OpenStreetMap Wiki, 2026a. _Wheelchair routing_. [online] Verfügbar unter: https://wiki.openstreetmap.org/wiki/Wheelchair_routing [Zugegriffen 7. April 2026].
 
-OpenStreetMap Wiki, 2026b. *Overpass API*. [online] Verfügbar unter: https://wiki.openstreetmap.org/wiki/Overpass_API [Zugegriffen 7. April 2026].
+OpenStreetMap Wiki, 2026b. _Overpass API_. [online] Verfügbar unter: https://wiki.openstreetmap.org/wiki/Overpass_API [Zugegriffen 7. April 2026].
 
-Preston-Werner, T. und Mitwirkende, 2019. *Conventional Commits 1.0.0*. [online] Verfügbar unter: https://www.conventionalcommits.org/de/v1.0.0/ [Zugegriffen 28. März 2026].
+Preston-Werner, T. und Mitwirkende, 2019. _Conventional Commits 1.0.0_. [online] Verfügbar unter: https://www.conventionalcommits.org/de/v1.0.0/ [Zugegriffen 28. März 2026].
 
-Schema.org Community Group, 2026. *Schema.org Vocabulary*. [online] Verfügbar unter: https://schema.org/ [Zugegriffen 9. August 2026].
+Schema.org Community Group, 2026. _Schema.org Vocabulary_. [online] Verfügbar unter: https://schema.org/ [Zugegriffen 9. August 2026].
 
-Supabase Inc., 2026. *Supabase Documentation*. [online] Verfügbar unter: https://supabase.com/docs [Zugegriffen 28. März 2026].
+Supabase Inc., 2026. _Supabase Documentation_. [online] Verfügbar unter: https://supabase.com/docs [Zugegriffen 28. März 2026].
 
-W3C, 2023. *Web Content Accessibility Guidelines (WCAG) 2.2*. [online] W3C Recommendation. Verfügbar unter: https://www.w3.org/TR/WCAG22/ [Zugegriffen 15. Mai 2026].
+W3C, 2023. _Web Content Accessibility Guidelines (WCAG) 2.2_. [online] W3C Recommendation. Verfügbar unter: https://www.w3.org/TR/WCAG22/ [Zugegriffen 15. Mai 2026].
 
-Wheelmap.org, 2026. *Wheelmap – Rollstuhlgerechte Orte finden*. [online] Verfügbar unter: https://wheelmap.org/ [Zugegriffen 10. April 2026].
+Wheelmap.org, 2026. _Wheelmap – Rollstuhlgerechte Orte finden_. [online] Verfügbar unter: https://wheelmap.org/ [Zugegriffen 10. April 2026].
 
-Zürich Tourismus, 2026. *Open Data Version 2.0*. [online] Verfügbar unter: https://www.zuerich.com/en/open-data-version-20 [Zugegriffen 9. August 2026].
+Zürich Tourismus, 2026. _Open Data Version 2.0_. [online] Verfügbar unter: https://www.zuerich.com/en/open-data-version-20 [Zugegriffen 9. August 2026].

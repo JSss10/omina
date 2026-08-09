@@ -54,9 +54,11 @@ struct RootView: View {
 // Routet nach erfolgreichem Login:
 // Consent (Datenschutz) → Berechtigungen (einmalig: Standort/Kamera/
 // Mitteilungen über Apples System-Prompts) → Onboarding (wenn kein Profil) →
-// Home. Danach werden keine eigenen Berechtigungs-Screens mehr gezeigt. Hält
-// das Profil separat, damit es als Binding an MainTabView und weiter an Settings
-// gereicht werden kann (S1).
+// Home. Die Einwilligung steht bewusst vor dem Onboarding: Dort werden
+// Rollstuhltyp, Masse und Fähigkeiten erfasst und gespeichert, also
+// gesundheitsbezogene Daten. Danach werden keine eigenen Berechtigungs-Screens
+// mehr gezeigt. Hält das Profil separat, damit es als Binding an MainTabView
+// und weiter an Settings gereicht werden kann (S1).
 struct AuthenticatedRootView: View {
     @EnvironmentObject var authService: AuthService
     @State private var profile: UserProfile?

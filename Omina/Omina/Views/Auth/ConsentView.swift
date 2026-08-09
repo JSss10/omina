@@ -1,12 +1,14 @@
 // ConsentView.swift
 // Omina
 //
-// Datenschutz-Hinweis nach Apples eigenem Muster ("Daten & Datenschutz"-
-// Splash-Screen): Icon, Titel, Daten-Übersicht, Link auf Details und ein
-// einzelner Fortfahren-Button. Rechtlich gilt Apples Standard-Lizenzvertrag
-// für lizenzierte Apps (Standard-EULA) statt eigener Nutzungsbedingungen;
-// die Zustimmung erfolgt – wie bei Apple üblich – durch Tippen auf
-// "Fortfahren". Der Zeitpunkt wird lokal persistiert.
+// Datenschutz-Screen nach Entwurf: Akzentleiste unter der Statusleiste, Titel
+// mit Einleitung, drei Hinweiskarten zu den verarbeiteten Daten, der Link auf
+// die ausführliche Erklärung und – nach Apples Muster für den "Daten &
+// Datenschutz"-Screen – ein einzelner Fortfahren-Button.
+//
+// Rechtlich gilt Apples Standard-Lizenzvertrag für lizenzierte Apps
+// (Standard-EULA) statt eigener Nutzungsbedingungen; die Zustimmung erfolgt
+// durch Tippen auf "Fortfahren". Der Zeitpunkt wird lokal persistiert.
 
 import SwiftUI
 
@@ -33,101 +35,98 @@ struct ConsentView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            BrandAccentBar()
+
             ScrollView {
-                VStack(spacing: 16) {
-                    Image(systemName: "hand.raised.fill")
-                        .font(.system(size: 56))
-                        .foregroundStyle(.tint)
-                        .padding(.top, 48)
+                VStack(alignment: .leading, spacing: AppMetrics.Space.s + AppMetrics.Space.xs) {
+                    header
 
-                    Text("Daten & Datenschutz")
-                        .font(.title)
-                        .bold()
-                        .multilineTextAlignment(.center)
-
-                    Text("Omina verarbeitet nur die Daten, die für die Barriere-Warnungen nötig sind – und nur, während du die App nutzt.")
-                        .font(.body)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 8)
-
-                    VStack(spacing: 12) {
-                        dataRow(
-                            symbolName: "location.fill",
-                            title: "Standort",
-                            detail: "Zeigt Barrieren in deiner Nähe. Keine Ortung im Hintergrund."
-                        )
-                        dataRow(
-                            symbolName: "camera.fill",
-                            title: "Kamera",
-                            detail: "Nur für die AR-Ansicht. Es werden keine Aufnahmen gespeichert."
-                        )
-                        dataRow(
-                            symbolName: "person.crop.rectangle.fill",
-                            title: "Profildaten",
-                            detail: "Dein Mobilitätsprofil, verschlüsselt gespeichert (Supabase, EU-Region)."
-                        )
-                    }
-                    .padding(.top, 8)
+                    InfoCard(
+                        icon: "location.fill",
+                        title: "Standort",
+                        detail: "Zeigt Barrieren in deiner Nähe. Keine Ortung im Hintergrund."
+                    )
+                    InfoCard(
+                        icon: "camera.fill",
+                        title: "Kamera",
+                        detail: "Nur für die AR-Ansicht. Es werden keine Aufnahmen gespeichert."
+                    )
+                    InfoCard(
+                        icon: "person.crop.rectangle.fill",
+                        title: "Profildaten",
+                        detail: "Dein Mobilitätsprofil, verschlüsselt gespeichert (Supabase, EU-Region)."
+                    )
 
                     NavigationLink {
                         PrivacyView()
                     } label: {
                         Text("Weitere Informationen zum Datenschutz …")
-                            .font(.footnote)
+                            .font(AppTypography.body)
+                            .foregroundStyle(AppColor.accentPrimary)
+                            .frame(minHeight: AppMetrics.Touch.minimum, alignment: .leading)
+                            .contentShape(Rectangle())
                     }
-                    .padding(.top, 4)
+                    .padding(.top, AppMetrics.Space.s)
+
+                    legalNotice
                 }
-                .padding(.horizontal, 24)
+                .padding(.horizontal, AppMetrics.Space.l)
+                .padding(.bottom, AppMetrics.Space.m)
             }
 
-            // Fusszeile nach Apple-Muster: Zustimmung durch Fortfahren,
-            // rechtliche Grundlage ist Apples Standard-EULA.
-            VStack(spacing: 12) {
-                Text("Durch Tippen auf „Fortfahren“ akzeptierst du den [Standard-Lizenzvertrag (EULA) von Apple](https://www.apple.com/legal/internet-services/itunes/dev/stdeula/) und die Datenschutzerklärung.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 8)
-
-                Button {
-                    ConsentStore.recordConsent()
-                    TestAnalyticsService.shared.track("consent_given", screen: "consent")
-                    onContinue()
-                } label: {
-                    Text("Fortfahren")
-                        .font(.headline)
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 56)
-                        .background(Color.accentColor)
-                        .cornerRadius(12)
-                }
-            }
-            .padding(.horizontal, 24)
-            .padding(.top, 12)
-            .padding(.bottom, 24)
+            footer
         }
+        .background(AppColor.backgroundPrimary.ignoresSafeArea())
+        // Wie im Entwurf ohne Navigationsleiste; die Akzentleiste sitzt direkt
+        // unter der Statusleiste.
+        .toolbar(.hidden, for: .navigationBar)
     }
 
-    private func dataRow(symbolName: String, title: String, detail: String) -> some View {
-        HStack(alignment: .top, spacing: 14) {
-            Image(systemName: symbolName)
-                .font(.title3)
-                .foregroundStyle(.tint)
-                .frame(width: 32)
+    private var header: some View {
+        VStack(alignment: .leading, spacing: AppMetrics.Space.m) {
+            Text("Datenschutz")
+                .font(AppTypography.largeTitle)
+                .foregroundStyle(AppColor.textBrand)
+                .accessibilityAddTraits(.isHeader)
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(.body.weight(.semibold))
-                Text(detail)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-
-            Spacer()
+            Text("Omina verarbeitet nur die Daten, die für die Barriere-Warnungen nötig sind – und nur, während du die App nutzt. Nichts davon wird weiterverkauft oder für Werbung genutzt.")
+                .font(AppTypography.body)
+                .foregroundStyle(AppColor.textSecondary)
         }
-        .padding(14)
-        .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 12))
+        .fixedSize(horizontal: false, vertical: true)
+        .padding(.top, AppMetrics.Space.xxl + AppMetrics.Space.m)
+        .padding(.bottom, AppMetrics.Space.l)
+    }
+
+    /// Zustimmung durch Fortfahren – rechtliche Grundlage ist Apples
+    /// Standard-EULA.
+    private var legalNotice: some View {
+        Text("Mit «Fortfahren» akzeptierst du den [Standard-Lizenzvertrag (EULA) von Apple](https://www.apple.com/legal/internet-services/itunes/dev/stdeula/) und die Datenschutzerklärung. Du kannst deine Daten in den Einstellungen jederzeit einsehen und löschen.")
+            .font(AppTypography.body)
+            .foregroundStyle(AppColor.textSecondary)
+            .tint(AppColor.accentPrimary)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.top, AppMetrics.Space.xxl)
+    }
+
+    private var footer: some View {
+        Button {
+            ConsentStore.recordConsent()
+            TestAnalyticsService.shared.track("consent_given", screen: "consent")
+            onContinue()
+        } label: {
+            Text("Fortfahren")
+        }
+        .buttonStyle(.appPrimary)
+        .padding(.horizontal, AppMetrics.Space.l)
+        .padding(.top, AppMetrics.Space.m)
+        .padding(.bottom, AppMetrics.Space.s)
+        .background(AppColor.backgroundPrimary)
+    }
+}
+
+#Preview {
+    NavigationStack {
+        ConsentView(onContinue: {})
     }
 }

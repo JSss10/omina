@@ -1,38 +1,16 @@
 // Screen16_Summary.swift
-// Omina – Onboarding Schritt 6/6: Profil-Zusammenfassung.
-// Zeigt alle gewählten Werte und speichert das Profil in Supabase.
+// Omina – Onboarding Schritt 7/8: Profil-Zusammenfassung.
+// Zeigt alle gewählten Werte, gruppiert in getönten Karten (Entwurf).
+// Gespeichert wird erst im letzten Schritt; der Speicherzustand steht deshalb
+// im OnboardingCoordinator über der Fusszeile.
 
 import SwiftUI
 
 struct Screen16_Summary: View {
     let draft: DraftProfile
-    let isSaving: Bool
-    let errorMessage: String?
 
     var body: some View {
-        VStack(spacing: 18) {
-            if isSaving {
-                ProgressView("Profil wird gespeichert…")
-                    .tint(AppColor.accentPrimary)
-                    .padding()
-            }
-
-            if let errorMessage {
-                HStack(alignment: .top, spacing: 10) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundStyle(AppColor.Status.blockedIcon)
-                    Text(errorMessage)
-                        .font(AppTypography.footnote)
-                        .foregroundStyle(AppColor.Status.blockedText)
-                }
-                .padding()
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(
-                    RoundedRectangle(cornerRadius: AppMetrics.Radius.field, style: .continuous)
-                        .fill(AppColor.Status.blockedFill)
-                )
-            }
-
+        VStack(alignment: .leading, spacing: AppMetrics.Space.l) {
             SummarySection(title: "Mobilität") {
                 SummaryRow(
                     label: "Kategorie",
@@ -85,9 +63,9 @@ struct Screen16_Summary: View {
             Text("Du kannst dein Profil später in den Einstellungen jederzeit anpassen.")
                 .font(AppTypography.footnote)
                 .foregroundStyle(AppColor.textSecondary)
-                .multilineTextAlignment(.center)
-                .padding(.top, 4)
+                .fixedSize(horizontal: false, vertical: true)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

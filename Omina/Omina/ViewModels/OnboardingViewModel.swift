@@ -76,11 +76,18 @@ final class OnboardingViewModel: ObservableObject {
             return draft.mobilityCategory == .wheelchair
         case .wheelchairType:
             return draft.wheelchairSubtype != nil
-        case .measurements, .phoneSetup, .abilities, .support:
+        case .measurements, .abilities, .support, .summary:
             return true
-        case .summary:
+        case .phoneSetup:
+            // Letzter Schritt: Von hier aus wird gespeichert, das Profil muss
+            // also vollständig sein.
             return draft.isComplete
         }
+    }
+
+    /// Letzter Schritt des Flows – hier wird gespeichert statt geblättert.
+    var isLastStep: Bool {
+        currentStep == OnboardingStep.allCases.last
     }
 
     // MARK: - Screen 1.2 Side Effect
@@ -137,15 +144,17 @@ final class OnboardingViewModel: ObservableObject {
 
 // MARK: - OnboardingStep
 
+// Reihenfolge gemäss Entwurf: Die Zusammenfassung steht an siebter Stelle,
+// den Abschluss macht die Handy-Ausrichtung – dort wird das Profil gespeichert.
 enum OnboardingStep: Int, CaseIterable {
     case profileSetup     = 1
     case mobilityCategory = 2
     case wheelchairType   = 3
     case measurements     = 4
-    case phoneSetup       = 5
-    case abilities        = 6
-    case support          = 7
-    case summary          = 8
+    case abilities        = 5
+    case support          = 6
+    case summary          = 7
+    case phoneSetup       = 8
 
     var progress: Double {
         Double(rawValue) / Double(Self.allCases.count)

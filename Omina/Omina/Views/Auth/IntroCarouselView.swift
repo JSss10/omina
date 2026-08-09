@@ -56,7 +56,7 @@ struct IntroCarouselView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            accentBar
+            BrandAccentBar()
             skipButton
 
             TabView(selection: $page) {
@@ -95,17 +95,6 @@ struct IntroCarouselView: View {
 
     private var isLastSlide: Bool {
         page >= slides.count - 1
-    }
-
-    /// Akzentleiste unter der Statusleiste (Entwurf): dekorative Markenlinie,
-    /// kein Fortschritt – deshalb durchgehend gefüllt.
-    private var accentBar: some View {
-        Capsule()
-            .fill(AppColor.Violet.v500)
-            .frame(height: 4)
-            .padding(.horizontal, AppMetrics.Space.l)
-            .padding(.top, AppMetrics.Space.s + AppMetrics.Space.xs)
-            .accessibilityHidden(true)
     }
 
     private var skipButton: some View {

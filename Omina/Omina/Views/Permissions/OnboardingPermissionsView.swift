@@ -1,11 +1,14 @@
 // OnboardingPermissionsView.swift
 // Omina
 //
-// Einmaliger Berechtigungs-Screen im Onboarding – direkt nach dem Datenschutz-
-// Screen (ConsentView). Hier gibt die Person einmal die Einwilligung für
-// Standort, Kamera und Mitteilungen; die eigentlichen Abfragen laufen über
-// Apples System-Prompts. Danach wird dieser Screen nie wieder gezeigt: im
-// laufenden Betrieb kommt höchstens noch Apples eigener System-Prompt zum Zug.
+// Einmaliger Berechtigungs-Screen zum Abschluss des Onboardings. Aufbau nach
+// Entwurf: Akzentleiste, Titel mit Einleitung, drei Hinweiskarten und unten
+// die beiden Aktionen «Erlauben» und «Später erlauben».
+//
+// Hier gibt die Person einmal die Einwilligung für Standort, Kamera und
+// Mitteilungen; die eigentlichen Abfragen laufen über Apples System-Prompts.
+// Danach wird dieser Screen nie wieder gezeigt: im laufenden Betrieb kommt
+// höchstens noch Apples eigener System-Prompt zum Zug.
 
 import SwiftUI
 import AVFoundation
@@ -38,49 +41,52 @@ struct OnboardingPermissionsView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            BrandAccentBar()
+
             ScrollView {
-                VStack(spacing: AppMetrics.Space.m) {
-                    Image(systemName: "checkmark.shield.fill")
-                        .font(.system(size: 56))
-                        .foregroundStyle(AppColor.accentPrimary)
-                        .padding(.top, AppMetrics.Space.xxl)
+                VStack(alignment: .leading, spacing: AppMetrics.Space.s + AppMetrics.Space.xs) {
+                    header
 
-                    Text("Zugriff erlauben")
-                        .font(AppTypography.title1)
-                        .foregroundStyle(AppColor.textPrimary)
-                        .multilineTextAlignment(.center)
-
-                    Text("Damit Omina dich vor Barrieren warnen kann, brauchen wir einmalig deine Zustimmung. Du erteilst sie jetzt – später wirst du nicht mehr danach gefragt.")
-                        .font(AppTypography.body)
-                        .foregroundStyle(AppColor.textSecondary)
-                        .multilineTextAlignment(.center)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .padding(.horizontal, AppMetrics.Space.s)
-
-                    VStack(spacing: AppMetrics.Space.s + AppMetrics.Space.xs) {
-                        permissionRow(
-                            icon: "location.fill",
-                            title: "Standort",
-                            detail: "Zeigt Barrieren in deiner Nähe. Keine Ortung im Hintergrund."
-                        )
-                        permissionRow(
-                            icon: "camera.fill",
-                            title: "Kamera",
-                            detail: "Nur für die AR-Ansicht. Es werden keine Aufnahmen gespeichert."
-                        )
-                        permissionRow(
-                            icon: "bell.badge.fill",
-                            title: "Mitteilungen",
-                            detail: "Warnen dich vorausschauend, bevor du eine Barriere erreichst."
-                        )
-                    }
-                    .padding(.top, AppMetrics.Space.s)
+                    InfoCard(
+                        icon: "location.fill",
+                        title: "Standort",
+                        detail: "Zeigt Barrieren in deiner Nähe. Keine Ortung im Hintergrund."
+                    )
+                    InfoCard(
+                        icon: "camera.fill",
+                        title: "Kamera",
+                        detail: "Nur für die AR-Ansicht. Es werden keine Aufnahmen gespeichert."
+                    )
+                    InfoCard(
+                        icon: "bell.badge.fill",
+                        title: "Mitteilungen",
+                        detail: "Warnen dich vorausschauend, bevor du eine Barriere erreichst."
+                    )
                 }
                 .padding(.horizontal, AppMetrics.Space.l)
+                .padding(.bottom, AppMetrics.Space.m)
             }
 
             footer
         }
+        .background(AppColor.backgroundPrimary.ignoresSafeArea())
+        .toolbar(.hidden, for: .navigationBar)
+    }
+
+    private var header: some View {
+        VStack(alignment: .leading, spacing: AppMetrics.Space.m) {
+            Text("Zugriff erlauben")
+                .font(AppTypography.largeTitle)
+                .foregroundStyle(AppColor.textBrand)
+                .accessibilityAddTraits(.isHeader)
+
+            Text("Damit Omina dich vor Barrieren warnen kann, brauchen wir einmalig deine Zustimmung. Du erteilst sie jetzt – später wirst du nicht mehr danach gefragt.")
+                .font(AppTypography.body)
+                .foregroundStyle(AppColor.textSecondary)
+        }
+        .fixedSize(horizontal: false, vertical: true)
+        .padding(.top, AppMetrics.Space.xxl + AppMetrics.Space.m)
+        .padding(.bottom, AppMetrics.Space.l)
     }
 
     private var footer: some View {
@@ -105,36 +111,9 @@ struct OnboardingPermissionsView: View {
             .disabled(isRequesting)
         }
         .padding(.horizontal, AppMetrics.Space.l)
-        .padding(.top, AppMetrics.Space.s)
-        .padding(.bottom, AppMetrics.Space.l)
+        .padding(.top, AppMetrics.Space.m)
+        .padding(.bottom, AppMetrics.Space.s)
         .background(AppColor.backgroundPrimary)
-    }
-
-    private func permissionRow(icon: String, title: String, detail: String) -> some View {
-        HStack(alignment: .top, spacing: AppMetrics.Space.m - AppMetrics.Space.xs) {
-            Image(systemName: icon)
-                .font(.title3)
-                .foregroundStyle(AppColor.accentPrimary)
-                .frame(width: 32)
-
-            VStack(alignment: .leading, spacing: AppMetrics.Space.xs / 2) {
-                Text(title)
-                    .font(AppTypography.headline)
-                    .foregroundStyle(AppColor.textPrimary)
-                Text(detail)
-                    .font(AppTypography.footnote)
-                    .foregroundStyle(AppColor.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            Spacer(minLength: 0)
-        }
-        .padding(AppMetrics.Space.m - AppMetrics.Space.xs)
-        .frame(maxWidth: .infinity)
-        .background(
-            RoundedRectangle(cornerRadius: AppMetrics.Radius.card, style: .continuous)
-                .fill(AppColor.surfaceRaised)
-        )
     }
 
     // MARK: - Anfragen
@@ -186,4 +165,8 @@ struct OnboardingPermissionsView: View {
         NotificationPermissionStore.markAsked()
         onFinished()
     }
+}
+
+#Preview {
+    OnboardingPermissionsView(onFinished: {})
 }

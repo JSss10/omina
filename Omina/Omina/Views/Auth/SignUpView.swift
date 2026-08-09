@@ -54,7 +54,7 @@ struct SignUpView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            accentBar
+            BrandAccentBar()
 
             ScrollView {
                 VStack(alignment: .leading, spacing: AppMetrics.Space.s + AppMetrics.Space.xs) {
@@ -80,16 +80,6 @@ struct SignUpView: View {
     }
 
     // MARK: - Rahmen
-
-    /// Akzentleiste unter der Statusleiste, wie im Intro.
-    private var accentBar: some View {
-        Capsule()
-            .fill(AppColor.Violet.v500)
-            .frame(height: 4)
-            .padding(.horizontal, AppMetrics.Space.l)
-            .padding(.top, AppMetrics.Space.s + AppMetrics.Space.xs)
-            .accessibilityHidden(true)
-    }
 
     private var header: some View {
         VStack(alignment: .leading, spacing: AppMetrics.Space.s) {

@@ -56,6 +56,11 @@ SF Pro über die SwiftUI-Text-Styles → Dynamic Type bis AX5 (§03).
   (Vorwahl + Nummer, Zahlenfelder in Karten) dieselbe Fläche.
 - `SelectionRow(label:icon:selected:)` und `SelectionMark(selected:)` — getönte
   Auswahlzeile mit gepunktetem Ring (offen) bzw. gefülltem Häkchen (gewählt).
+- `InfoCard(icon:title:detail:)` — Hinweiskarte mit Symbol im hellvioletten
+  Kreis (Handy-Ausrichtung, Datenschutz, Zugriff erlauben).
+- `BrandAccentBar()` — die violette Leiste unter der Statusleiste auf allen
+  Screens ohne Navigationsleiste. Fortschritt zeigt stattdessen
+  `OnboardingProgressBar`.
 - `StatusBadge(status:)` — vierfach codiert: Farbe + Form + Symbol + Text (P2, §2.3).
   Grundformen: Kreis (zugänglich) · Dreieck (eingeschränkt) · Achteck (Barriere).
 
