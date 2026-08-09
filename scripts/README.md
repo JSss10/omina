@@ -58,7 +58,7 @@ Trottoir – sie werden deshalb 4 m quer zur Digitalisierrichtung versetzt
   Schätzwerte folgen DIN 18024-1, wie sie das Wiki zusammenfasst
   (Bordstein max. 3 cm, Nebenweg min. 90 cm, Längsneigung 3 % bzw. 6 % mit
   Verweilplätzen) – dieselben Zahlen stehen in der App unter
-  `Services/AccessibilityStandard.swift`.
+  `Omina/Omina/Services/AccessibilityStandard.swift`.
 
 ### import_ginto.py
 
@@ -131,7 +131,7 @@ die Felder, die das API tatsächlich liefert:
 | `zuerich_name`       | gefundener Name im API – macht die Zuordnung nachvollziehbar              |
 | `info_source`        | Quellenangabe für die Textangaben                                         |
 
-Genau diese Schlüssel liest `POI.swift`. Das Detail-Sheet zeigt daraus das
+Genau diese Schlüssel liest `Omina/Omina/Models/POI.swift`. Das Detail-Sheet zeigt daraus das
 Foto-Karussell, eine Öffnungszeiten-Karte mit hervorgehobenem heutigem Tag
 (dafür `opening_hours_spec`), Telefon- und Webseiten-Zeile sowie die
 Quellenangabe – deren Nennung verlangt die Lizenz von Zürich Tourismus.
@@ -162,7 +162,7 @@ OK 128 von 439 POIs im API gefunden (29 %)
 | `--yes`               | ohne Rückfrage schreiben                                                               |
 
 Neben dem Backup-JSON schreibt das Script ein idempotentes
-`poi_zuerich_<zeitstempel>.sql`. Damit lassen sich die Angaben auch ohne
+`data/exports/poi_zuerich_<zeitstempel>.sql`. Damit lassen sich die Angaben auch ohne
 Service-Key über den Supabase-SQL-Editor einspielen (die UPDATEs mergen per
 `||` in das bestehende JSONB, alles andere bleibt stehen).
 
@@ -194,4 +194,9 @@ python3 import_zuerich.py --seed-file ../Omina/Omina/Seed/seed_pois.json
 
 ## Backups
 
-Beide Scripts erstellen automatisch ein JSON-Backup mit Zeitstempel vor dem Import. Diese kannst du im Repo behalten oder als Referenz für die Thesis verwenden.
+Alle drei Scripts schreiben vor dem Import ein JSON-Backup mit Zeitstempel nach
+`data/exports/` – unabhängig davon, aus welchem Verzeichnis sie gestartet wurden.
+`import_zuerich.py` legt dort zusätzlich ein idempotentes SQL-Script ab.
+
+Die Läufe, die in der Arbeit belegt werden, sind eingecheckt; jeder weitere Lauf
+bleibt lokal (`.gitignore`), damit das Repository nicht mit jedem Import wächst.
