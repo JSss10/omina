@@ -39,11 +39,17 @@ struct POIDetailSheet: View {
             VStack(alignment: .leading, spacing: AppMetrics.Space.l) {
                 header
                 photoCarousel
+                descriptionText
                 eurokeyHint
+                // Zugänglichkeit zuerst, danach die praktischen Angaben aus
+                // dem Zürich-Tourismus-API (Zeiten, Kontakt, Webseite).
                 ratingsCard
                 accessStatusLine
+                openingHoursCard
                 detailsCard
+                phoneRow
                 websiteRow
+                infoSourceNote
 
                 VStack(spacing: AppMetrics.Space.s + AppMetrics.Space.xs) {
                     arButton
@@ -139,38 +145,191 @@ struct POIDetailSheet: View {
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
-    /// Foto-Karussell (ginto-Bilder des Ortes) als vollbreites Hero-Bild.
-    /// Bei mehreren Bildern paged mit dezenten Indikatoren.
+    /// Foto-Karussell des Ortes als vollbreites Hero-Bild, darunter der
+    /// Bildnachweis. Bei mehreren Bildern paged mit dezenten Indikatoren.
+    /// Kennt das Zürich-Tourismus-API den Ort nicht, steht hier ein Platzhalter.
     @ViewBuilder
     private var photoCarousel: some View {
-        let urls = poi.imageURLs
-        if !urls.isEmpty {
-            Group {
-                if urls.count == 1 {
-                    photo(urls[0])
-                } else {
-                    TabView(selection: $photoIndex) {
-                        ForEach(Array(urls.enumerated()), id: \.element.absoluteString) { index, url in
-                            photo(url).tag(index)
+        let images = poi.images
+        if images.isEmpty {
+            photoPlaceholder
+        } else {
+            VStack(alignment: .leading, spacing: AppMetrics.Space.xs) {
+                Group {
+                    if images.count == 1 {
+                        photo(images[0])
+                    } else {
+                        TabView(selection: $photoIndex) {
+                            ForEach(Array(images.enumerated()), id: \.element.id) { index, image in
+                                photo(image).tag(index)
+                            }
                         }
+                        .tabViewStyle(.page(indexDisplayMode: .always))
+                        .indexViewStyle(.page(backgroundDisplayMode: .interactive))
                     }
-                    .tabViewStyle(.page(indexDisplayMode: .always))
-                    .indexViewStyle(.page(backgroundDisplayMode: .interactive))
+                }
+                .frame(height: 200)
+                .frame(maxWidth: .infinity)
+                .background(AppColor.surfaceRaised)
+                .clipShape(RoundedRectangle(cornerRadius: AppMetrics.Radius.card, style: .continuous))
+                // Nur ein Label auf dem Container – die Seiten des Karussells
+                // bleiben für VoiceOver einzeln bedienbar.
+                .accessibilityLabel(photoAccessibilityLabel(images))
+
+                // Bildunterschrift und Quellenangabe unter dem Bild statt als
+                // Overlay – sonst läge sie hinter den Seiten-Indikatoren.
+                // Die Nennung der Quelle verlangt die Lizenz der Bildquelle.
+                if let line = photoCaptionLine(images) {
+                    Text(line)
+                        .font(AppTypography.footnote)
+                        .foregroundStyle(AppColor.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityHidden(true)
                 }
             }
-            .frame(height: 200)
-            .frame(maxWidth: .infinity)
-            .background(AppColor.surfaceRaised)
-            .clipShape(RoundedRectangle(cornerRadius: AppMetrics.Radius.card, style: .continuous))
-            .accessibilityLabel("Fotos von \(poi.name)")
         }
     }
 
-    private func photo(_ url: URL) -> some View {
-        AsyncImage(url: url) { phase in
+    /// Platzhalter, wenn zum Ort kein Foto vorliegt. Bewusst flacher als das
+    /// Karussell – eine leere Fläche in voller Höhe würde das Sheet dominieren.
+    private var photoPlaceholder: some View {
+        VStack(spacing: AppMetrics.Space.s) {
+            Image(systemName: "photo")
+                .font(.largeTitle)
+                .foregroundStyle(AppColor.textSecondary)
+            Text("Kein Foto verfügbar")
+                .font(AppTypography.footnote)
+                .foregroundStyle(AppColor.textSecondary)
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: 140)
+        .background(
+            AppColor.surfaceTinted,
+            in: RoundedRectangle(cornerRadius: AppMetrics.Radius.card, style: .continuous)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: AppMetrics.Radius.card, style: .continuous)
+                .strokeBorder(AppColor.borderDecorative, lineWidth: 0.5)
+        )
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Kein Foto von \(poi.name) verfügbar")
+    }
+
+    /// Kurzbeschreibung des Ortes, sofern das Zürich-Tourismus-API eine liefert.
+    @ViewBuilder
+    private var descriptionText: some View {
+        if let text = poi.placeDescription {
+            Text(text)
+                .font(AppTypography.body)
+                .foregroundStyle(AppColor.textSecondary)
+                .lineSpacing(6)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    /// Öffnungszeiten mit hervorgehobenem heutigem Tag. Die Karte steht auch
+    /// ohne Daten – dann als Platzhalter, damit im Sheet nichts fehlt.
+    private var openingHoursCard: some View {
+        let hours = poi.openingHours
+        let today = poi.openingHoursToday()
+
+        return VStack(alignment: .leading, spacing: AppMetrics.Space.s) {
+            HStack(spacing: AppMetrics.Space.m) {
+                Image(systemName: "clock")
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(hours.isEmpty ? AppColor.textSecondary : AppColor.accentPrimary)
+                    .frame(width: 28)
+
+                Text("Öffnungszeiten")
+                    .font(AppTypography.headline)
+                    .foregroundStyle(AppColor.textPrimary)
+
+                Spacer(minLength: AppMetrics.Space.s)
+
+                if let today {
+                    Text("Heute \(today)")
+                        .font(AppTypography.subheadline.weight(.semibold))
+                        .foregroundStyle(AppColor.textPrimary)
+                        .multilineTextAlignment(.trailing)
+                }
+            }
+
+            VStack(alignment: .leading, spacing: AppMetrics.Space.xs) {
+                if hours.isEmpty {
+                    Text("Für diesen Ort liegen keine Öffnungszeiten vor.")
+                        .font(AppTypography.subheadline)
+                        .foregroundStyle(AppColor.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                } else {
+                    ForEach(hours, id: \.self) { line in
+                        Text(line)
+                            .font(AppTypography.subheadline)
+                            .foregroundStyle(AppColor.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+            // Auf die Höhe des Icons eingerückt, damit die Zeiten unter dem
+            // Titel stehen und nicht unter dem Symbol beginnen.
+            .padding(.leading, 28 + AppMetrics.Space.m)
+        }
+        .padding(AppMetrics.Space.m)
+        .cardBackground()
+        .accessibilityElement(children: .combine)
+    }
+
+    /// Telefonnummer als eigene Zeile – vorab anrufen ist im Rollstuhl-Alltag
+    /// oft der schnellste Weg, offene Fragen zur Zugänglichkeit zu klären.
+    @ViewBuilder
+    private var phoneRow: some View {
+        if let number = poi.phoneNumber, let url = poi.phoneURL {
+            linkRow(
+                icon: "phone.fill",
+                title: "Telefon",
+                value: number,
+                url: url,
+                accessibilityLabel: "Anrufen, \(number)"
+            )
+        }
+    }
+
+    /// Quellenangabe für die übernommenen Text- und Kontaktangaben.
+    @ViewBuilder
+    private var infoSourceNote: some View {
+        if let credit = poi.infoCredit {
+            Text("Angaben: \(credit)")
+                .font(AppTypography.footnote)
+                .foregroundStyle(AppColor.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    /// Bildunterschrift des gerade sichtbaren Fotos plus Bildnachweis,
+    /// z. B. «Saal im Literaturhaus · Foto: Zürich Tourismus (zuerich.com)».
+    private func photoCaptionLine(_ images: [POIImage]) -> String? {
+        let current = images.indices.contains(photoIndex) ? images[photoIndex] : images.first
+        let credit = current?.credit ?? poi.imageCredit
+        let parts = [current?.caption, credit.map { "Foto: \($0)" }].compactMap { $0 }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    /// Ein Sammel-Label statt vieler Einzelbilder: VoiceOver liest die
+    /// Anzahl, die Bildunterschriften und den Bildnachweis am Stück.
+    private func photoAccessibilityLabel(_ images: [POIImage]) -> String {
+        var parts = [images.count == 1 ? "Foto von \(poi.name)"
+                                       : "\(images.count) Fotos von \(poi.name)"]
+        parts.append(contentsOf: images.compactMap(\.caption))
+        if let credit = poi.imageCredit {
+            parts.append("Bildnachweis: \(credit)")
+        }
+        return parts.joined(separator: ", ")
+    }
+
+    private func photo(_ image: POIImage) -> some View {
+        AsyncImage(url: image.url) { phase in
             switch phase {
-            case .success(let image):
-                image
+            case .success(let loaded):
+                loaded
                     .resizable()
                     .scaledToFill()
             case .failure:
@@ -284,8 +443,9 @@ struct POIDetailSheet: View {
         if let details = poi.accessibilityDetails, !details.isEmpty {
             let rows = details.keys.sorted().compactMap { key -> (String, String)? in
                 // URL-/Webseiten-Felder werden separat als «Webseite»-Zeile
-                // gezeigt (websiteRow); interne Quell-Schlüssel bleiben aussen vor.
-                guard !isWebsiteKey(key) else { return nil }
+                // gezeigt (websiteRow), Bildfelder als Foto-Karussell mit
+                // Bildnachweis; interne Quell-Schlüssel bleiben aussen vor.
+                guard !isShownElsewhere(key) else { return nil }
                 guard let text = displayValue(details[key]) else { return nil }
                 return (key, text)
             }
@@ -323,34 +483,52 @@ struct POIDetailSheet: View {
     @ViewBuilder
     private var websiteRow: some View {
         if let url = poi.websiteURL {
-            Link(destination: url) {
-                HStack(spacing: AppMetrics.Space.m) {
-                    Image(systemName: "safari")
-                        .font(.title3.weight(.semibold))
-                        .foregroundStyle(AppColor.accentPrimary)
-                        .frame(width: 28)
-
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Webseite")
-                            .font(AppTypography.headline)
-                            .foregroundStyle(AppColor.textPrimary)
-                        Text(cleanHost(url))
-                            .font(AppTypography.footnote)
-                            .foregroundStyle(AppColor.textSecondary)
-                            .lineLimit(1)
-                    }
-
-                    Spacer(minLength: AppMetrics.Space.s)
-
-                    Image(systemName: "arrow.up.right")
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(AppColor.textSecondary)
-                }
-                .padding(AppMetrics.Space.m)
-                .cardBackground()
-            }
-            .accessibilityLabel("Webseite öffnen, \(cleanHost(url))")
+            linkRow(
+                icon: "safari",
+                title: "Webseite",
+                value: cleanHost(url),
+                url: url,
+                accessibilityLabel: "Webseite öffnen, \(cleanHost(url))"
+            )
         }
+    }
+
+    /// Angehobene Zeile mit Icon, Titel und Wert, die einen Link öffnet –
+    /// gemeinsame Form für Telefon und Webseite.
+    private func linkRow(
+        icon: String,
+        title: String,
+        value: String,
+        url: URL,
+        accessibilityLabel: String
+    ) -> some View {
+        Link(destination: url) {
+            HStack(spacing: AppMetrics.Space.m) {
+                Image(systemName: icon)
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(AppColor.accentPrimary)
+                    .frame(width: 28)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(AppTypography.headline)
+                        .foregroundStyle(AppColor.textPrimary)
+                    Text(value)
+                        .font(AppTypography.footnote)
+                        .foregroundStyle(AppColor.textSecondary)
+                        .lineLimit(1)
+                }
+
+                Spacer(minLength: AppMetrics.Space.s)
+
+                Image(systemName: "arrow.up.right")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(AppColor.textSecondary)
+            }
+            .padding(AppMetrics.Space.m)
+            .cardBackground()
+        }
+        .accessibilityLabel(accessibilityLabel)
     }
 
     /// Host einer URL ohne Schema und führendes «www.» – für eine ruhige,
@@ -363,11 +541,20 @@ struct POIDetailSheet: View {
         return host
     }
 
-    /// Schlüssel, deren Wert eine Webseite/URL ist – separat als websiteRow
-    /// dargestellt und in der Detail-Tabelle ausgeblendet.
-    private func isWebsiteKey(_ key: String) -> Bool {
+    /// Schlüssel, die die Detail-Tabelle auslässt, weil sie an anderer Stelle
+    /// stehen: Webseiten/URLs als websiteRow, Fotos am Karussell, Zeiten in
+    /// der Öffnungszeiten-Karte, Telefon als eigene Zeile. `zuerich_name`
+    /// dient nur der Nachvollziehbarkeit des Imports.
+    private func isShownElsewhere(_ key: String) -> Bool {
+        let handled: Set<String> = [
+            "website", "homepage",
+            "images", "image_source",
+            "opening_hours", "opening_hours_spec",
+            "phone", "description",
+            "info_source", "zuerich_name",
+        ]
         let k = key.lowercased()
-        return k.contains("url") || k == "website" || k == "homepage"
+        return k.contains("url") || handled.contains(k)
     }
 
     private var arButton: some View {
@@ -531,6 +718,8 @@ struct POIDetailSheet: View {
         case "ramp":                      return "Rampe"
         case "elevator", "lift":          return "Aufzug"
         case "parking":                   return "Parkplatz"
+        case "email":                     return "E-Mail"
+        case "price_range":               return "Preisniveau"
         default:
             return key.replacingOccurrences(of: "_", with: " ").capitalized
         }

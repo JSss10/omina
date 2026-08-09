@@ -146,12 +146,13 @@ SELECT * FROM test_event_overview WHERE test_day = '2026-07-21';
 
 ## Datenquellen
 
-| Quelle           | Typ                                                                                                       | Lizenz                               |
-| ---------------- | --------------------------------------------------------------------------------------------------------- | ------------------------------------ |
-| OpenStreetMap    | Barrieren (kerb/sloped_curb, incline, surface, smoothness, tracktype, width, steps, sidewalk:\*, barrier) | ODbL                                 |
-| OpenRouteService | Alternativroute um eine einzelne Barriere herum (Profil `wheelchair`, avoid_polygons)                     | ODbL (OSM) / ORS-Nutzungsbedingungen |
-| ginto API        | POI-Zugänglichkeit (GraphQL, POIs ganze Schweiz)                                                          | Nutzungsbedingungen ginto            |
-| Wheelmap         | POI wheelchair=yes/limited/no                                                                             | CC-BY-SA                             |
+| Quelle           | Typ                                                                                                       | Lizenz                                     |
+| ---------------- | --------------------------------------------------------------------------------------------------------- | ------------------------------------------ |
+| OpenStreetMap    | Barrieren (kerb/sloped_curb, incline, surface, smoothness, tracktype, width, steps, sidewalk:\*, barrier) | ODbL                                       |
+| OpenRouteService | Alternativroute um eine einzelne Barriere herum (Profil `wheelchair`, avoid_polygons)                     | ODbL (OSM) / ORS-Nutzungsbedingungen       |
+| ginto API        | POI-Zugänglichkeit (GraphQL, POIs ganze Schweiz)                                                          | Nutzungsbedingungen ginto                  |
+| Zürich Tourismus | POI-Fotos, Öffnungszeiten, Kontakt (Open Data 2.0, `/en/api/v2/data`)                                     | Open Data Zürich Tourismus, Quellennennung |
+| Wheelmap         | POI wheelchair=yes/limited/no                                                                             | CC-BY-SA                                   |
 
 Die Standardroute ist die Fussgängerroute – sie nimmt den Weg, den man auch
 selbst nehmen würde. Die Rollstuhl-Perspektive steckt in der personalisierten
@@ -159,6 +160,14 @@ Bewertung der Barrieren entlang dieser Route, nicht in der Geometrie: In der
 Altstadt sind `width`, `surface` und `incline` an zu wenigen Gassen erfasst,
 als dass ein Rollstuhl-Routing dort brauchbare Wege liefern würde (es schlug
 im Feldtest weiträumige Umwege um Ziele vor, die nebenan lagen).
+
+Fotos, Öffnungszeiten und Kontaktangaben im POI-Detail kommen aus dem
+[Open-Data-API von Zürich Tourismus](https://www.zuerich.com/en/open-data-version-20)
+(Version 2.0). `scripts/import_zuerich.py` prüft jeden ginto-POI gegen dieses
+API – zugeordnet wird über Distanz und Namensähnlichkeit – und schreibt die
+Treffer nach `accessibility_details`. Kennt das API einen Ort nicht, zeigt das
+Detail-Sheet Platzhalter statt leerer Flächen. Die Quellenangabe steht unter
+den Fotos und den übernommenen Angaben; die Lizenz verlangt die Nennung.
 
 Welche OSM-Tags für die Barrieren ausgewertet werden und wie sie bewertet
 werden, richtet sich nach dem OSM-Wiki, Projekt
@@ -173,4 +182,4 @@ Dieses Projekt verwendet [Conventional Commits](https://www.conventionalcommits.
 ## Lizenz
 
 © 2026 Jessica Schneiter, SAE Institut Zürich. Bachelorarbeit, nicht für kommerzielle Nutzung.  
-OpenStreetMap: © OpenStreetMap Contributors, ODbL | ginto: © ginto guide AG
+OpenStreetMap: © OpenStreetMap Contributors, ODbL | ginto: © ginto guide AG | Fotos: © Zürich Tourismus (zuerich.com)

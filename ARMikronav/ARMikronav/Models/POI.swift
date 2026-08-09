@@ -39,22 +39,128 @@ struct POI: Codable, Identifiable {
         }
     }
 
-    // MARK: - ginto-Detailinformationen (accessibility_details JSONB)
+    // MARK: - Detailinformationen (accessibility_details JSONB)
 
-    /// Bild-URLs des Ortes aus dem ginto-Import (accessibility_details.images,
-    /// als Strings oder Objekte mit "url"). Leer, wenn keine Bilder vorliegen.
-    var imageURLs: [URL] {
+    /// Fotos des Ortes aus accessibility_details.images – als reine URL-Strings
+    /// (ginto-Import) oder als Objekte mit url/caption/credit (Import aus dem
+    /// Open-Data-API von Zürich Tourismus, scripts/import_zuerich.py).
+    /// Leer, wenn keine Bilder vorliegen.
+    var images: [POIImage] {
         guard case .array(let items)? = accessibilityDetails?["images"] else { return [] }
         return items.compactMap { item in
             switch item {
             case .string(let urlString):
-                return URL(string: urlString)
+                guard let url = URL(string: urlString) else { return nil }
+                return POIImage(url: url, caption: nil, credit: fallbackImageCredit)
             case .object(let dict):
-                guard case .string(let urlString)? = dict["url"] else { return nil }
-                return URL(string: urlString)
+                guard case .string(let urlString)? = dict["url"],
+                      let url = URL(string: urlString)
+                else { return nil }
+                return POIImage(
+                    url: url,
+                    caption: string(dict["caption"]),
+                    credit: string(dict["credit"]) ?? fallbackImageCredit
+                )
             default:
                 return nil
             }
+        }
+    }
+
+    /// Bildnachweis für alle Fotos ohne eigenen Credit
+    /// (accessibility_details.image_source, vom Import gesetzt).
+    private var fallbackImageCredit: String? {
+        string(accessibilityDetails?["image_source"])
+    }
+
+    /// Quellenangabe unter dem Foto-Karussell: die Rechteinhaber der
+    /// angezeigten Bilder, ohne Wiederholungen. Die Nennung ist von der
+    /// Lizenz der Bildquelle verlangt.
+    var imageCredit: String? {
+        var credits: [String] = []
+        for credit in images.compactMap(\.credit) where !credits.contains(credit) {
+            credits.append(credit)
+        }
+        return credits.isEmpty ? nil : credits.joined(separator: ", ")
+    }
+
+    private func string(_ value: AnyJSON?) -> String? {
+        guard case .string(let text)? = value else { return nil }
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    // MARK: - Angaben aus dem Zürich-Tourismus-Import
+    // Gefüllt von scripts/import_zuerich.py, sofern der POI im Open-Data-API
+    // von Zürich Tourismus gefunden wurde. Fehlt der Eintrag dort, bleiben
+    // die Felder leer und das Detail-Sheet zeigt Platzhalter.
+
+    /// Öffnungszeiten als fertige Anzeigezeilen, z. B. «Mo-Fr 09:00-18:00».
+    var openingHours: [String] {
+        switch accessibilityDetails?["opening_hours"] {
+        case .array(let items)?:
+            return items.compactMap { string($0) }
+        case .string(let line)?:
+            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? [] : [trimmed]
+        default:
+            return []
+        }
+    }
+
+    /// Zeiten des heutigen Wochentags, z. B. «09:00–18:00» – aus der
+    /// strukturierten Fassung (opening_hours_spec, Tage 1 = Montag … 7 = Sonntag).
+    /// Datum und Kalender sind Parameter, damit die Tests einen Tag festlegen können.
+    func openingHoursToday(_ date: Date = Date(), calendar: Calendar = .current) -> String? {
+        guard case .array(let entries)? = accessibilityDetails?["opening_hours_spec"]
+        else { return nil }
+
+        // Calendar zählt Sonntag = 1, die Daten zählen ISO (Montag = 1).
+        let weekday = calendar.component(.weekday, from: date)
+        let today = ((weekday + 5) % 7) + 1
+
+        var ranges: [String] = []
+        for entry in entries {
+            guard case .object(let dict) = entry,
+                  case .array(let days)? = dict["days"],
+                  let opens = string(dict["opens"]),
+                  let closes = string(dict["closes"]),
+                  days.contains(where: { integer($0) == today })
+            else { continue }
+            let range = "\(opens)–\(closes)"
+            if !ranges.contains(range) { ranges.append(range) }
+        }
+        return ranges.isEmpty ? nil : ranges.joined(separator: ", ")
+    }
+
+    /// Telefonnummer des Ortes – im Rollstuhl-Alltag oft der schnellste Weg,
+    /// die Zugänglichkeit vorab abzuklären.
+    var phoneNumber: String? { string(accessibilityDetails?["phone"]) }
+
+    /// `tel:`-Link zur Telefonnummer, ohne Leer- und Sonderzeichen.
+    var phoneURL: URL? {
+        guard let number = phoneNumber else { return nil }
+        let allowed = number.filter { $0.isNumber || $0 == "+" }
+        return allowed.isEmpty ? nil : URL(string: "tel:\(allowed)")
+    }
+
+    /// Kurzbeschreibung des Ortes.
+    var placeDescription: String? { string(accessibilityDetails?["description"]) }
+
+    /// Detailseite des Ortes auf zuerich.com.
+    var zuerichURL: URL? {
+        guard let raw = string(accessibilityDetails?["zuerich_url"]) else { return nil }
+        return URL(string: raw)
+    }
+
+    /// Quellenangabe für die Textangaben (accessibility_details.info_source).
+    var infoCredit: String? { string(accessibilityDetails?["info_source"]) }
+
+    private func integer(_ value: AnyJSON?) -> Int? {
+        switch value {
+        case .integer(let number)?: return number
+        case .double(let number)?:  return Int(number)
+        default:                    return nil
         }
     }
 
@@ -67,7 +173,9 @@ struct POI: Codable, Identifiable {
     /// Webseite des Ortes für die Detailansicht. Nimmt das erste vorhandene
     /// URL-Feld aus den Detaildaten (ohne Bezug auf die Datenquelle in der UI).
     var websiteURL: URL? {
-        let candidateKeys = ["website", "homepage", "url", "ginto_url"]
+        // zuerich_url als Rückfall: Kennt das Tourismus-API den Ort, aber
+        // keine eigene Webseite, führt wenigstens die Detailseite weiter.
+        let candidateKeys = ["website", "homepage", "url", "zuerich_url", "ginto_url"]
         for key in candidateKeys {
             if case .string(let urlString)? = accessibilityDetails?[key],
                let url = normalizedURL(urlString) {
@@ -172,6 +280,18 @@ extension POI {
         self.source = "saved"
         self.distanceM = 0
     }
+}
+
+/// Ein Foto eines Ortes mit Bildunterschrift und Rechteinhaber.
+/// Die Bilder stammen aus dem Open-Data-API von Zürich Tourismus, dessen
+/// Lizenz die Nennung der Quelle verlangt – `credit` wird deshalb immer
+/// mitgeführt und im Detail-Sheet angezeigt.
+struct POIImage: Identifiable, Hashable {
+    let url: URL
+    let caption: String?
+    let credit: String?
+
+    var id: String { url.absoluteString }
 }
 
 /// Eine ginto-Zugänglichkeits-Bewertung für ein Rollstuhl-Profil.
