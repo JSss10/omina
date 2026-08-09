@@ -2,7 +2,7 @@
 // Omina
 //
 // Schreibt BarrierFeedback in die Supabase-Tabelle `user_feedback`.
-// Status defaultet serverseitig auf 'pending' (siehe Database/schema.sql).
+// Status defaultet serverseitig auf 'pending' (siehe supabase/schema.sql).
 //
 // Foto-Upload: best effort in den Storage-Bucket
 // `feedback-photos`. Existiert der Bucket (noch) nicht oder schlägt der

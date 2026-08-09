@@ -6,7 +6,7 @@
 // Zürcher Altstadt geladen. Zeigt Userposition, profilrelevante Barrieren,
 // POI-Marker mit Zugänglichkeits-Status, Suchleiste (inkl. Kategorie-Filter)
 // und ein Annäherungs-Banner. Bei aktiver Route erscheinen nur die Barrieren
-// direkt auf der Route. MapViewModel kommt vom HomeView, damit Filter-
+// direkt auf der Route. MapViewModel kommt vom MainTabView, damit Filter-
 // und Barrieren-State mit dem AR-Modus geteilt werden.
 //
 // Kameraführung während der Navigation (Feldtest-Rückmeldung):
@@ -29,7 +29,7 @@ import CoreLocation
 struct MapView: View {
     let profile: UserProfile
     @ObservedObject var viewModel: MapViewModel
-    /// Startet die AR-Navigation zum POI (HomeView wechselt in den AR-Modus).
+    /// Startet die AR-Navigation zum POI (MainTabView wechselt in den AR-Modus).
     var onStartARRoute: ((POI) -> Void)? = nil
 
     @StateObject private var locationService = LocationService.shared

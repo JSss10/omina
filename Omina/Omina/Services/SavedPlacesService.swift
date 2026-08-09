@@ -3,7 +3,7 @@
 //
 // Speichert POIs in der Supabase-Tabelle saved_places (RLS: user-owned).
 // Die geography-Spalte akzeptiert WKT-Text ('POINT(lng lat)') via PostgREST.
-// Gelesen wird über die RPC saved_places_list (siehe migrations/saved_places_list.sql),
+// Gelesen wird über die RPC saved_places_list (siehe supabase/migrations/saved_places_list.sql),
 // die lat/lng explizit liefert.
 
 import Foundation

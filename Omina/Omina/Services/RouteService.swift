@@ -37,323 +37,6 @@ import MapKit
 import CoreLocation
 import simd
 
-/// Wie die Route berechnet wurde.
-enum RouteKind: Equatable {
-    /// Fussgängerroute (MapKit) – der Standard. Die Geometrie kennt keine
-    /// Barrieren; die Barrieren entlang der Strecke werden separat bewertet,
-    /// angezeigt und angesagt.
-    case walking
-    /// Rollstuhlgerechte OSM-Route (OpenRouteService-Profil "wheelchair") mit
-    /// den persönlichen Limits. Nur noch für die Alternativroute um eine
-    /// konkrete Barriere herum.
-    case wheelchair
-
-    /// Beruht die Route auf dem OSM-Rollstuhl-Routing?
-    var usesOSMWheelchairRouting: Bool { self == .wheelchair }
-
-    /// Symbol für den Manöver-Kreis im Routen-Panel.
-    var symbolName: String {
-        usesOSMWheelchairRouting ? "figure.roll" : "figure.walk"
-    }
-}
-
-/// Eine berechnete Route zu einem Ziel (POI).
-struct ActiveRoute: Identifiable, Equatable {
-    let id: UUID
-    let destinationName: String
-    let destinationCoordinate: CLLocationCoordinate2D
-    /// Wegpunkte des Routen-Polylines (Start → Ziel).
-    let coordinates: [CLLocationCoordinate2D]
-    let totalDistanceM: CLLocationDistance
-    let expectedTravelTimeS: TimeInterval
-    let kind: RouteKind
-    /// Turn-by-turn-Schritte der Route (Manöver + Strasse/Weg) für die
-    /// Listenansicht während der Navigation. Leer, wenn der Routing-Dienst
-    /// keine Schrittdaten liefert.
-    let steps: [RouteStep]
-
-    init(
-        id: UUID = UUID(),
-        destinationName: String,
-        destinationCoordinate: CLLocationCoordinate2D,
-        coordinates: [CLLocationCoordinate2D],
-        totalDistanceM: CLLocationDistance,
-        expectedTravelTimeS: TimeInterval,
-        kind: RouteKind = .wheelchair,
-        steps: [RouteStep] = []
-    ) {
-        self.id = id
-        self.destinationName = destinationName
-        self.destinationCoordinate = destinationCoordinate
-        self.coordinates = coordinates
-        self.totalDistanceM = totalDistanceM
-        self.expectedTravelTimeS = expectedTravelTimeS
-        self.kind = kind
-        self.steps = steps
-    }
-
-    static func == (lhs: ActiveRoute, rhs: ActiveRoute) -> Bool {
-        lhs.id == rhs.id
-    }
-}
-
-/// Verbleibende Distanz und Zeit auf der aktiven Route.
-struct RouteProgress: Equatable {
-    let remainingDistanceM: CLLocationDistance
-    let remainingTimeS: TimeInterval
-
-    /// Ankunft, sobald weniger als 10 m Restweg übrig sind.
-    var hasArrived: Bool { remainingDistanceM < 10 }
-}
-
-/// Fusspunkt des Standorts auf der Route: die Position auf der Polyline
-/// (violette Linie) plus der seitliche Abstand des Rohstandorts zu ihr.
-struct RouteSnap {
-    /// Auf die Route projizierter Punkt (auf der Linie).
-    let coordinate: CLLocationCoordinate2D
-    /// Seitlicher Abstand des Rohstandorts zur Route in Metern.
-    let offsetM: CLLocationDistance
-}
-
-/// Verortung eines Standorts auf der Route: auf welchem Segment er liegt, wie
-/// weit er seitlich daneben liegt und wie viel Weg davor bzw. dahinter liegt.
-/// Gemeinsame Grundlage für Restweg, Einrasten, Abbiege-Ansage und
-/// Kartendrehung – damit alle vier dieselbe Stelle der Route meinen.
-struct RouteFix {
-    /// Index des Segments (Wegpunkt i → i+1), auf das projiziert wurde.
-    let segmentIndex: Int
-    /// Auf die Route projizierter Punkt (auf der Linie).
-    let coordinate: CLLocationCoordinate2D
-    /// Seitlicher Abstand des Rohstandorts zur Route in Metern.
-    let offsetM: CLLocationDistance
-    /// Weglänge vom Routenstart bis zum Fusspunkt.
-    let alongM: CLLocationDistance
-    /// Weglänge vom Fusspunkt bis zum Ziel.
-    let remainingM: CLLocationDistance
-}
-
-/// Richtung des nächsten Manövers entlang der Route (aus der Polyline-
-/// Geometrie abgeleitet). Positiver Winkel = Linkskurve.
-enum ManeuverDirection: Equatable {
-    case straight
-    case slightLeft
-    case slightRight
-    case left
-    case right
-    /// Blickrichtung zeigt (annähernd) entgegengesetzt zur Route – man muss
-    /// sich umdrehen. Entsteht nur aus der egozentrischen Ausrichtung, nicht
-    /// aus der Routengeometrie.
-    case turnAround
-
-    var symbolName: String {
-        switch self {
-        case .straight:    return "arrow.up"
-        case .slightLeft:  return "arrow.up.left"
-        case .slightRight: return "arrow.up.right"
-        case .left:        return "arrow.turn.up.left"
-        case .right:       return "arrow.turn.up.right"
-        case .turnAround:  return "arrow.uturn.down"
-        }
-    }
-
-    /// Verb-Phrase für die Anweisung ("In 40 m …").
-    var phrase: String {
-        switch self {
-        case .straight:    return "geradeaus weiter"
-        case .slightLeft:  return "leicht links halten"
-        case .slightRight: return "leicht rechts halten"
-        case .left:        return "links abbiegen"
-        case .right:       return "rechts abbiegen"
-        case .turnAround:  return "umdrehen"
-        }
-    }
-}
-
-/// Nächstes Manöver auf der aktiven Route: Richtung plus Distanz vom
-/// aktuellen Standort bis zum Abbiegepunkt (bzw. bis zum Ziel bei geradeaus).
-struct RouteManeuver: Equatable {
-    let direction: ManeuverDirection
-    let distanceM: CLLocationDistance
-
-    /// Fertige Anweisung, z. B. "In 40 m links abbiegen" oder "Jetzt
-    /// rechts abbiegen" kurz vor dem Abbiegepunkt.
-    var instruction: String {
-        if direction == .straight {
-            return "Geradeaus weiter"
-        }
-        // Blickt man entgegengesetzt zur Route, ist die klare Ansage "umdrehen"
-        // (kein "jetzt links/rechts" – die Richtung liegt hinter einem).
-        if direction == .turnAround {
-            return "Bitte umdrehen"
-        }
-        if distanceM < 15 {
-            return "Jetzt \(direction.phrase)"
-        }
-        return "In \(DistanceFormatter.string(fromMeters: distanceM)) \(direction.phrase)"
-    }
-}
-
-/// Manöver-Typ eines Routenschritts (aus den OpenRouteService-Instruktions-
-/// typen bzw. aus dem Text der MapKit-Fallback-Route abgeleitet). Liefert
-/// Icon und deutsche Kurzanweisung für die Turn-by-turn-Liste.
-enum StepManeuver: Equatable {
-    case depart
-    case arrive
-    case straight
-    case slightLeft
-    case slightRight
-    case left
-    case right
-    case sharpLeft
-    case sharpRight
-    case keepLeft
-    case keepRight
-    case uTurn
-    case roundabout
-
-    /// SF-Symbol des Manövers (bewusst nur breit verfügbare Symbolnamen).
-    var symbolName: String {
-        switch self {
-        case .depart:      return "figure.roll"
-        case .arrive:      return "mappin.circle.fill"
-        case .straight:    return "arrow.up"
-        case .slightLeft:  return "arrow.up.left"
-        case .slightRight: return "arrow.up.right"
-        case .left:        return "arrow.turn.up.left"
-        case .right:       return "arrow.turn.up.right"
-        case .sharpLeft:   return "arrow.uturn.left"
-        case .sharpRight:  return "arrow.uturn.right"
-        case .keepLeft:    return "arrow.up.left"
-        case .keepRight:   return "arrow.up.right"
-        case .uTurn:       return "arrow.uturn.down"
-        case .roundabout:  return "arrow.clockwise"
-        }
-    }
-
-    /// Kurzanweisung ("Links abbiegen", "Geradeaus weiter", …).
-    var phrase: String {
-        switch self {
-        case .depart:      return "Start"
-        case .arrive:      return "Ziel erreicht"
-        case .straight:    return "Geradeaus weiter"
-        case .slightLeft:  return "Leicht links halten"
-        case .slightRight: return "Leicht rechts halten"
-        case .left:        return "Links abbiegen"
-        case .right:       return "Rechts abbiegen"
-        case .sharpLeft:   return "Scharf links abbiegen"
-        case .sharpRight:  return "Scharf rechts abbiegen"
-        case .keepLeft:    return "Links halten"
-        case .keepRight:   return "Rechts halten"
-        case .uTurn:       return "Wenden"
-        case .roundabout:  return "Kreisverkehr"
-        }
-    }
-
-    /// Abbildung der OpenRouteService-Instruktionstypen (0–13).
-    /// https://openrouteservice.org/dev/#/api-docs/v2/directions
-    static func fromORSType(_ type: Int) -> StepManeuver {
-        switch type {
-        case 0:      return .left
-        case 1:      return .right
-        case 2:      return .sharpLeft
-        case 3:      return .sharpRight
-        case 4:      return .slightLeft
-        case 5:      return .slightRight
-        case 6:      return .straight
-        case 7, 8:   return .roundabout
-        case 9:      return .uTurn
-        case 10:     return .arrive
-        case 11:     return .depart
-        case 12:     return .keepLeft
-        case 13:     return .keepRight
-        default:     return .straight
-        }
-    }
-
-    /// Best-effort-Ableitung aus dem Anweisungstext der MapKit-Fallback-Route
-    /// (die keine strukturierten Manöverdaten liefert).
-    static func fromText(_ text: String, isFirst: Bool) -> StepManeuver {
-        let lower = text.lowercased()
-        if isFirst, lower.isEmpty { return .depart }
-        if lower.contains("ziel") || lower.contains("angekommen") || lower.contains("erreicht") {
-            return .arrive
-        }
-        if lower.contains("wenden") { return .uTurn }
-        if lower.contains("links") {
-            return lower.contains("leicht") ? .slightLeft : .left
-        }
-        if lower.contains("rechts") {
-            return lower.contains("leicht") ? .slightRight : .right
-        }
-        return .straight
-    }
-}
-
-/// Ein Schritt der Turn-by-turn-Liste: das Manöver plus die Strasse/der Weg,
-/// dem man bis zum nächsten Manöver folgt ("wo durch"). Über `way_points`
-/// (ORS) an die Routengeometrie gekoppelt, damit sich der aktuelle Schritt
-/// aus der Position bestimmen lässt.
-struct RouteStep: Identifiable, Equatable {
-    /// Reihenfolge-Index in der Route (0 = Start).
-    let id: Int
-    /// Manöver-Richtung (liefert Icon und Kurzanweisung).
-    let maneuver: StepManeuver
-    /// Strassen-/Wegname des Schritts – nil, wenn unbenannt.
-    let streetName: String?
-    /// Vollständige Anweisung, falls der Routing-Dienst nur Text liefert
-    /// (MapKit-Fallback). Ersetzt dann die aus Manöver + Strasse gebildete.
-    let providedText: String?
-    /// Länge dieses Schritts (Meter).
-    let distanceM: CLLocationDistance
-    /// Dauer dieses Schritts (Sekunden).
-    let durationS: TimeInterval
-    /// Startkoordinate des Schritts (dort wird das Manöver ausgeführt).
-    let coordinate: CLLocationCoordinate2D
-
-    init(
-        id: Int,
-        maneuver: StepManeuver,
-        streetName: String? = nil,
-        providedText: String? = nil,
-        distanceM: CLLocationDistance,
-        durationS: TimeInterval = 0,
-        coordinate: CLLocationCoordinate2D
-    ) {
-        self.id = id
-        self.maneuver = maneuver
-        self.streetName = streetName
-        self.providedText = providedText
-        self.distanceM = distanceM
-        self.durationS = durationS
-        self.coordinate = coordinate
-    }
-
-    /// Primäre Anweisung der Zeile ("Links abbiegen").
-    var instruction: String {
-        if let providedText, !providedText.isEmpty { return providedText }
-        return maneuver.phrase
-    }
-
-    /// "Wo durch" – Strasse/Weg unter der Anweisung (nil = keine Angabe).
-    /// Bei Text-Schritten (Fallback) steckt die Strasse schon in `instruction`.
-    var wayText: String? {
-        if providedText != nil { return nil }
-        guard let streetName else { return nil }
-        switch maneuver {
-        case .arrive, .depart, .straight: return streetName
-        default: return "auf \(streetName)"
-        }
-    }
-
-    static func == (lhs: RouteStep, rhs: RouteStep) -> Bool {
-        lhs.id == rhs.id
-            && lhs.maneuver == rhs.maneuver
-            && lhs.streetName == rhs.streetName
-            && lhs.providedText == rhs.providedText
-            && lhs.distanceM == rhs.distanceM
-    }
-}
-
 enum RouteService {
     enum RouteError: LocalizedError {
         case noRoute
@@ -775,14 +458,12 @@ enum RouteService {
     ) -> ProjectedFix? {
         guard points.count >= 2 else { return nil }
 
-        // prefix[i] = Weglänge vom Start bis Punkt i.
-        var prefix = [Double](repeating: 0, count: points.count)
-        for i in 1..<points.count {
-            prefix[i] = prefix[i - 1] + simd_distance(points[i - 1], points[i])
-        }
-        let totalLength = prefix[points.count - 1]
-
-        var best: ProjectedFix?
+        // Weglänge bis zum jeweiligen Segmentanfang läuft im selben Durchgang
+        // mit; die Gesamtlänge steht am Ende der Schleife fest. (Früher lief
+        // dafür ein eigener Vorlauf mit eigenem Array – bei ~20 Auswertungen
+        // je Sekunde während der Navigation eine unnötige Allokation.)
+        var cumulative = 0.0
+        var best: (segmentIndex: Int, projection: SIMD2<Double>, offsetM: Double, alongM: Double)?
         var bestScore = Double.greatestFiniteMagnitude
 
         for i in 0..<(points.count - 1) {
@@ -793,7 +474,7 @@ enum RouteService {
             let t = lengthSquared > 0 ? min(1, max(0, simd_dot(-a, ab) / lengthSquared)) : 0
             let projected = a + t * ab
             let offset = simd_length(projected)
-            let along = prefix[i] + simd_distance(a, projected)
+            let along = cumulative + simd_distance(a, projected)
 
             var score = offset
             if let alongAnchorM {
@@ -805,16 +486,21 @@ enum RouteService {
 
             if score < bestScore {
                 bestScore = score
-                best = ProjectedFix(
-                    segmentIndex: i,
-                    projection: projected,
-                    offsetM: offset,
-                    alongM: along,
-                    remainingM: max(0, totalLength - along)
-                )
+                best = (segmentIndex: i, projection: projected, offsetM: offset, alongM: along)
             }
+
+            cumulative += lengthSquared.squareRoot()
         }
-        return best
+
+        guard let best else { return nil }
+        let totalLength = cumulative
+        return ProjectedFix(
+            segmentIndex: best.segmentIndex,
+            projection: best.projection,
+            offsetM: best.offsetM,
+            alongM: best.alongM,
+            remainingM: max(0, totalLength - best.alongM)
+        )
     }
 
     /// Verortet den Standort auf der Route (Segment, Fusspunkt, seitlicher
@@ -1103,8 +789,76 @@ enum RouteService {
         return RouteManeuver(direction: .straight, distanceM: traveled)
     }
 
+    // MARK: - Massenauswertung: Barrieren gegen die Route
+
+    /// Die Route einmal in ein lokales Ost/Nord-Meter-System (Ursprung =
+    /// Routenstart) umgerechnet, samt aufsummierten Segmentlängen.
+    ///
+    /// Wozu: `distance(from:to:)` und `distanceAlongRoute(to:on:)` bauen dieses
+    /// System bei JEDEM Aufruf neu auf – für eine einzelne Abfrage belanglos,
+    /// für die Barrieren entlang der Route jedoch nicht. Dort fiele der Aufbau
+    /// einmal je Barriere an, also mehrere hundert Mal je Auswertung. Mit der
+    /// vorberechneten Geometrie fällt er genau einmal an.
+    struct RoutePath {
+        fileprivate let origin: CLLocationCoordinate2D
+        fileprivate let points: [SIMD2<Double>]
+        /// `cumulative[i]` = Weglänge vom Routenstart bis Punkt i.
+        fileprivate let cumulative: [Double]
+    }
+
+    /// Rechnet die Route einmal in das lokale Meter-System um.
+    static func path(of route: ActiveRoute) -> RoutePath {
+        let origin = route.coordinates.first ?? route.destinationCoordinate
+        let points = route.coordinates.map { metersEastNorth(of: $0, relativeTo: origin) }
+        var cumulative = [Double](repeating: 0, count: points.count)
+        if points.count >= 2 {
+            for i in 1..<points.count {
+                cumulative[i] = cumulative[i - 1] + simd_distance(points[i - 1], points[i])
+            }
+        }
+        return RoutePath(origin: origin, points: points, cumulative: cumulative)
+    }
+
+    /// Seitlicher Abstand einer Koordinate zur Route UND Weglänge vom
+    /// Routenstart bis zu ihrem Fusspunkt – beides in einem Durchgang, auf der
+    /// vorberechneten Geometrie. Wie `project` ohne Anker: es gewinnt das
+    /// nächstgelegene Segment.
+    static func offsetAndAlong(
+        of coordinate: CLLocationCoordinate2D,
+        on path: RoutePath
+    ) -> (offsetM: CLLocationDistance, alongM: CLLocationDistance) {
+        let points = path.points
+        guard points.count >= 2 else {
+            guard let only = points.first else { return (.greatestFiniteMagnitude, 0) }
+            let query = metersEastNorth(of: coordinate, relativeTo: path.origin)
+            return (simd_distance(only, query), 0)
+        }
+
+        // Der Abfragepunkt wandert in den Ursprung – dieselbe Rechnung wie in
+        // `project`, nur ohne die Route je Abfrage neu umzurechnen.
+        let query = metersEastNorth(of: coordinate, relativeTo: path.origin)
+
+        var bestOffset = Double.greatestFiniteMagnitude
+        var bestAlong = 0.0
+        for i in 0..<(points.count - 1) {
+            let a = points[i] - query
+            let b = points[i + 1] - query
+            let ab = b - a
+            let lengthSquared = simd_length_squared(ab)
+            let t = lengthSquared > 0 ? min(1, max(0, simd_dot(-a, ab) / lengthSquared)) : 0
+            let projected = a + t * ab
+            let offset = simd_length(projected)
+            if offset < bestOffset {
+                bestOffset = offset
+                bestAlong = path.cumulative[i] + simd_distance(a, projected)
+            }
+        }
+        return (bestOffset, bestAlong)
+    }
+
     /// Kürzeste Distanz (Meter) von einer Koordinate zum Routen-Polyline.
-    /// Für die Korridor-Filterung der Barrieren entlang der aktiven Route.
+    /// Für Einzelabfragen; für ganze Barrieren-Listen `path(of:)` zusammen mit
+    /// `offsetAndAlong(of:on:)` verwenden.
     static func distance(from coordinate: CLLocationCoordinate2D, to route: ActiveRoute) -> CLLocationDistance {
         let coords = route.coordinates
         guard coords.count >= 2 else {
@@ -1112,12 +866,7 @@ enum RouteService {
             return CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
                 .distance(from: CLLocation(latitude: target.latitude, longitude: target.longitude))
         }
-
-        // Lokales Ost/Nord-Meter-Koordinatensystem um die Koordinate:
-        // sie selbst liegt im Ursprung (0,0).
-        let points = routePoints(of: route, relativeTo: coordinate)
-        guard let fix = project(points) else { return .greatestFiniteMagnitude }
-        return fix.offsetM
+        return offsetAndAlong(of: coordinate, on: path(of: route)).offsetM
     }
 
     /// Weglänge (Meter) vom Routen-Start bis zur Projektion der Koordinate
@@ -1127,11 +876,7 @@ enum RouteService {
         to coordinate: CLLocationCoordinate2D,
         on route: ActiveRoute
     ) -> CLLocationDistance {
-        // Lokales Ost/Nord-Meter-Koordinatensystem um die Koordinate:
-        // sie selbst liegt im Ursprung (0,0).
-        let points = routePoints(of: route, relativeTo: coordinate)
-        guard let fix = project(points) else { return 0 }
-        return fix.alongM
+        offsetAndAlong(of: coordinate, on: path(of: route)).alongM
     }
 
     // MARK: - Karten-Ausrichtung
@@ -1274,276 +1019,5 @@ enum RouteService {
             latitude: origin.latitude + north / metersPerDegreeLatitude,
             longitude: origin.longitude + east / metersPerDegreeLongitude
         )
-    }
-}
-
-extension MKPolyline {
-    /// Alle Koordinaten des Polylines als Array.
-    func coordinateList() -> [CLLocationCoordinate2D] {
-        var coords = [CLLocationCoordinate2D](
-            repeating: kCLLocationCoordinate2DInvalid,
-            count: pointCount
-        )
-        getCoordinates(&coords, range: NSRange(location: 0, length: pointCount))
-        return coords
-    }
-}
-
-// MARK: - OpenRouteService DTOs
-// https://openrouteservice.org/dev/#/api-docs/v2/directions/{profile}/geojson/post
-
-/// Request-Body für POST /v2/directions/wheelchair/geojson.
-/// Koordinaten in GeoJSON-Reihenfolge: [Längengrad, Breitengrad].
-/// Bewusst nicht `private`, damit sich in den Tests nachprüfen lässt, dass die
-/// Anfrage exakt die von ORS dokumentierten Parameter und Werte enthält.
-struct ORSDirectionsRequest: Encodable {
-    let coordinates: [[Double]]
-    let options: Options
-
-    struct Options: Encodable {
-        let profileParams: ProfileParams
-        /// GeoJSON-Sperrflächen um zu umgehende Barrieren (nil = keine).
-        let avoidPolygons: AvoidPolygons?
-        /// Wegearten, die die Route nicht benutzen darf.
-        ///
-        /// Fähren sind in OSM ganz normale Routen-Ways und für ORS
-        /// grundsätzlich befahrbar – in Zürich ist das das Limmatschiff.
-        /// Ohne diese Sperre schickt das Routing für ein Ziel auf der anderen
-        /// Uferseite gern quer über den Fluss und wieder zurück (im Feldtest
-        /// als kilometerlange gerade Linie über die Limmat sichtbar). Für die
-        /// Mikronavigation in der Altstadt ist eine Schifffahrt nie die
-        /// gemeinte Antwort.
-        let avoidFeatures: [String]
-
-        enum CodingKeys: String, CodingKey {
-            case profileParams = "profile_params"
-            case avoidPolygons = "avoid_polygons"
-            case avoidFeatures = "avoid_features"
-        }
-
-        func encode(to encoder: Encoder) throws {
-            var container = encoder.container(keyedBy: CodingKeys.self)
-            try container.encode(profileParams, forKey: .profileParams)
-            try container.encodeIfPresent(avoidPolygons, forKey: .avoidPolygons)
-            if !avoidFeatures.isEmpty {
-                try container.encode(avoidFeatures, forKey: .avoidFeatures)
-            }
-        }
-    }
-
-    /// Wegearten, die für die Rollstuhl-Mikronavigation ausgeschlossen sind.
-    /// Genau die Kombination, die die ORS-Doku im Beispiel für das
-    /// Rollstuhlprofil zeigt.
-    static let excludedFeatures = ["ferries", "steps"]
-
-    /// GeoJSON-MultiPolygon: ein kleines Achteck (~15 m Radius) um jede zu
-    /// umgehende Barriere, damit ORS die Stelle nicht auf der Route hat.
-    struct AvoidPolygons: Encodable {
-        let type = "MultiPolygon"
-        /// [[Ring: [[lng, lat], …, erster Punkt wiederholt]]] je Barriere.
-        let coordinates: [[[[Double]]]]
-
-        /// Radius der Sperrfläche um eine Barriere in Metern.
-        static let clearanceRadiusM = 15.0
-
-        init?(around centers: [CLLocationCoordinate2D]) {
-            guard !centers.isEmpty else { return nil }
-            coordinates = centers.map { [Self.octagonRing(around: $0)] }
-        }
-
-        /// Geschlossener Achteck-Ring um die Koordinate (GeoJSON-Reihenfolge
-        /// [Längengrad, Breitengrad], erster Punkt am Ende wiederholt).
-        private static func octagonRing(around center: CLLocationCoordinate2D) -> [[Double]] {
-            let metersPerDegreeLatitude = 111_320.0
-            let metersPerDegreeLongitude = metersPerDegreeLatitude * cos(center.latitude * .pi / 180)
-
-            var ring: [[Double]] = (0..<8).map { i in
-                let angle = Double(i) / 8 * 2 * .pi
-                return [
-                    center.longitude + clearanceRadiusM * cos(angle) / metersPerDegreeLongitude,
-                    center.latitude + clearanceRadiusM * sin(angle) / metersPerDegreeLatitude,
-                ]
-            }
-            ring.append(ring[0])
-            return ring
-        }
-    }
-
-    struct ProfileParams: Encodable {
-        let restrictions: Restrictions
-    }
-
-    /// Vorgaben an das ORS-Rollstuhlprofil. Jede entspricht einem der im
-    /// OSM-Wiki (Wheelchair routing) beschriebenen Tags:
-    /// incline, sloped_curb/kerb:height, width, surface, smoothness, tracktype.
-    struct Restrictions: Encodable {
-        /// Maximale Steigung in Prozent (OSM `incline`).
-        let maximumIncline: Int
-        /// Maximale Bordsteinhöhe in Metern (OSM `sloped_curb`, `kerb:height`).
-        let maximumSlopedKerb: Double
-        /// Minimale Wegbreite in Metern (OSM `width`). nil = keine Vorgabe.
-        let minimumWidth: Double?
-        /// Schlechteste noch akzeptierte Oberfläche (OSM `surface`).
-        let surfaceType: String
-        /// Schlechteste noch akzeptierte Ebenheit (OSM `smoothness`).
-        let smoothnessType: String
-        /// Schlechteste noch akzeptierte Wegequalität (OSM `tracktype`).
-        let trackType: String
-
-        enum CodingKeys: String, CodingKey {
-            case maximumIncline = "maximum_incline"
-            case maximumSlopedKerb = "maximum_sloped_kerb"
-            case minimumWidth = "minimum_width"
-            case surfaceType = "surface_type"
-            case smoothnessType = "smoothness_type"
-            case trackType = "track_type"
-        }
-
-        func encode(to encoder: Encoder) throws {
-            var container = encoder.container(keyedBy: CodingKeys.self)
-            try container.encode(maximumIncline, forKey: .maximumIncline)
-            try container.encode(maximumSlopedKerb, forKey: .maximumSlopedKerb)
-            try container.encodeIfPresent(minimumWidth, forKey: .minimumWidth)
-            try container.encode(surfaceType, forKey: .surfaceType)
-            try container.encode(smoothnessType, forKey: .smoothnessType)
-            try container.encode(trackType, forKey: .trackType)
-        }
-
-        /// Werte, die ORS für `maximum_incline` akzeptiert (Prozent).
-        /// Die API kennt nur diese Stufen – ein "krummer" Wert wie 9 % ist
-        /// nicht vorgesehen und würde die Anfrage gefährden.
-        static let allowedInclines = [3, 6, 10, 15]
-        /// Werte, die ORS für `maximum_sloped_kerb` akzeptiert (Meter).
-        static let allowedSlopedKerbs = [0.03, 0.06, 0.1]
-
-        /// Grösster erlaubter Wert, der das persönliche Limit NICHT
-        /// überschreitet – lieber etwas strenger routen als über eine Kante,
-        /// die zu hoch ist. Liegt das Limit unter der kleinsten Stufe, bleibt
-        /// diese (feiner kann ORS nicht).
-        private static func snappedDown<T: Comparable>(_ value: T, to allowed: [T]) -> T {
-            allowed.last { $0 <= value } ?? allowed[0]
-        }
-
-        /// Vorgaben aus dem Profil. `relaxed` weitet sie auf die
-        /// ORS-Standardwerte (die den Norm-Grenzwerten entsprechen, siehe
-        /// AccessibilityStandard) und lässt die Breitenvorgabe ganz weg – in
-        /// der Altstadt ist `width` an den wenigsten Gassen erfasst, eine
-        /// strikte Mindestbreite schliesst deshalb schnell das halbe Wegnetz
-        /// aus.
-        init(profile: UserProfile, relaxed: Bool = false) {
-            // Oberflächen-Toleranz inkl. Tagesform (Nässe verschiebt sie eine
-            // Stufe Richtung "nur glatt") – dieselbe Grundlage wie die
-            // Barrieren-Bewertung.
-            let tolerance = profile.effectiveSurfaceTolerance
-
-            let personalIncline = Self.snappedDown(
-                Int(profile.effectiveMaxIncline.rounded(.down)),
-                to: Self.allowedInclines
-            )
-            let personalKerb = Self.snappedDown(
-                profile.effectiveMaxCurb / 100, // cm → m
-                to: Self.allowedSlopedKerbs
-            )
-
-            if relaxed {
-                // Nie strenger als die eigenen Werte, aber mindestens die
-                // Norm-/ORS-Standardstufe.
-                maximumIncline = max(personalIncline, 6)
-                maximumSlopedKerb = max(personalKerb, 0.06)
-                minimumWidth = nil
-                surfaceType = "cobblestone"
-                smoothnessType = "very_bad"
-                trackType = "grade3"
-            } else {
-                maximumIncline = personalIncline
-                maximumSlopedKerb = personalKerb
-                minimumWidth = Double(profile.effectiveWidthNeeded) / 100 // cm → m
-                surfaceType = Self.surfaceType(for: tolerance)
-                smoothnessType = Self.smoothnessType(for: tolerance)
-                trackType = Self.trackType(for: tolerance)
-            }
-        }
-
-        private static func surfaceType(for tolerance: SurfaceTolerance) -> String {
-            switch tolerance {
-            case .smoothOnly: return "paved"
-            case .fineCobble: return "cobblestone:flattened"
-            case .almostAll: return "cobblestone"
-            }
-        }
-
-        /// OSM `smoothness`: Das Wiki führt für Rollstühle "intermediate" als
-        /// gerade noch nutzbar (Citybike/Rollstuhl/Kinderwagen), "bad" nur für
-        /// robuste Bereifung.
-        private static func smoothnessType(for tolerance: SurfaceTolerance) -> String {
-            switch tolerance {
-            case .smoothOnly: return "good"
-            case .fineCobble: return "intermediate"
-            case .almostAll: return "bad"
-            }
-        }
-
-        /// OSM `tracktype`: grade1 = befestigt/stark verdichtet,
-        /// grade2 = Kies oder dicht gepackter Sand (Wiki-Tabelle).
-        private static func trackType(for tolerance: SurfaceTolerance) -> String {
-            switch tolerance {
-            case .smoothOnly, .fineCobble: return "grade1"
-            case .almostAll: return "grade2"
-            }
-        }
-    }
-}
-
-/// GeoJSON-Antwort von ORS: Route als LineString plus Distanz/Dauer-Summary.
-private struct ORSDirectionsResponse: Decodable {
-    let features: [Feature]
-
-    struct Feature: Decodable {
-        let geometry: Geometry
-        let properties: Properties
-    }
-
-    struct Geometry: Decodable {
-        /// LineString-Koordinaten: [[Längengrad, Breitengrad], …]
-        let coordinates: [[Double]]
-    }
-
-    struct Properties: Decodable {
-        let summary: Summary
-        /// Abschnitte mit Turn-by-turn-Schritten (ORS liefert sie standardmässig,
-        /// `instructions=true`). Optional, damit das Fehlen nicht die ganze
-        /// Route-Dekodierung scheitern lässt.
-        let segments: [Segment]?
-    }
-
-    struct Summary: Decodable {
-        /// Gesamtdistanz in Metern.
-        let distance: Double
-        /// Erwartete Dauer in Sekunden.
-        let duration: Double
-    }
-
-    /// Ein Routenabschnitt (Start → Zwischenziel/Ziel) mit seinen Schritten.
-    struct Segment: Decodable {
-        let steps: [Step]
-    }
-
-    /// Ein einzelner Turn-by-turn-Schritt (Manöver + Weg).
-    struct Step: Decodable {
-        /// Länge des Schritts in Metern.
-        let distance: Double
-        /// Dauer des Schritts in Sekunden.
-        let duration: Double
-        /// ORS-Instruktionstyp (0–13), siehe StepManeuver.fromORSType.
-        let type: Int
-        /// Strassen-/Wegname ("-" für unbenannte Wege).
-        let name: String?
-        /// Start-/Endindex des Schritts in der Routengeometrie.
-        let wayPoints: [Int]
-
-        enum CodingKeys: String, CodingKey {
-            case distance, duration, type, name
-            case wayPoints = "way_points"
-        }
     }
 }

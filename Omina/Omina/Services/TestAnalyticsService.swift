@@ -3,7 +3,7 @@
 //
 // Zeichnet auf, was Testpersonen anklicken und welche Screens sie öffnen,
 // und schreibt die Events in die Supabase-Tabelle `test_events`
-// (siehe migrations/field_test_tables.sql). Events werden lokal gepuffert
+// (siehe supabase/migrations/field_test_tables.sql). Events werden lokal gepuffert
 // und gebündelt hochgeladen; bei fehlendem Netz bleiben sie in den
 // UserDefaults liegen und werden beim nächsten Event / App-Start nachgereicht.
 //

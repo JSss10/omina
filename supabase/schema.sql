@@ -134,8 +134,8 @@ GRANT SELECT, INSERT, UPDATE, DELETE
     TO service_role;
 
 -- 9. RPC-Funktionen für die App (Umkreissuche)
--- Deckungsgleich mit migrations/barriers_within_radius.sql und
--- migrations/pois_within_radius.sql – dort stehen die ausführlichen
+-- Deckungsgleich mit supabase/migrations/barriers_within_radius.sql und
+-- supabase/migrations/pois_within_radius.sql – dort stehen die ausführlichen
 -- Kommentare zu Aufruf und Rückgabewerten. Wer das Schema frisch aufsetzt,
 -- braucht die beiden Migrationen danach nicht mehr einzeln auszuführen.
 --

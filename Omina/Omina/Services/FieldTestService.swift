@@ -13,7 +13,7 @@
 //   4. Nach dem Test: "Test beenden" (Home, oben rechts) lädt offene Events
 //      hoch und setzt das Gerät für die nächste Testperson zurück.
 //
-// Voraussetzung in Supabase: migrations/field_test_tables.sql ausführen und
+// Voraussetzung in Supabase: supabase/migrations/field_test_tables.sql ausführen und
 // "Allow anonymous sign-ins" aktivieren (Authentication → Sign In / Providers).
 
 import Foundation

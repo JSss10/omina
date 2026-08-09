@@ -243,6 +243,16 @@ struct POI: Codable, Identifiable {
     }
 }
 
+// MARK: - Geografie
+
+extension POI {
+    /// Position des Orts – spart an den vielen Aufrufstellen das wiederholte
+    /// Zusammensetzen aus `latitude`/`longitude`.
+    var coordinate: CLLocationCoordinate2D {
+        CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+    }
+}
+
 // MARK: - Apple-Karten-Feature
 
 extension POI {

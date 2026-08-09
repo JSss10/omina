@@ -5,7 +5,7 @@
 // primär als JPEG im Documents-Verzeichnis, beim Speichern läuft zusätzlich
 // ein Best-Effort-Upload in den Supabase-Storage-Bucket "avatars"
 // (Pfad <user_id>/avatar.jpg, RLS: user-owned – siehe
-// migrations/avatars_bucket.sql). Auf einem frischen Gerät wird das Foto
+// supabase/migrations/avatars_bucket.sql). Auf einem frischen Gerät wird das Foto
 // einmalig aus dem Bucket zurückgeholt und lokal gecached.
 
 import UIKit
