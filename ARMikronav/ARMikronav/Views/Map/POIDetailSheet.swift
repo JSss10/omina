@@ -39,11 +39,17 @@ struct POIDetailSheet: View {
             VStack(alignment: .leading, spacing: AppMetrics.Space.l) {
                 header
                 photoCarousel
+                descriptionText
                 eurokeyHint
+                // Zugänglichkeit zuerst, danach die praktischen Angaben aus
+                // dem Zürich-Tourismus-API (Zeiten, Kontakt, Webseite).
                 ratingsCard
                 accessStatusLine
+                openingHoursCard
                 detailsCard
+                phoneRow
                 websiteRow
+                infoSourceNote
 
                 VStack(spacing: AppMetrics.Space.s + AppMetrics.Space.xs) {
                     arButton
@@ -141,10 +147,13 @@ struct POIDetailSheet: View {
 
     /// Foto-Karussell des Ortes als vollbreites Hero-Bild, darunter der
     /// Bildnachweis. Bei mehreren Bildern paged mit dezenten Indikatoren.
+    /// Kennt das Zürich-Tourismus-API den Ort nicht, steht hier ein Platzhalter.
     @ViewBuilder
     private var photoCarousel: some View {
         let images = poi.images
-        if !images.isEmpty {
+        if images.isEmpty {
+            photoPlaceholder
+        } else {
             VStack(alignment: .leading, spacing: AppMetrics.Space.xs) {
                 Group {
                     if images.count == 1 {
@@ -178,6 +187,120 @@ struct POIDetailSheet: View {
                         .accessibilityHidden(true)
                 }
             }
+        }
+    }
+
+    /// Platzhalter, wenn zum Ort kein Foto vorliegt. Bewusst flacher als das
+    /// Karussell – eine leere Fläche in voller Höhe würde das Sheet dominieren.
+    private var photoPlaceholder: some View {
+        VStack(spacing: AppMetrics.Space.s) {
+            Image(systemName: "photo")
+                .font(.largeTitle)
+                .foregroundStyle(AppColor.textSecondary)
+            Text("Kein Foto verfügbar")
+                .font(AppTypography.footnote)
+                .foregroundStyle(AppColor.textSecondary)
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: 140)
+        .background(
+            AppColor.surfaceTinted,
+            in: RoundedRectangle(cornerRadius: AppMetrics.Radius.card, style: .continuous)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: AppMetrics.Radius.card, style: .continuous)
+                .strokeBorder(AppColor.borderDecorative, lineWidth: 0.5)
+        )
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Kein Foto von \(poi.name) verfügbar")
+    }
+
+    /// Kurzbeschreibung des Ortes, sofern das Zürich-Tourismus-API eine liefert.
+    @ViewBuilder
+    private var descriptionText: some View {
+        if let text = poi.placeDescription {
+            Text(text)
+                .font(AppTypography.body)
+                .foregroundStyle(AppColor.textSecondary)
+                .lineSpacing(6)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    /// Öffnungszeiten mit hervorgehobenem heutigem Tag. Die Karte steht auch
+    /// ohne Daten – dann als Platzhalter, damit im Sheet nichts fehlt.
+    private var openingHoursCard: some View {
+        let hours = poi.openingHours
+        let today = poi.openingHoursToday()
+
+        return VStack(alignment: .leading, spacing: AppMetrics.Space.s) {
+            HStack(spacing: AppMetrics.Space.m) {
+                Image(systemName: "clock")
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(hours.isEmpty ? AppColor.textSecondary : AppColor.accentPrimary)
+                    .frame(width: 28)
+
+                Text("Öffnungszeiten")
+                    .font(AppTypography.headline)
+                    .foregroundStyle(AppColor.textPrimary)
+
+                Spacer(minLength: AppMetrics.Space.s)
+
+                if let today {
+                    Text("Heute \(today)")
+                        .font(AppTypography.subheadline.weight(.semibold))
+                        .foregroundStyle(AppColor.textPrimary)
+                        .multilineTextAlignment(.trailing)
+                }
+            }
+
+            VStack(alignment: .leading, spacing: AppMetrics.Space.xs) {
+                if hours.isEmpty {
+                    Text("Für diesen Ort liegen keine Öffnungszeiten vor.")
+                        .font(AppTypography.subheadline)
+                        .foregroundStyle(AppColor.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                } else {
+                    ForEach(hours, id: \.self) { line in
+                        Text(line)
+                            .font(AppTypography.subheadline)
+                            .foregroundStyle(AppColor.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+            // Auf die Höhe des Icons eingerückt, damit die Zeiten unter dem
+            // Titel stehen und nicht unter dem Symbol beginnen.
+            .padding(.leading, 28 + AppMetrics.Space.m)
+        }
+        .padding(AppMetrics.Space.m)
+        .cardBackground()
+        .accessibilityElement(children: .combine)
+    }
+
+    /// Telefonnummer als eigene Zeile – vorab anrufen ist im Rollstuhl-Alltag
+    /// oft der schnellste Weg, offene Fragen zur Zugänglichkeit zu klären.
+    @ViewBuilder
+    private var phoneRow: some View {
+        if let number = poi.phoneNumber, let url = poi.phoneURL {
+            linkRow(
+                icon: "phone.fill",
+                title: "Telefon",
+                value: number,
+                url: url,
+                accessibilityLabel: "Anrufen, \(number)"
+            )
+        }
+    }
+
+    /// Quellenangabe für die übernommenen Text- und Kontaktangaben.
+    @ViewBuilder
+    private var infoSourceNote: some View {
+        if let credit = poi.infoCredit {
+            Text("Angaben: \(credit)")
+                .font(AppTypography.footnote)
+                .foregroundStyle(AppColor.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
@@ -360,34 +483,52 @@ struct POIDetailSheet: View {
     @ViewBuilder
     private var websiteRow: some View {
         if let url = poi.websiteURL {
-            Link(destination: url) {
-                HStack(spacing: AppMetrics.Space.m) {
-                    Image(systemName: "safari")
-                        .font(.title3.weight(.semibold))
-                        .foregroundStyle(AppColor.accentPrimary)
-                        .frame(width: 28)
-
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Webseite")
-                            .font(AppTypography.headline)
-                            .foregroundStyle(AppColor.textPrimary)
-                        Text(cleanHost(url))
-                            .font(AppTypography.footnote)
-                            .foregroundStyle(AppColor.textSecondary)
-                            .lineLimit(1)
-                    }
-
-                    Spacer(minLength: AppMetrics.Space.s)
-
-                    Image(systemName: "arrow.up.right")
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(AppColor.textSecondary)
-                }
-                .padding(AppMetrics.Space.m)
-                .cardBackground()
-            }
-            .accessibilityLabel("Webseite öffnen, \(cleanHost(url))")
+            linkRow(
+                icon: "safari",
+                title: "Webseite",
+                value: cleanHost(url),
+                url: url,
+                accessibilityLabel: "Webseite öffnen, \(cleanHost(url))"
+            )
         }
+    }
+
+    /// Angehobene Zeile mit Icon, Titel und Wert, die einen Link öffnet –
+    /// gemeinsame Form für Telefon und Webseite.
+    private func linkRow(
+        icon: String,
+        title: String,
+        value: String,
+        url: URL,
+        accessibilityLabel: String
+    ) -> some View {
+        Link(destination: url) {
+            HStack(spacing: AppMetrics.Space.m) {
+                Image(systemName: icon)
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(AppColor.accentPrimary)
+                    .frame(width: 28)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(AppTypography.headline)
+                        .foregroundStyle(AppColor.textPrimary)
+                    Text(value)
+                        .font(AppTypography.footnote)
+                        .foregroundStyle(AppColor.textSecondary)
+                        .lineLimit(1)
+                }
+
+                Spacer(minLength: AppMetrics.Space.s)
+
+                Image(systemName: "arrow.up.right")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(AppColor.textSecondary)
+            }
+            .padding(AppMetrics.Space.m)
+            .cardBackground()
+        }
+        .accessibilityLabel(accessibilityLabel)
     }
 
     /// Host einer URL ohne Schema und führendes «www.» – für eine ruhige,
@@ -401,12 +542,19 @@ struct POIDetailSheet: View {
     }
 
     /// Schlüssel, die die Detail-Tabelle auslässt, weil sie an anderer Stelle
-    /// stehen: Webseiten/URLs als websiteRow, Bilder und Bildnachweis am
-    /// Foto-Karussell.
+    /// stehen: Webseiten/URLs als websiteRow, Fotos am Karussell, Zeiten in
+    /// der Öffnungszeiten-Karte, Telefon als eigene Zeile. `zuerich_name`
+    /// dient nur der Nachvollziehbarkeit des Imports.
     private func isShownElsewhere(_ key: String) -> Bool {
+        let handled: Set<String> = [
+            "website", "homepage",
+            "images", "image_source",
+            "opening_hours", "opening_hours_spec",
+            "phone", "description",
+            "info_source", "zuerich_name",
+        ]
         let k = key.lowercased()
-        return k.contains("url") || k == "website" || k == "homepage"
-            || k == "images" || k == "image_source"
+        return k.contains("url") || handled.contains(k)
     }
 
     private var arButton: some View {
@@ -570,6 +718,8 @@ struct POIDetailSheet: View {
         case "ramp":                      return "Rampe"
         case "elevator", "lift":          return "Aufzug"
         case "parking":                   return "Parkplatz"
+        case "email":                     return "E-Mail"
+        case "price_range":               return "Preisniveau"
         default:
             return key.replacingOccurrences(of: "_", with: " ").capitalized
         }

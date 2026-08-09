@@ -151,7 +151,7 @@ SELECT * FROM test_event_overview WHERE test_day = '2026-07-21';
 | OpenStreetMap    | Barrieren (kerb/sloped_curb, incline, surface, smoothness, tracktype, width, steps, sidewalk:\*, barrier) | ODbL                                       |
 | OpenRouteService | Alternativroute um eine einzelne Barriere herum (Profil `wheelchair`, avoid_polygons)                     | ODbL (OSM) / ORS-Nutzungsbedingungen       |
 | ginto API        | POI-Zugänglichkeit (GraphQL, POIs ganze Schweiz)                                                          | Nutzungsbedingungen ginto                  |
-| Zürich Tourismus | POI-Fotos (Open Data 2.0, `/en/api/v2/data`)                                                              | Open Data Zürich Tourismus, Quellennennung |
+| Zürich Tourismus | POI-Fotos, Öffnungszeiten, Kontakt (Open Data 2.0, `/en/api/v2/data`)                                     | Open Data Zürich Tourismus, Quellennennung |
 | Wheelmap         | POI wheelchair=yes/limited/no                                                                             | CC-BY-SA                                   |
 
 Die Standardroute ist die Fussgängerroute – sie nimmt den Weg, den man auch
@@ -161,13 +161,13 @@ Altstadt sind `width`, `surface` und `incline` an zu wenigen Gassen erfasst,
 als dass ein Rollstuhl-Routing dort brauchbare Wege liefern würde (es schlug
 im Feldtest weiträumige Umwege um Ziele vor, die nebenan lagen).
 
-Die Fotos im POI-Detail kommen aus dem
+Fotos, Öffnungszeiten und Kontaktangaben im POI-Detail kommen aus dem
 [Open-Data-API von Zürich Tourismus](https://www.zuerich.com/en/open-data-version-20)
-(Version 2.0). `scripts/import_zuerich_images.py` ordnet die Einträge über
-Distanz und Namensähnlichkeit den bestehenden POIs zu und schreibt die
-Bild-URLs samt Bildnachweis nach `accessibility_details.images`. Der Nachweis
-steht in der App unter dem Foto-Karussell – die Lizenz verlangt die Nennung
-der Quelle.
+(Version 2.0). `scripts/import_zuerich.py` prüft jeden ginto-POI gegen dieses
+API – zugeordnet wird über Distanz und Namensähnlichkeit – und schreibt die
+Treffer nach `accessibility_details`. Kennt das API einen Ort nicht, zeigt das
+Detail-Sheet Platzhalter statt leerer Flächen. Die Quellenangabe steht unter
+den Fotos und den übernommenen Angaben; die Lizenz verlangt die Nennung.
 
 Welche OSM-Tags für die Barrieren ausgewertet werden und wie sie bewertet
 werden, richtet sich nach dem OSM-Wiki, Projekt

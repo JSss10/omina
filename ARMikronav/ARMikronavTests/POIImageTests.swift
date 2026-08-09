@@ -4,7 +4,7 @@
 // Tests für das Auslesen der POI-Fotos aus accessibility_details.images.
 // Das Feld kommt in zwei Formen vor: als reine URL-Strings (ginto-Import)
 // und als Objekte mit url/caption/credit (Import aus dem Open-Data-API von
-// Zürich Tourismus, scripts/import_zuerich_images.py). Der Bildnachweis
+// Zürich Tourismus, scripts/import_zuerich.py). Der Bildnachweis
 // muss in beiden Fällen ankommen – die Lizenz der Bildquelle verlangt ihn.
 
 import Testing

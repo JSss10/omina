@@ -1,38 +1,51 @@
 #!/usr/bin/env python3
 """
-Zuerich-Tourismus Bilder-Import - AR-Mikronavigation
+Zuerich-Tourismus Import - AR-Mikronavigation
 
-Holt die Fotos aus dem Open-Data-API von Zuerich Tourismus (Version 2.0,
-https://www.zuerich.com/en/open-data-version-20) und haengt sie an die
-bestehenden POIs in der Supabase-Tabelle poi_accessibility an. Die POIs
-selbst stammen aus ginto/OSM und haben keine Bilder - das API von
-Zuerich Tourismus liefert die passenden, hochwertigen Aufnahmen dazu.
+Prueft fuer jeden bestehenden POI (ginto/OSM), ob es ihn im Open-Data-API
+von Zuerich Tourismus gibt (Version 2.0,
+https://www.zuerich.com/en/open-data-version-20), und uebernimmt bei einem
+Treffer Fotos, Oeffnungszeiten, Telefon, Webseite und Kurzbeschreibung in
+die Supabase-Tabelle poi_accessibility. POIs ohne Treffer bleiben
+unveraendert - die App zeigt dort Platzhalter.
 
-API-Aufbau (Version 2.0, nur unter /en/ verfuegbar):
+API-Aufbau (Version 2.0, nur unter /en/ verfuegbar, kein API-Key noetig):
 
     GET /en/api/v2/data              Liste aller Kategorien
                                      [{id, name, path, parent}, ...]
     GET /en/api/v2/data?id=<id>      Alle Eintraege einer Kategorie
 
 Die Eintraege sind nach Schema.org aufgebaut; mehrsprachige Felder kommen
-als Objekt {"de": ..., "en": ...}. Die Bilder stecken in `image`
-(Hauptbild) und `photo` (weitere Bilder), die Position in `geoCoordinates`.
+als Objekt {"de": ..., "en": ...}. Bilder stecken in `image` (Hauptbild)
+und `photo`, die Position in `geoCoordinates`, die Zeiten in
+`openingHours` bzw. `openingHoursSpecification`.
 
 Zuordnung API-Eintrag -> POI: ueber die Distanz (Standard 150 m) UND die
 Namensaehnlichkeit. Beides zusammen, weil in der Altstadt viele Lokale
 dicht beieinanderliegen und Namen wie "Hotel Storchen" mehrfach vorkommen.
 
-Geschrieben wird ausschliesslich in accessibility_details:
+Geschrieben wird ausschliesslich in accessibility_details - genau die
+Schluessel, die POI.swift liest:
 
-    images        Liste {url, caption, credit} - genau das Format, das
-                  POI.swift (POIImage) liest
-    image_source  "Zuerich Tourismus (zuerich.com)" fuer den Bildnachweis
+    images              Liste {url, caption, credit}
+    image_source        Bildnachweis
+    opening_hours       Anzeigezeilen, z. B. ["Mo-Fr 09:00-18:00"]
+    opening_hours_spec  strukturiert [{days: [1..7], opens, closes}]
+    phone, email        Kontakt
+    website             Webseite des Ortes
+    description         Kurzbeschreibung
+    price_range         Preisniveau
+    zuerich_name        gefundener Name im API (Nachvollziehbarkeit)
+    zuerich_url         Detailseite auf zuerich.com
+    info_source         Quellenangabe fuer die Textangaben
 
 Verwendung:
-    python3 import_zuerich_images.py                  # Supabase lesen + schreiben
-    python3 import_zuerich_images.py --dry-run        # nur Vorschau
-    python3 import_zuerich_images.py --pois-file ../pois_ginto_20260407_142744.json
-                                                      # Vorschau ohne Supabase
+    python3 import_zuerich.py                  # Supabase lesen + schreiben
+    python3 import_zuerich.py --dry-run        # nur Vorschau
+    python3 import_zuerich.py --pois-file ../pois_ginto_20260407_142744.json
+                                               # Vorschau ohne Supabase
+    python3 import_zuerich.py --seed-file ../ARMikronav/ARMikronav/Seed/seed_pois.json
+                                               # Offline-Seed der App mitpflegen
 
 Voraussetzungen:
     pip3 install requests supabase
@@ -77,10 +90,14 @@ CLOSE_DISTANCE_M = 40
 # Mehr als das braucht das Foto-Karussell im Detail-Sheet nicht.
 DEFAULT_MAX_IMAGES = 5
 
-# Bildnachweis: Die Daten stehen unter der Lizenz von Zuerich Tourismus zur
+# Quellenangabe: Die Daten stehen unter der Lizenz von Zuerich Tourismus zur
 # Verfuegung und verlangen die Nennung der Quelle (siehe Open-Data-Seite).
-# Umlaut hier bewusst: der Wert landet als Bildnachweis in der App-Oberflaeche.
+# Umlaut hier bewusst: der Wert landet als Nachweis in der App-Oberflaeche.
 IMAGE_SOURCE = "Zürich Tourismus (zuerich.com)"
+INFO_SOURCE = IMAGE_SOURCE
+
+# Kurzbeschreibung im Detail-Sheet: laenger als das liest im Sheet niemand.
+MAX_DESCRIPTION_CHARS = 500
 
 # Sprachreihenfolge fuer mehrsprachige Felder.
 LANGUAGES = ("de", "en", "fr", "it")
@@ -286,23 +303,205 @@ def extract_images(node, limit):
     return images
 
 
-def entry_to_place(node, max_images):
-    """Ein API-Eintrag, reduziert auf das, was fuer die Zuordnung noetig ist."""
-    lat, lng = entry_coordinates(node)
-    name = local_text(node.get("name"))
-    images = extract_images(node, max_images)
+# ------------------------------------------------------------
+# Oeffnungszeiten
+# ------------------------------------------------------------
+# Schema.org nennt die Wochentage englisch (auch als URL
+# https://schema.org/Monday); zuerich.com liefert je nach Feld deutsch.
+DAY_NUMBERS = {
+    "monday": 1, "mon": 1, "mo": 1, "montag": 1,
+    "tuesday": 2, "tue": 2, "tu": 2, "di": 2, "dienstag": 2,
+    "wednesday": 3, "wed": 3, "we": 3, "mi": 3, "mittwoch": 3,
+    "thursday": 4, "thu": 4, "th": 4, "do": 4, "donnerstag": 4,
+    "friday": 5, "fri": 5, "fr": 5, "freitag": 5,
+    "saturday": 6, "sat": 6, "sa": 6, "samstag": 6,
+    "sunday": 7, "sun": 7, "su": 7, "so": 7, "sonntag": 7,
+    "publicholidays": 0, "feiertage": 0,
+}
 
-    if not name or lat is None or not images:
+DAY_LABELS = {1: "Mo", 2: "Di", 3: "Mi", 4: "Do", 5: "Fr", 6: "Sa", 7: "So"}
+
+
+def day_number(value):
+    """Wochentag -> 1 (Montag) .. 7 (Sonntag), sonst None."""
+    text = local_text(value)
+    if not text:
+        return None
+    key = text.rsplit("/", 1)[-1].strip().lower().replace(".", "").replace(" ", "")
+    number = DAY_NUMBERS.get(key)
+    return number if number else None
+
+
+def clock_time(value):
+    """"09:00:00" / "9:00" -> "09:00"; alles andere unveraendert."""
+    text = local_text(value)
+    if not text:
+        return None
+    match = re.match(r"^(\d{1,2}):(\d{2})", text.strip())
+    if not match:
+        return text.strip()
+    return "{:02d}:{}".format(int(match.group(1)), match.group(2))
+
+
+def day_range_label(days):
+    """[1,2,3,4,5] -> "Mo-Fr", [1,3] -> "Mo, Mi"."""
+    ordered = sorted(set(d for d in days if d in DAY_LABELS))
+    if not ordered:
         return None
 
-    return {
+    groups = []
+    run = [ordered[0]]
+    for day in ordered[1:]:
+        if day == run[-1] + 1:
+            run.append(day)
+        else:
+            groups.append(run)
+            run = [day]
+    groups.append(run)
+
+    parts = []
+    for group in groups:
+        if len(group) >= 3:
+            parts.append(DAY_LABELS[group[0]] + "-" + DAY_LABELS[group[-1]])
+        else:
+            parts.extend(DAY_LABELS[d] for d in group)
+    return ", ".join(parts)
+
+
+def extract_opening_hours(node):
+    """(Anzeigezeilen, strukturierte Eintraege) aus openingHours bzw.
+    openingHoursSpecification. Die Struktur erlaubt der App, die Zeiten des
+    heutigen Wochentags hervorzuheben."""
+    spec = []
+    raw_spec = node.get("openingHoursSpecification")
+    if isinstance(raw_spec, dict):
+        raw_spec = [raw_spec]
+    for item in raw_spec or []:
+        if not isinstance(item, dict):
+            continue
+        raw_days = item.get("dayOfWeek")
+        if not isinstance(raw_days, (list, tuple)):
+            raw_days = [raw_days]
+        days = sorted({d for d in (day_number(x) for x in raw_days) if d})
+        opens, closes = clock_time(item.get("opens")), clock_time(item.get("closes"))
+        if days and opens and closes:
+            spec.append({"days": days, "opens": opens, "closes": closes})
+
+    # Anzeigezeilen: bevorzugt der Freitext des API, sonst aus der Struktur.
+    lines = []
+    raw_hours = node.get("openingHours")
+    if isinstance(raw_hours, (list, tuple)):
+        candidates = [local_text(h) for h in raw_hours]
+    else:
+        candidates = [local_text(raw_hours)]
+    for line in candidates:
+        if line and line not in lines:
+            lines.append(line)
+
+    if not lines:
+        for item in spec:
+            label = day_range_label(item["days"])
+            line = ((label + " ") if label else "") + item["opens"] + "-" + item["closes"]
+            if line not in lines:
+                lines.append(line)
+
+    return lines, spec
+
+
+# ------------------------------------------------------------
+# Weitere Angaben
+# ------------------------------------------------------------
+def is_zuerich_com(url):
+    return bool(url) and "zuerich.com" in url.lower()
+
+
+def extract_links(node):
+    """(Webseite des Ortes, Detailseite auf zuerich.com). `url` ist je nach
+    Eintrag das eine oder das andere - unterschieden wird am Host."""
+    website, zuerich_url = None, None
+    candidates = []
+    for field in ("url", "sameAs", "mainEntityOfPage"):
+        value = node.get(field)
+        if isinstance(value, (list, tuple)):
+            candidates.extend(local_text(v) for v in value)
+        else:
+            candidates.append(local_text(value))
+
+    for candidate in candidates:
+        if not candidate or not candidate.startswith("http"):
+            continue
+        if is_zuerich_com(candidate):
+            zuerich_url = zuerich_url or candidate
+        else:
+            website = website or candidate
+    return website, zuerich_url
+
+
+def extract_description(node):
+    """Kurzbeschreibung, auf eine im Sheet lesbare Laenge gekuerzt."""
+    text = (local_text(node.get("disambiguatingDescription"))
+            or local_text(node.get("description"))
+            or local_text(node.get("detailedInformation")))
+    if not text:
+        return None
+    text = re.sub(r"<[^>]+>", " ", text)          # vereinzelt steckt HTML drin
+    text = " ".join(text.split())
+    if len(text) > MAX_DESCRIPTION_CHARS:
+        text = text[:MAX_DESCRIPTION_CHARS].rsplit(" ", 1)[0] + "…"
+    return text or None
+
+
+def entry_to_place(node, max_images):
+    """Ein API-Eintrag, reduziert auf das, was die App braucht. Ohne Name
+    oder Koordinaten laesst sich nichts zuordnen - der Rest darf fehlen."""
+    lat, lng = entry_coordinates(node)
+    name = local_text(node.get("name"))
+    if not name or lat is None:
+        return None
+
+    opening_hours, opening_hours_spec = extract_opening_hours(node)
+    website, zuerich_url = extract_links(node)
+
+    place = {
         "identifier": entry_key(node),
         "name": name,
         "latitude": lat,
         "longitude": lng,
-        "images": images,
-        "url": local_text(node.get("url")),
+        "images": extract_images(node, max_images),
+        "opening_hours": opening_hours,
+        "opening_hours_spec": opening_hours_spec,
+        "phone": local_text(node.get("telephone")),
+        "email": local_text(node.get("email")),
+        "website": website,
+        "zuerich_url": zuerich_url,
+        "description": extract_description(node),
+        "price_range": local_text(node.get("priceRange")),
     }
+
+    # Ein Eintrag ohne jede verwertbare Angabe bringt dem POI nichts.
+    return place if place_payload(place) else None
+
+
+def place_payload(place):
+    """Die Felder, die dieser Import in accessibility_details schreibt -
+    leere Angaben bleiben weg, damit die App Platzhalter zeigen kann."""
+    payload = {}
+    if place["images"]:
+        payload["images"] = place["images"]
+        payload["image_source"] = IMAGE_SOURCE
+    if place["opening_hours"]:
+        payload["opening_hours"] = place["opening_hours"]
+    if place["opening_hours_spec"]:
+        payload["opening_hours_spec"] = place["opening_hours_spec"]
+    for field in ("phone", "email", "website", "description",
+                  "price_range", "zuerich_url"):
+        if place.get(field):
+            payload[field] = place[field]
+
+    if payload:
+        payload["zuerich_name"] = place["name"]
+        payload["info_source"] = INFO_SOURCE
+    return payload
 
 
 # ============================================================
@@ -377,19 +576,54 @@ def match_pois(pois, places, max_distance_m):
                         "ratio": ratio, "score": score}
 
         if best:
+            place = best["place"]
             matches.append({
                 "poi_id": poi.get("id"),
                 "poi_source": poi.get("source"),
                 "poi_source_id": poi.get("source_id"),
                 "poi_name": poi["name"],
-                "matched_name": best["place"]["name"],
+                "matched_name": place["name"],
                 "distance_m": round(best["distance_m"], 1),
                 "name_ratio": round(best["ratio"], 3),
-                "identifier": best["place"]["identifier"],
-                "images": best["place"]["images"],
+                "identifier": place["identifier"],
+                "payload": place_payload(place),
                 "accessibility_details": poi.get("accessibility_details") or {},
             })
     return matches
+
+
+def print_coverage(pois, matches):
+    """Wie viele POIs das API kennt und was es je Feld beisteuert - die
+    Abdeckung gehoert in die Arbeit und erklaert die Platzhalter in der App."""
+    total, hit = len(pois), len(matches)
+    percent = (100.0 * hit / total) if total else 0.0
+    print("OK " + str(hit) + " von " + str(total) + " POIs im API gefunden ("
+          + "{:.0f}".format(percent) + " %)")
+    for key, label in (("images", "mit Fotos"),
+                       ("opening_hours", "mit Oeffnungszeiten"),
+                       ("phone", "mit Telefon"),
+                       ("website", "mit Webseite"),
+                       ("description", "mit Beschreibung")):
+        count = sum(1 for m in matches if m["payload"].get(key))
+        print("   " + label.ljust(22) + str(count))
+    print("   " + "ohne Treffer".ljust(22) + str(total - hit)
+          + " (die App zeigt dort Platzhalter)")
+
+
+def payload_summary(payload):
+    """Kurzform fuer die Konsole: was dieser Treffer beisteuert."""
+    parts = []
+    if payload.get("images"):
+        parts.append(str(len(payload["images"])) + " Bilder")
+    if payload.get("opening_hours"):
+        parts.append("Zeiten")
+    if payload.get("phone"):
+        parts.append("Telefon")
+    if payload.get("website"):
+        parts.append("Web")
+    if payload.get("description"):
+        parts.append("Text")
+    return ", ".join(parts) if parts else "-"
 
 
 # ============================================================
@@ -516,27 +750,22 @@ def load_pois_from_file(path):
 # SCHREIBEN
 # ============================================================
 def merged_details(match):
-    """accessibility_details des POI plus Bilder und Bildnachweis."""
+    """accessibility_details des POI plus die Angaben aus dem API."""
     details = dict(match["accessibility_details"])
-    details["images"] = match["images"]
-    details["image_source"] = IMAGE_SOURCE
+    details.update(match["payload"])
     return details
-
-
-def images_patch(match):
-    """Nur die Felder, die dieser Import setzt - fuer das SQL-Merge."""
-    return {"images": match["images"], "image_source": IMAGE_SOURCE}
 
 
 def write_sql(matches, path):
     """Idempotentes SQL fuer den Supabase-SQL-Editor (ohne Service-Key).
     `||` merged in das bestehende JSONB, alle anderen Felder bleiben."""
     lines = [
-        "-- AR-Mikronavigation - POI-Bilder aus dem Zuerich-Tourismus-API",
-        "-- Quelle: " + BASE_URL + DATA_PATH + " (Open Data 2.0, " + IMAGE_SOURCE + ")",
+        "-- AR-Mikronavigation - POI-Angaben aus dem Zuerich-Tourismus-API",
+        "-- Quelle: " + BASE_URL + DATA_PATH + " (Open Data 2.0, " + INFO_SOURCE + ")",
         "-- Erzeugt: " + datetime.now().isoformat(timespec="seconds"),
-        "-- Setzt accessibility_details.images/.image_source; mehrfaches",
-        "-- Ausfuehren ueberschreibt dieselben Felder und ist damit idempotent.",
+        "-- Setzt in accessibility_details: images, opening_hours, phone,",
+        "-- website, description ... Mehrfaches Ausfuehren ueberschreibt",
+        "-- dieselben Felder und ist damit idempotent.",
         "",
         "BEGIN;",
         "",
@@ -544,7 +773,7 @@ def write_sql(matches, path):
 
     written = 0
     for match in matches:
-        patch = json.dumps(images_patch(match), ensure_ascii=False).replace("'", "''")
+        patch = json.dumps(match["payload"], ensure_ascii=False).replace("'", "''")
         if match.get("poi_id"):
             where = "id = '" + str(match["poi_id"]) + "'"
         elif match.get("poi_source_id"):
@@ -565,8 +794,44 @@ def write_sql(matches, path):
     return written
 
 
+def update_seed_file(matches, path):
+    """Denselben Stand in den Offline-Seed der App schreiben (seed_pois.json),
+    damit Simulator und Feldtest ohne Netz dieselben Angaben zeigen.
+    Zugeordnet wird ueber source_id, sonst ueber Name und Koordinaten."""
+    with open(path, "r", encoding="utf-8") as handle:
+        seeds = json.load(handle)
+
+    by_source_id = {}
+    by_name = {}
+    for seed in seeds:
+        if seed.get("source_id"):
+            by_source_id[str(seed["source_id"])] = seed
+        by_name.setdefault(seed.get("name"), []).append(seed)
+
+    updated = 0
+    for match in matches:
+        seed = None
+        if match.get("poi_source_id"):
+            seed = by_source_id.get(str(match["poi_source_id"]))
+        if seed is None:
+            # Nur wenn der Name im Seed eindeutig ist - sonst liesse sich
+            # nicht sagen, welcher der gleichnamigen Orte gemeint ist.
+            candidates = by_name.get(match["poi_name"]) or []
+            seed = candidates[0] if len(candidates) == 1 else None
+        if seed is None:
+            continue
+        details = dict(seed.get("accessibility_details") or {})
+        details.update(match["payload"])
+        seed["accessibility_details"] = details
+        updated += 1
+
+    with open(path, "w", encoding="utf-8") as handle:
+        json.dump(seeds, handle, indent=2, ensure_ascii=False)
+    return updated
+
+
 def update_supabase(client, matches):
-    print("\nSchreibe Bilder zu " + str(len(matches)) + " POIs in Supabase...")
+    print("\nSchreibe Angaben zu " + str(len(matches)) + " POIs in Supabase...")
     ok, failed = 0, 0
     for index, match in enumerate(matches, start=1):
         if not match.get("poi_id"):
@@ -592,12 +857,16 @@ def update_supabase(client, matches):
 # ============================================================
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="Fotos aus dem Zuerich-Tourismus-API zu den POIs ergaenzen")
+        description="POIs gegen das Zuerich-Tourismus-API pruefen und um Fotos, "
+                    "Oeffnungszeiten und Kontaktangaben ergaenzen")
     parser.add_argument("--dry-run", action="store_true",
                         help="nur Zuordnung zeigen, nichts schreiben")
     parser.add_argument("--pois-file",
                         help="POIs aus einem Import-Backup statt aus Supabase lesen "
                              "(Vorschau ohne Zugangsdaten)")
+    parser.add_argument("--seed-file",
+                        help="zusaetzlich den Offline-Seed der App aktualisieren "
+                             "(ARMikronav/ARMikronav/Seed/seed_pois.json)")
     parser.add_argument("--categories",
                         help="nur diese Kategorie-IDs abfragen, kommagetrennt "
                              "(z. B. 72,101 fuer Sehenswuerdigkeiten und Gastronomie)")
@@ -619,7 +888,7 @@ def main():
     args = parse_args()
 
     print("=" * 60)
-    print("Zuerich-Tourismus Bilder-Import - AR-Mikronavigation")
+    print("Zuerich-Tourismus Import - AR-Mikronavigation")
     print("API: " + BASE_URL + DATA_PATH)
     print("=" * 60)
 
@@ -637,12 +906,12 @@ def main():
     print("OK " + str(len(entries)) + " Eintraege insgesamt")
 
     places = [p for p in (entry_to_place(e, args.max_images) for e in entries) if p]
-    image_count = sum(len(p["images"]) for p in places)
-    print("OK " + str(len(places)) + " Eintraege mit Koordinaten und Bild "
-          + "(" + str(image_count) + " Bilder)")
+    print("OK " + str(len(places)) + " Eintraege mit Koordinaten und Angaben "
+          + "(" + str(sum(len(p["images"]) for p in places)) + " Bilder, "
+          + str(sum(1 for p in places if p["opening_hours"])) + " mit Oeffnungszeiten)")
 
     if not places:
-        print("Keine Bilder gefunden - Abbruch.")
+        print("Keine verwertbaren Eintraege gefunden - Abbruch.")
         sys.exit(1)
 
     # 3. POIs
@@ -656,16 +925,16 @@ def main():
         pois = load_pois_from_supabase(client, args.radius_km)
     print("OK " + str(len(pois)) + " POIs")
 
-    # 4. Zuordnung
-    print("\nOrdne Bilder den POIs zu (max. " + str(args.max_distance_m) + " m)...")
+    # 4. Zuordnung: fuer jeden POI pruefen, ob es ihn im API gibt
+    print("\nPruefe jeden POI gegen das API (max. " + str(args.max_distance_m) + " m)...")
     matches = match_pois(pois, places, args.max_distance_m)
-    print("OK " + str(len(matches)) + " von " + str(len(pois)) + " POIs bekommen Bilder")
+    print_coverage(pois, matches)
 
     for match in matches[:15]:
-        print("  - " + match["poi_name"] + "  <-  " + match["matched_name"]
+        print("  + " + match["poi_name"] + "  <-  " + match["matched_name"]
               + "  (" + str(match["distance_m"]) + " m, "
-              + str(int(match["name_ratio"] * 100)) + "% Name, "
-              + str(len(match["images"])) + " Bilder)")
+              + str(int(match["name_ratio"] * 100)) + "% Name: "
+              + payload_summary(match["payload"]) + ")")
     if len(matches) > 15:
         print("  ... und " + str(len(matches) - 15) + " weitere")
 
@@ -675,22 +944,27 @@ def main():
 
     # 5. Backup + SQL
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    backup_file = "poi_images_zuerich_" + stamp + ".json"
+    backup_file = "poi_zuerich_" + stamp + ".json"
     with open(backup_file, "w", encoding="utf-8") as handle:
         json.dump([{k: v for k, v in m.items() if k != "accessibility_details"}
                    for m in matches], handle, indent=2, ensure_ascii=False)
     print("\nOK Backup gespeichert: " + backup_file)
 
-    sql_file = "poi_images_zuerich_" + stamp + ".sql"
+    sql_file = "poi_zuerich_" + stamp + ".sql"
     print("OK SQL geschrieben: " + sql_file + " ("
           + str(write_sql(matches, sql_file)) + " UPDATEs)")
 
     # 6. Schreiben
     if args.dry_run:
-        print("\n--dry-run: nichts in Supabase geschrieben.")
+        print("\n--dry-run: nichts geschrieben.")
         return
+
+    if args.seed_file:
+        print("OK Offline-Seed aktualisiert: " + args.seed_file + " ("
+              + str(update_seed_file(matches, args.seed_file)) + " POIs)")
+
     if args.pois_file:
-        print("\nOhne POI-IDs (--pois-file) wird nicht direkt geschrieben - "
+        print("\nOhne POI-IDs (--pois-file) wird nicht in Supabase geschrieben - "
               "das erzeugte SQL im Supabase-SQL-Editor ausfuehren.")
         return
 
