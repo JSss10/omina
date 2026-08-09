@@ -1,4 +1,4 @@
-# AR-Mikronavigation
+# Omina
 
 > AR-gestützte Mikronavigation für Rollstuhlnutzende – iOS-Prototyp zur Entscheidungsunterstützung in barrierekritischen urbanen Situationen.
 
@@ -21,22 +21,23 @@ Diese iOS-App visualisiert situative Barrieren (Stufen, Steigungen, Engstellen, 
 
 ## Tech Stack
 
-| Komponente   | Technologie                                     |
-| ------------ | ----------------------------------------------- |
-| iOS App      | Swift / SwiftUI                                 |
-| AR           | ARKit + RealityKit (ARGeoTrackingConfiguration) |
-| Karten       | MapKit                                          |
-| Backend      | Supabase (PostgreSQL + PostGIS)                 |
-| Auth         | Supabase Auth (E-Mail, Google, Apple Sign-in)   |
-| Datenquellen | OSM/Overpass API, ginto API (GraphQL), Wheelmap |
-| Design       | Figma (iPhone 17, 402×874pt)                    |
+| Komponente   | Technologie                                                                          |
+| ------------ | ------------------------------------------------------------------------------------ |
+| iOS App      | Swift / SwiftUI                                                                      |
+| AR           | ARKit + RealityKit (ARGeoTrackingConfiguration)                                      |
+| Karten       | MapKit                                                                               |
+| Routing      | MapKit (Fussgängerroute); Barrieren werden entlang der Route personalisiert bewertet |
+| Backend      | Supabase (PostgreSQL + PostGIS)                                                      |
+| Auth         | Supabase Auth (E-Mail, Google, Apple Sign-in)                                        |
+| Datenquellen | OSM/Overpass API, ginto API (GraphQL, ganze Schweiz), Wheelmap                       |
+| Design       | Figma (iPhone 17, 402×874pt)                                                         |
 
 ## Projektstruktur
 
 ```
-ARMikronav/
+Omina/
 ├── App/
-│   └── ARMikronavApp.swift
+│   └── OminaApp.swift
 ├── Models/
 │   ├── UserProfile.swift
 │   ├── Barrier.swift
@@ -75,20 +76,104 @@ ARMikronav/
 ### Installation
 
 ```bash
-git clone https://github.com/JSss10/ar-micronav-app.git
-cd ar-micronav-app
-open ARMikronav.xcodeproj
-cp Config.example.swift Config.swift
+git clone https://github.com/JSss10/ar-mikronav.git
+cd ar-mikronav
+open Omina/Omina.xcodeproj
+cp Omina/Omina/Config/Secrets.example.swift Omina/Omina/Config/Secrets.swift
 # → Supabase URL und Anon Key eintragen
+```
+
+## Standort simulieren (Rathaus Zürich)
+
+Zum Testen ohne vor Ort zu sein lässt sich der GPS-Standort faken –
+die GPX-Datei `Omina/Testing/RathausZuerich.gpx` enthält das
+Rathaus Zürich (47.37172, 8.54222) als Wegpunkt.
+
+**Simulator oder echtes iPhone (via Xcode):**
+
+1. `RathausZuerich.gpx` per Drag & Drop ins Xcode-Projekt ziehen (einmalig).
+2. App mit ▶︎ starten, dann in der Debug-Leiste unten auf das
+   Pfeil-Symbol **„Simulate Location"** klicken → **RathausZuerich** wählen.
+3. Alternativ als Standard setzen: **Product → Scheme → Edit Scheme… →
+   Run → Options → Core Location → Default Location → RathausZuerich** –
+   dann startet jeder Run direkt beim Rathaus.
+
+**Nur Simulator (ohne GPX):** **Features → Location → Custom Location…**
+und Breite `47.37172` / Länge `8.54222` eintragen.
+
+Hinweis: Der simulierte Standort wirkt auf Karte, Suche, Routing und
+Annäherungswarnungen. ARGeoTracking (AR-Modus) braucht dagegen echtes
+GPS + Kamerabild vor Ort und lässt sich nicht sinnvoll simulieren.
+
+## Feldtest-Modus (Altstadt Zürich, 3 Testtage)
+
+Für die Feldtests wählen Testpersonen auf dem Welcome-Screen unter
+**„Feldtest starten"** ihr vorgefertigtes Testprofil (Bild + Vorname,
+alphabetisch sortiert, `Models/TestProfile.swift`) – keine Registrierung
+nötig. Danach durchlaufen sie das normale Onboarding mit ihren eigenen
+Angaben (inkl. Nachname).
+
+**Datenerfassung (separat von den regulären App-Tabellen):**
+
+| Tabelle             | Inhalt                                                          |
+| ------------------- | --------------------------------------------------------------- |
+| `test_participants` | 1 Zeile pro Testperson: Testprofil, Onboarding-Antworten (JSON) |
+| `test_events`       | Alle Interaktionen: Screen-Aufrufe, Klicks, Routen, Feedback    |
+
+**Setup vor dem ersten Testtag:**
+
+1. `migrations/field_test_tables.sql` im Supabase SQL-Editor ausführen.
+2. Supabase Dashboard → Authentication → Sign In / Providers →
+   **„Allow anonymous sign-ins"** aktivieren (Testpersonen bekommen beim
+   Profil-Auswählen automatisch einen anonymen User).
+3. In `Config/AppConfig.swift` muss `fieldTestModeEnabled = true` stehen
+   (nach den Testtagen wieder auf `false`).
+
+**Ablauf pro Testperson:** Profil antippen → Consent → Onboarding ausfüllen →
+App testen. Danach oben rechts **„Test beenden"**: lädt offene Tracking-Events
+hoch und setzt das Gerät für die nächste Testperson zurück. Die
+Abschluss-Umfrage wird nicht mehr in der App geöffnet — der Umfrage-Link wird
+den Testpersonen separat zugestellt, damit sie ihn auf einem Tablet oder
+Computer (grösser, bessere Bedienbarkeit) ausfüllen können. So lassen sich
+Klickdaten (`test_events`) und Onboarding-Profil (`test_participants`) pro
+Testperson zusammenführen.
+
+**Auswertung:** im Supabase SQL-Editor, z. B.
+
+```sql
+SELECT * FROM test_event_overview WHERE test_day = '2026-07-21';
 ```
 
 ## Datenquellen
 
-| Quelle        | Typ                                              | Lizenz                    |
-| ------------- | ------------------------------------------------ | ------------------------- |
-| OpenStreetMap | Barrieren (kerb, incline, surface, width, steps) | ODbL                      |
-| ginto API     | POI-Zugänglichkeit (GraphQL, 440 POIs Altstadt)  | Nutzungsbedingungen ginto |
-| Wheelmap      | POI wheelchair=yes/limited/no                    | CC-BY-SA                  |
+| Quelle           | Typ                                                                                                       | Lizenz                                     |
+| ---------------- | --------------------------------------------------------------------------------------------------------- | ------------------------------------------ |
+| OpenStreetMap    | Barrieren (kerb/sloped_curb, incline, surface, smoothness, tracktype, width, steps, sidewalk:\*, barrier) | ODbL                                       |
+| OpenRouteService | Alternativroute um eine einzelne Barriere herum (Profil `wheelchair`, avoid_polygons)                     | ODbL (OSM) / ORS-Nutzungsbedingungen       |
+| ginto API        | POI-Zugänglichkeit (GraphQL, POIs ganze Schweiz)                                                          | Nutzungsbedingungen ginto                  |
+| Zürich Tourismus | POI-Fotos, Öffnungszeiten, Kontakt (Open Data 2.0, `/en/api/v2/data`)                                     | Open Data Zürich Tourismus, Quellennennung |
+| Wheelmap         | POI wheelchair=yes/limited/no                                                                             | CC-BY-SA                                   |
+
+Die Standardroute ist die Fussgängerroute – sie nimmt den Weg, den man auch
+selbst nehmen würde. Die Rollstuhl-Perspektive steckt in der personalisierten
+Bewertung der Barrieren entlang dieser Route, nicht in der Geometrie: In der
+Altstadt sind `width`, `surface` und `incline` an zu wenigen Gassen erfasst,
+als dass ein Rollstuhl-Routing dort brauchbare Wege liefern würde (es schlug
+im Feldtest weiträumige Umwege um Ziele vor, die nebenan lagen).
+
+Fotos, Öffnungszeiten und Kontaktangaben im POI-Detail kommen aus dem
+[Open-Data-API von Zürich Tourismus](https://www.zuerich.com/en/open-data-version-20)
+(Version 2.0). `scripts/import_zuerich.py` prüft jeden ginto-POI gegen dieses
+API – zugeordnet wird über Distanz und Namensähnlichkeit – und schreibt die
+Treffer nach `accessibility_details`. Kennt das API einen Ort nicht, zeigt das
+Detail-Sheet Platzhalter statt leerer Flächen. Die Quellenangabe steht unter
+den Fotos und den übernommenen Angaben; die Lizenz verlangt die Nennung.
+
+Welche OSM-Tags für die Barrieren ausgewertet werden und wie sie bewertet
+werden, richtet sich nach dem OSM-Wiki, Projekt
+[Wheelchair routing](https://wiki.openstreetmap.org/wiki/Wheelchair_routing);
+die Grenzwerte nach DIN 18024-1 stehen in
+`Omina/Services/AccessibilityStandard.swift`.
 
 ## Commit Convention
 
@@ -97,4 +182,4 @@ Dieses Projekt verwendet [Conventional Commits](https://www.conventionalcommits.
 ## Lizenz
 
 © 2026 Jessica Schneiter, SAE Institut Zürich. Bachelorarbeit, nicht für kommerzielle Nutzung.  
-OpenStreetMap: © OpenStreetMap Contributors, ODbL | ginto: © ginto guide AG
+OpenStreetMap: © OpenStreetMap Contributors, ODbL | ginto: © ginto guide AG | Fotos: © Zürich Tourismus (zuerich.com)

@@ -62,7 +62,7 @@ git commit -m "chore(data): add Supabase schema with PostGIS and RLS"
 git add Config.example.swift
 git commit -m "chore(config): add Supabase config template"
 
-git add ARMikronav/
+git add Omina/
 git commit -m "feat: add UserProfile model and shouldWarn barrier logic"
 
 git push

@@ -1,4 +1,4 @@
--- AR-Mikronavigation – Supabase Schema v2.1
+-- Omina – Supabase Schema v2.1
 -- Stand: 13.07.2026 | Phase 2
 
 -- PostGIS ins Schema "extensions" statt "public" installieren:
