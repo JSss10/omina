@@ -10,10 +10,9 @@ struct OnboardingCoordinator: View {
     var body: some View {
         VStack(spacing: 0) {
             OnboardingProgressBar(step: viewModel.currentStep)
-                .padding(.top, 12)
+                .padding(.top, AppMetrics.Space.s + AppMetrics.Space.xs)
 
             OnboardingHeader(step: viewModel.currentStep)
-                .padding(.bottom, 8)
 
             ScrollView {
                 Group {
@@ -44,8 +43,9 @@ struct OnboardingCoordinator: View {
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .top)
-                .padding(.horizontal)
-                .padding(.vertical, 16)
+                .padding(.horizontal, AppMetrics.Space.l)
+                .padding(.top, AppMetrics.Space.xl)
+                .padding(.bottom, AppMetrics.Space.m)
             }
             // Bei jedem Schritt eine frische ScrollView: der Inhalt beginnt
             // immer oben, sodass das erste Eingabefeld ganz oben erscheint
@@ -67,6 +67,7 @@ struct OnboardingCoordinator: View {
                 }
             )
         }
+        .background(AppColor.backgroundPrimary.ignoresSafeArea())
         .onChange(of: viewModel.didComplete) { _, completed in
             if completed { onFinish() }
         }

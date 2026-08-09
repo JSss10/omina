@@ -42,8 +42,8 @@ struct Screen14_Abilities: View {
                 )
 
                 Text("Fahrzeit und Ankunftszeit einer Route werden mit deinem Tempo berechnet – nicht mit dem Fussgänger-Tempo der Karten-Dienste.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .font(AppTypography.footnote)
+                    .foregroundStyle(AppColor.textSecondary)
                     .padding(.horizontal, 4)
             }
 
@@ -62,8 +62,8 @@ struct Screen14_Abilities: View {
                 )
 
                 Text("Bei Engstellen warnt dich die App, wenn der Durchgang schmaler ist als \(draft.widthCm + draft.maneuverBufferCm) cm (Breite + Spielraum).")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .font(AppTypography.footnote)
+                    .foregroundStyle(AppColor.textSecondary)
                     .padding(.horizontal, 4)
             }
 
@@ -72,15 +72,16 @@ struct Screen14_Abilities: View {
                 HStack(spacing: 10) {
                     Image(systemName: "road.lanes")
                         .font(.title3)
-                        .foregroundStyle(Color.accentColor)
+                        .foregroundStyle(AppColor.accentPrimary)
                         .frame(width: 28)
                     Text("Untergrund-Toleranz")
-                        .font(.headline)
+                        .font(AppTypography.headline)
+                        .foregroundStyle(AppColor.textPrimary)
                 }
 
                 Text("Welche Beläge sind für dich passierbar?")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .font(AppTypography.subheadline)
+                    .foregroundStyle(AppColor.textSecondary)
 
                 ForEach(SurfaceTolerance.allCases, id: \.self) { tolerance in
                     SurfaceRow(
@@ -93,8 +94,8 @@ struct Screen14_Abilities: View {
             }
             .padding()
             .background(
-                RoundedRectangle(cornerRadius: 14)
-                    .fill(Color(.secondarySystemBackground))
+                RoundedRectangle(cornerRadius: AppMetrics.Radius.button, style: .continuous)
+                    .fill(AppColor.surfaceTinted)
             )
         }
     }
@@ -117,10 +118,10 @@ private struct SurfaceRow: View {
         Button(action: action) {
             HStack {
                 Image(systemName: selected ? "largecircle.fill.circle" : "circle")
-                    .foregroundStyle(selected ? Color.accentColor : Color.secondary)
+                    .foregroundStyle(selected ? AppColor.accentPrimary : AppColor.borderFunctional)
                 Text(label)
-                    .font(.body)
-                    .foregroundStyle(.primary)
+                    .font(AppTypography.body)
+                    .foregroundStyle(AppColor.textPrimary)
                 Spacer()
             }
             .padding(.vertical, 8)

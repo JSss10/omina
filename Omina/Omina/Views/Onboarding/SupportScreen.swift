@@ -1,5 +1,7 @@
 // Screen15_Support.swift
-// Omina – Onboarding Schritt 5/6: Unterstützung / Begleitung.
+// Omina – Onboarding Schritt 7/8: Unterstützung / Begleitung.
+// Aufbau nach Entwurf: getönte Auswahlkarten mit Symbol, Titel und
+// Erläuterung, darunter der Hinweistext und die Eurokey-Karte mit Schalter.
 // Beeinflusst effectiveMaxIncline und effectiveMaxCurb in der Barrierenlogik.
 
 import SwiftUI
@@ -23,7 +25,7 @@ struct Screen15_Support: View {
     ]
 
     var body: some View {
-        VStack(spacing: 14) {
+        VStack(spacing: AppMetrics.Space.s + AppMetrics.Space.xs) {
             ForEach(options, id: \.0) { status, label, icon, hint in
                 SupportCard(
                     icon: icon,
@@ -37,13 +39,15 @@ struct Screen15_Support: View {
 
             if draft.companionStatus != .alwaysAlone {
                 companionBonusCard
+                    .padding(.top, AppMetrics.Space.s)
             }
 
             Text(footerText)
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.leading)
-                .padding(.top, 8)
+                .font(AppTypography.footnote)
+                .foregroundStyle(AppColor.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.vertical, AppMetrics.Space.s)
 
             eurokeyToggle
         }
@@ -52,20 +56,22 @@ struct Screen15_Support: View {
     // Eurokey-Besitz: schaltet abgeschlossene Eurokey-WCs als zugänglich frei.
     private var eurokeyToggle: some View {
         Toggle(isOn: $draft.hasEurokey) {
-            VStack(alignment: .leading, spacing: 3) {
+            VStack(alignment: .leading, spacing: AppMetrics.Space.xs) {
                 Text("Ich besitze einen Eurokey")
-                    .font(.body.weight(.medium))
+                    .font(AppTypography.body.weight(.medium))
+                    .foregroundStyle(AppColor.textPrimary)
                 Text("Viele Behinderten-WCs in der Schweiz sind mit dem Eurokey zugänglich.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .font(AppTypography.footnote)
+                    .foregroundStyle(AppColor.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .padding()
+        .tint(AppColor.accentPrimary)
+        .padding(AppMetrics.Space.m)
         .background(
-            RoundedRectangle(cornerRadius: 14)
-                .fill(Color(.secondarySystemBackground))
+            RoundedRectangle(cornerRadius: AppMetrics.Radius.button, style: .continuous)
+                .fill(AppColor.surfaceTinted)
         )
-        .padding(.top, 4)
     }
 
     private var footerText: String {
@@ -78,14 +84,15 @@ struct Screen15_Support: View {
     // MARK: - Individuelle Begleit-Boni
 
     private var companionBonusCard: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(spacing: 10) {
+        VStack(alignment: .leading, spacing: AppMetrics.Space.m) {
+            HStack(spacing: AppMetrics.Space.s + AppMetrics.Space.xs) {
                 Image(systemName: "plusminus.circle")
                     .font(.title3)
-                    .foregroundStyle(Color.accentColor)
+                    .foregroundStyle(AppColor.accentPrimary)
                     .frame(width: 28)
                 Text("Wie viel hilft deine Begleitung?")
-                    .font(.headline)
+                    .font(AppTypography.headline)
+                    .foregroundStyle(AppColor.textPrimary)
             }
 
             OnboardingNumberField(
@@ -106,14 +113,15 @@ struct Screen15_Support: View {
                 prefix: "+"
             )
         }
-        .padding()
+        .padding(AppMetrics.Space.m)
         .background(
-            RoundedRectangle(cornerRadius: 14)
-                .fill(Color(.secondarySystemBackground))
+            RoundedRectangle(cornerRadius: AppMetrics.Radius.button, style: .continuous)
+                .fill(AppColor.surfaceTinted)
         )
     }
 }
 
+/// Auswahlkarte mit Symbol, Titel und Erläuterung (Entwurf Schritt 6).
 private struct SupportCard: View {
     let icon: String
     let label: String
@@ -123,43 +131,47 @@ private struct SupportCard: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(alignment: .top, spacing: 14) {
+            HStack(alignment: .top, spacing: AppMetrics.Space.m - AppMetrics.Space.xs) {
                 Image(systemName: icon)
-                    .font(.title2)
-                    .foregroundStyle(selected ? Color.accentColor : Color.secondary)
-                    .frame(width: 32)
+                    .font(.title3)
+                    .foregroundStyle(selected ? AppColor.accentPrimary : AppColor.textBrand)
+                    .frame(width: 28)
 
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: AppMetrics.Space.xs) {
                     Text(label)
-                        .font(.body.weight(.medium))
-                        .foregroundStyle(.primary)
-                    Text(hint)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
+                        .font(AppTypography.body.weight(.medium))
+                        .foregroundStyle(AppColor.textPrimary)
                         .multilineTextAlignment(.leading)
+                    Text(hint)
+                        .font(AppTypography.footnote)
+                        .foregroundStyle(AppColor.textSecondary)
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
 
-                Spacer()
+                Spacer(minLength: AppMetrics.Space.s)
 
                 if selected {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.title3)
-                        .foregroundStyle(Color.accentColor)
+                    SelectionMark(selected: true)
                 }
             }
-            .padding()
+            .padding(AppMetrics.Space.m)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .background(
-                RoundedRectangle(cornerRadius: 14)
-                    .fill(selected ? Color.accentColor.opacity(0.08) : Color(.secondarySystemBackground))
+                RoundedRectangle(cornerRadius: AppMetrics.Radius.button, style: .continuous)
+                    .fill(AppColor.surfaceTinted)
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 14)
-                    .stroke(selected ? Color.accentColor : Color.clear, lineWidth: 2)
+                RoundedRectangle(cornerRadius: AppMetrics.Radius.button, style: .continuous)
+                    .strokeBorder(
+                        selected ? AppColor.accentPrimary : Color.clear,
+                        lineWidth: 2
+                    )
             )
         }
         .buttonStyle(.plain)
         .accessibilityLabel(label)
         .accessibilityHint(hint)
-        .accessibilityAddTraits(selected ? .isSelected : [])
+        .accessibilityAddTraits(selected ? [.isButton, .isSelected] : .isButton)
     }
 }

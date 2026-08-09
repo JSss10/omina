@@ -28,24 +28,26 @@ struct OnboardingNumberField: View {
             HStack(spacing: 10) {
                 Image(systemName: icon)
                     .font(.title3)
-                    .foregroundStyle(Color.accentColor)
+                    .foregroundStyle(AppColor.accentPrimary)
                     .frame(width: 28)
                 Text(label)
-                    .font(.headline)
+                    .font(AppTypography.headline)
+                    .foregroundStyle(AppColor.textPrimary)
                 Spacer()
                 HStack(spacing: 4) {
                     if !prefix.isEmpty {
                         Text(prefix)
-                            .font(.headline.monospacedDigit())
-                            .foregroundStyle(Color.accentColor)
+                            .font(AppTypography.headline.monospacedDigit())
+                            .foregroundStyle(AppColor.accentPrimary)
                     }
                     TextField("0", text: $text)
                         .keyboardType(isInteger ? .numberPad : .decimalPad)
                         .multilineTextAlignment(.trailing)
-                        .font(.headline.monospacedDigit())
-                        .foregroundStyle(Color.accentColor)
+                        .font(AppTypography.headline.monospacedDigit())
+                        .foregroundStyle(AppColor.accentPrimary)
                         .frame(width: 64)
-                        .textFieldStyle(.roundedBorder)
+                        .textFieldStyle(.plain)
+                        .compactFieldChrome()
                         .focused($focused)
                         .toolbar {
                             // Zahlentastatur hat keine Eingabetaste – „Fertig“
@@ -58,18 +60,18 @@ struct OnboardingNumberField: View {
                             }
                         }
                     Text(unit)
-                        .font(.headline)
-                        .foregroundStyle(Color.accentColor)
+                        .font(AppTypography.headline)
+                        .foregroundStyle(AppColor.accentPrimary)
                 }
             }
             Text(hint)
-                .font(.footnote)
-                .foregroundStyle(.secondary)
+                .font(AppTypography.footnote)
+                .foregroundStyle(AppColor.textSecondary)
         }
         .padding()
         .background(
-            RoundedRectangle(cornerRadius: 14)
-                .fill(Color(.secondarySystemBackground))
+            RoundedRectangle(cornerRadius: AppMetrics.Radius.button, style: .continuous)
+                .fill(AppColor.surfaceTinted)
         )
         .onAppear { text = formatted(value) }
         // Externe Änderungen (z. B. Defaults aus dem Rollstuhltyp) übernehmen,

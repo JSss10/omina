@@ -69,6 +69,20 @@ enum WheelchairSubtype: String, Codable, CaseIterable, Identifiable {
         }
     }
 
+    /// Leit-Symbol in der Auswahlliste (Screen 1.2): angetriebene und
+    /// sportliche Modelle tragen das Symbol mit Bewegungslinien, Treppen-
+    /// steiger das Treppensymbol.
+    var icon: String {
+        switch self {
+        case .sportManual, .eMotion, .smartDrive, .pullingDevice:
+            return "figure.roll.runningpace"
+        case .scewoBro, .iBot:
+            return "figure.stairs"
+        default:
+            return "figure.roll"
+        }
+    }
+
     var category: WheelchairCategory {
         switch self {
         case .activeManual, .rigidFrame, .foldingManual, .lightweight, .sportManual:

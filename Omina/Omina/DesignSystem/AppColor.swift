@@ -38,6 +38,9 @@ enum AppColor {
     static let accentPressed = Color("AccentPressed")
     /// Text/Icon auf AccentPrimary. Light #FFFFFF · Dark #2E1065.
     static let onAccent = Color("OnAccent")
+    /// Gedämpfte Akzentfläche für inaktive Primäraktionen (Entwurf: heller
+    /// violetter Button mit dunkler Schrift). Light #C4B5FD · Dark #4C1D95.
+    static let accentMuted = Color("AccentMuted")
     /// Fokusindikator (3-pt-Ring). Light #6D28D9 (7,1:1) · Dark #C4B5FD.
     static let focusRing = Color("FocusRing")
     /// AR-Scrim-Hintergrund. #2E1065, in beiden Modi (>= 93 % Deckkraft).

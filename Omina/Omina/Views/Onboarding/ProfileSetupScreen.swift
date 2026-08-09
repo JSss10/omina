@@ -1,5 +1,8 @@
 // ProfileSetupScreen.swift
-// Omina – Onboarding Schritt 1/7: Name und Profilbild.
+// Omina – Onboarding Schritt 1/8: Name und Profilbild.
+// Aufbau nach Entwurf: getönter Kreis mit Personen-Symbol als Profilbild,
+// darunter Vorname und Nachname als Felder ohne eigene Label-Zeile.
+//
 // Name bei E-Mail-Registrierung vorbelegt aus user_metadata; Pflichtfeld bei
 // Apple/Google Sign-in. Das Profilbild ist optional: Ein Tap aufs Foto öffnet
 // Apples nativen Auswahldialog (Foto aufnehmen via Kamera oder Bild hochladen
@@ -19,31 +22,28 @@ struct Screen10_ProfileSetup: View {
     @State private var showingPhotoOptions = false
     @State private var showingGalleryPicker = false
 
+    /// Durchmesser des Profilbilds bzw. seines Platzhalter-Kreises (Entwurf).
+    @ScaledMetric(relativeTo: .largeTitle) private var avatarSize: CGFloat = 140
+
     var body: some View {
-        VStack(spacing: 24) {
+        VStack(spacing: AppMetrics.Space.xxl) {
             avatarPreview
-                .padding(.top, 8)
+                .padding(.top, AppMetrics.Space.s)
 
-            Text("Profilbild (optional)")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
+            VStack(spacing: AppMetrics.Space.m) {
+                AppTextField(
+                    placeholder: "Vorname",
+                    text: $draft.firstName,
+                    textContentType: .givenName,
+                    autocapitalization: .words
+                )
 
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Vorname")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                TextField("Vorname", text: $draft.firstName)
-                    .textFieldStyle(.roundedBorder)
-                    .textContentType(.givenName)
-            }
-
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Nachname")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                TextField("Nachname", text: $draft.lastName)
-                    .textFieldStyle(.roundedBorder)
-                    .textContentType(.familyName)
+                AppTextField(
+                    placeholder: "Nachname",
+                    text: $draft.lastName,
+                    textContentType: .familyName,
+                    autocapitalization: .words
+                )
             }
         }
         .fullScreenCover(isPresented: $showingCamera) {
@@ -87,13 +87,13 @@ struct Screen10_ProfileSetup: View {
                             .scaledToFill()
                     } else {
                         Circle()
-                            .fill(Color(.systemGray6))
-                        Image(systemName: "person.crop.circle.badge.plus")
-                            .font(.system(size: 44))
-                            .foregroundStyle(.secondary)
+                            .fill(AppColor.surfaceTinted)
+                        Image(systemName: "person.crop.circle")
+                            .font(.system(size: avatarSize / 3, weight: .regular))
+                            .foregroundStyle(AppColor.accentPrimary)
                     }
                 }
-                .frame(width: 120, height: 120)
+                .frame(width: avatarSize, height: avatarSize)
                 .clipShape(Circle())
 
                 if avatarStore.image != nil {
@@ -103,8 +103,7 @@ struct Screen10_ProfileSetup: View {
                         Image(systemName: "xmark.circle.fill")
                             .font(.system(size: 28))
                             .symbolRenderingMode(.palette)
-                            .foregroundStyle(.white, .black.opacity(0.55))
-                            .shadow(color: .black.opacity(0.25), radius: 2)
+                            .foregroundStyle(AppColor.onAccent, AppColor.accentPrimary)
                     }
                     .accessibilityLabel("Foto entfernen")
                     .offset(x: 4, y: -4)
@@ -113,5 +112,6 @@ struct Screen10_ProfileSetup: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel(avatarStore.image == nil ? "Profilbild hinzufügen" : "Profilbild ändern")
+        .accessibilityHint("Optional. Öffnet die Auswahl zwischen Kamera und Fotomediathek.")
     }
 }

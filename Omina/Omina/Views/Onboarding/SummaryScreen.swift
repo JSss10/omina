@@ -13,21 +13,23 @@ struct Screen16_Summary: View {
         VStack(spacing: 18) {
             if isSaving {
                 ProgressView("Profil wird gespeichert…")
+                    .tint(AppColor.accentPrimary)
                     .padding()
             }
 
             if let errorMessage {
                 HStack(alignment: .top, spacing: 10) {
                     Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundStyle(.red)
+                        .foregroundStyle(AppColor.Status.blockedIcon)
                     Text(errorMessage)
-                        .font(.footnote)
-                        .foregroundStyle(.red)
+                        .font(AppTypography.footnote)
+                        .foregroundStyle(AppColor.Status.blockedText)
                 }
                 .padding()
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .background(
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(Color.red.opacity(0.08))
+                    RoundedRectangle(cornerRadius: AppMetrics.Radius.field, style: .continuous)
+                        .fill(AppColor.Status.blockedFill)
                 )
             }
 
@@ -81,8 +83,8 @@ struct Screen16_Summary: View {
             }
 
             Text("Du kannst dein Profil später in den Einstellungen jederzeit anpassen.")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
+                .font(AppTypography.footnote)
+                .foregroundStyle(AppColor.textSecondary)
                 .multilineTextAlignment(.center)
                 .padding(.top, 4)
         }
@@ -97,18 +99,18 @@ private struct SummarySection<Content: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text(title.uppercased())
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 4)
-                .padding(.bottom, 6)
+            Text(title)
+                .font(AppTypography.body)
+                .foregroundStyle(AppColor.accentPrimary)
+                .padding(.bottom, AppMetrics.Space.s)
+                .accessibilityAddTraits(.isHeader)
 
             VStack(spacing: 0) {
                 content()
             }
             .background(
-                RoundedRectangle(cornerRadius: 14)
-                    .fill(Color(.secondarySystemBackground))
+                RoundedRectangle(cornerRadius: AppMetrics.Radius.button, style: .continuous)
+                    .fill(AppColor.surfaceTinted)
             )
         }
     }
@@ -122,18 +124,18 @@ private struct SummaryRow: View {
     var body: some View {
         HStack {
             Text(label)
-                .font(.body)
-                .foregroundStyle(subdued ? .secondary : .primary)
+                .font(AppTypography.body)
+                .foregroundStyle(subdued ? AppColor.textSecondary : AppColor.textPrimary)
             Spacer()
             Text(value)
-                .font(.body.weight(.medium))
-                .foregroundStyle(subdued ? .secondary : .primary)
+                .font(AppTypography.body.weight(.medium))
+                .foregroundStyle(subdued ? AppColor.textSecondary : AppColor.textPrimary)
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
+        .padding(.horizontal, AppMetrics.Space.m)
+        .padding(.vertical, AppMetrics.Space.s + AppMetrics.Space.xs)
         .overlay(
             Rectangle()
-                .fill(Color.gray.opacity(0.15))
+                .fill(AppColor.borderDecorative)
                 .frame(height: 0.5),
             alignment: .bottom
         )
