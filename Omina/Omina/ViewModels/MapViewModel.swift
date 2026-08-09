@@ -13,10 +13,12 @@ import CoreLocation
 
 @MainActor
 final class MapViewModel: ObservableObject {
-    @Published private(set) var barriers: [Barrier] = []
+    @Published private(set) var barriers: [Barrier] = [] { didSet { barrierDataRevision &+= 1 } }
     @Published private(set) var isLoading: Bool = false
     @Published private(set) var loadError: String?
-    @Published private(set) var filterState: BarrierFilterState = .default
+    @Published private(set) var filterState: BarrierFilterState = .default {
+        didSet { filteredBarriersRevision &+= 1 }
+    }
 
     // Sichtbarkeits-Toggles (Karte & AR): blenden Barrieren- bzw. POI-Marker
     // komplett aus. Rein visuell – Annäherungswarnungen laufen weiterhin über
@@ -24,13 +26,24 @@ final class MapViewModel: ObservableObject {
     @Published var barriersVisible = true
     @Published var poisVisible = true
 
+    /// Zählt jede Änderung an der Barrieren-Grundmenge oder am Filter mit –
+    /// also genau die Fälle, in denen sich `filteredBarriers` ändern kann.
+    /// Views beobachten diesen Zähler statt die Liste selbst zu vergleichen
+    /// (`onChange(of: filteredBarriers.map(\.id))` baute je Bildaufbau ein
+    /// neues UUID-Array auf, nur um festzustellen, dass sich nichts geändert hat).
+    @Published private(set) var filteredBarriersRevision = 0
+
+    /// Interne Zähler für den Zwischenspeicher der abgeleiteten Listen.
+    private var barrierDataRevision = 0 { didSet { filteredBarriersRevision &+= 1 } }
+    private var poiDataRevision = 0
+
     // POIs (Wireframe 2.1/2.1a): standardmässig alle POIs der Altstadt
     // (einmalig geladen). Kategorie-Chips filtern diese Liste client-seitig
     // über die exakten ginto-Kategorie-Keys; nur die Freitext-Suche läuft
     // über die RPC.
-    @Published private(set) var altstadtPOIs: [POI] = []
+    @Published private(set) var altstadtPOIs: [POI] = [] { didSet { poiDataRevision &+= 1 } }
     /// Ergebnis der letzten Freitext-Suche (nil = keine aktive Suche).
-    @Published private(set) var searchResults: [POI]?
+    @Published private(set) var searchResults: [POI]? { didSet { poiDataRevision &+= 1 } }
     /// Aktiver Kategorie-Chip (deutsches Label, siehe POICategory.chips).
     @Published private(set) var activeCategory: String?
     @Published private(set) var recentSearches: [String] = []
@@ -106,8 +119,86 @@ final class MapViewModel: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
     private var hasStarted = false
 
+    // MARK: - Zwischenspeicher der abgeleiteten Listen
+    //
+    // `filteredBarriers`, `displayedBarriers`, `displayedPOIs` und
+    // `routeBarrierEntries` werden aus SwiftUI-`body` gelesen – auf der Karte
+    // mehrfach je Bildaufbau, und die Blickrichtung des Geräts stösst laufend
+    // neue Durchläufe an. Ohne Zwischenspeicher würde dabei jedes Mal jede
+    // Barriere erneut gegen die ganze Routen-Polyline projiziert
+    // (Barrieren × Wegpunkte), was den Hauptthread auslastet und das Gerät im
+    // AR-Betrieb thermisch drosselt.
+    //
+    // Deshalb wird das Ergebnis unter einem Schlüssel gemerkt, der genau die
+    // Eingaben abbildet, aus denen es entsteht. Ändert sich keine davon, ist
+    // der Zugriff O(1); ändert sich eine, wird neu gerechnet. Die Listen
+    // bleiben damit exakt dieselben wie zuvor – nur eben nicht mehr je Bild.
+
+    /// Die Eingaben, aus denen die abgeleiteten Listen entstehen.
+    private struct DerivedInputs: Equatable {
+        let barrierDataRevision: Int
+        let poiDataRevision: Int
+        let filterState: BarrierFilterState
+        let barriersVisible: Bool
+        let poisVisible: Bool
+        let routeID: UUID?
+        let navigationTargetID: UUID?
+        let activeCategory: String?
+        /// Standort, auf ~1 m gerastert – feiner ändert die Auswahl nichts.
+        let locationGrid: LocationGrid?
+
+        struct LocationGrid: Equatable {
+            let latitude: Int
+            let longitude: Int
+
+            init(_ coordinate: CLLocationCoordinate2D) {
+                latitude = Int((coordinate.latitude * 100_000).rounded())
+                longitude = Int((coordinate.longitude * 100_000).rounded())
+            }
+        }
+    }
+
+    private var derivedInputs: DerivedInputs {
+        DerivedInputs(
+            barrierDataRevision: barrierDataRevision,
+            poiDataRevision: poiDataRevision,
+            filterState: filterState,
+            barriersVisible: barriersVisible,
+            poisVisible: poisVisible,
+            routeID: activeRoute?.id,
+            navigationTargetID: navigationTarget?.id,
+            activeCategory: activeCategory,
+            locationGrid: locationService.currentLocation
+                .map { DerivedInputs.LocationGrid($0.coordinate) }
+        )
+    }
+
+    private var derivedCacheInputs: DerivedInputs?
+    private var cachedFilteredBarriers: [Barrier]?
+    private var cachedDisplayedBarriers: [Barrier]?
+    private var cachedDisplayedPOIs: [POI]?
+    private var cachedRouteBarrierEntries: [RouteBarrierEntry]?
+
+    /// Verwirft den Zwischenspeicher, sobald sich eine der Eingaben geändert hat.
+    private func refreshDerivedCacheIfNeeded() {
+        let inputs = derivedInputs
+        guard inputs != derivedCacheInputs else { return }
+        derivedCacheInputs = inputs
+        cachedFilteredBarriers = nil
+        cachedDisplayedBarriers = nil
+        cachedDisplayedPOIs = nil
+        cachedRouteBarrierEntries = nil
+    }
+
+    /// Barrieren, die der aktive Filter durchlässt. Grundlage der
+    /// Annäherungswarnungen – bewusst unabhängig davon, was auf der Karte
+    /// sichtbar ist (siehe `displayedBarriers`).
     var filteredBarriers: [Barrier] {
-        barriers.filter { filterState.enabledTypes.contains($0.type) }
+        refreshDerivedCacheIfNeeded()
+        if let cachedFilteredBarriers { return cachedFilteredBarriers }
+        let value = barriers.filter { filterState.enabledTypes.contains($0.type) }
+        cachedFilteredBarriers = value
+        return value
     }
 
     /// Halbe Korridor-Breite bei rollstuhlgerechter Route (OpenRouteService).
@@ -146,40 +237,71 @@ final class MapViewModel: ObservableObject {
     /// Barrieren im Warnradius um den tatsächlichen Standort – auch über
     /// solche, die hier nicht als Marker erscheinen.
     var displayedBarriers: [Barrier] {
+        refreshDerivedCacheIfNeeded()
+        if let cachedDisplayedBarriers { return cachedDisplayedBarriers }
+        let value = computeDisplayedBarriers()
+        cachedDisplayedBarriers = value
+        return value
+    }
+
+    private func computeDisplayedBarriers() -> [Barrier] {
         guard barriersVisible else { return [] }
         if let route = activeRoute {
             let corridorM = corridorM(for: route.kind)
+            // Die Route einmal in das lokale Meter-System umrechnen, statt je
+            // Barriere erneut (siehe RouteService.path).
+            let path = RouteService.path(of: route)
             let onRoute = filteredBarriers.filter { barrier in
-                RouteService.distance(
-                    from: CLLocationCoordinate2D(
-                        latitude: barrier.latitude,
-                        longitude: barrier.longitude
-                    ),
-                    to: route
-                ) <= corridorM
+                RouteService.offsetAndAlong(of: barrier.coordinate, on: path).offsetM <= corridorM
             }
             return collapseColocated(onRoute)
         }
         // Ohne Route nur die Barrieren im engen Umkreis des aktuellen
         // Standorts anzeigen (Überlastung vermeiden); passt sich beim
         // Weiterfahren an.
-        return collapseColocated(nearCurrentLocation(filteredBarriers) {
-            CLLocation(latitude: $0.latitude, longitude: $0.longitude)
-        })
+        return collapseColocated(nearCurrentLocation(filteredBarriers, at: \.coordinate))
     }
 
     /// Filtert Elemente auf den Anzeige-Umkreis (nearbyDisplayRadiusM) um den
     /// aktuellen Standort. Bewusst eng, damit in der dichten Altstadt nur die
     /// unmittelbare Umgebung sichtbar ist (Feldtest-Rückmeldung Tag 1). Ohne
     /// Standort-Fix (kurz nach dem Start) werden übergangsweise alle Elemente
-    /// gezeigt. `location` liefert die Position je Element.
+    /// gezeigt. `coordinate` liefert die Position je Element.
+    ///
+    /// Gerechnet wird in quadrierten Metern der Flach-Erde-Näherung: Auf 50 m
+    /// ist sie millimetergenau, spart aber je Element ein `CLLocation`-Objekt
+    /// und eine Wurzel – bei mehreren hundert Elementen je Auswertung spürbar.
     private func nearCurrentLocation<Element>(
         _ elements: [Element],
-        location: (Element) -> CLLocation
+        at coordinate: (Element) -> CLLocationCoordinate2D
     ) -> [Element] {
         guard let userLocation = locationService.currentLocation else { return elements }
+        let origin = userLocation.coordinate
+        let metersPerDegreeLatitude = 111_320.0
+        let metersPerDegreeLongitude = metersPerDegreeLatitude * cos(origin.latitude * .pi / 180)
+        let radiusSquared = AppConfig.nearbyDisplayRadiusM * AppConfig.nearbyDisplayRadiusM
+
         return elements.filter { element in
-            userLocation.distance(from: location(element)) <= AppConfig.nearbyDisplayRadiusM
+            let position = coordinate(element)
+            let north = (position.latitude - origin.latitude) * metersPerDegreeLatitude
+            let east = (position.longitude - origin.longitude) * metersPerDegreeLongitude
+            return north * north + east * east <= radiusSquared
+        }
+    }
+
+    /// Raster, auf das `collapseColocated` Koordinaten legt. Ganzzahlig statt
+    /// als formatierter String: `String(format:)` ist für einen reinen
+    /// Wörterbuch-Schlüssel unverhältnismässig teuer (Locale-Behandlung und
+    /// eine Zeichenkette je Barriere), das Ergebnis ist dasselbe.
+    private struct ColocationKey: Hashable {
+        let latitude: Int
+        let longitude: Int
+
+        /// 6 Nachkommastellen ≈ 0,11 m: fasst nur wirklich deckungsgleiche
+        /// Punkte zusammen, keine benachbarten Barrieren.
+        init(_ barrier: Barrier) {
+            latitude = Int((barrier.latitude * 1_000_000).rounded())
+            longitude = Int((barrier.longitude * 1_000_000).rounded())
         }
     }
 
@@ -191,11 +313,10 @@ final class MapViewModel: ObservableObject {
     /// Pro Punkt bleibt die schwerwiegendste Barriere als Stellvertreterin –
     /// so zeigen Karte, Liste und der Panel-Zähler exakt dieselbe Anzahl.
     private func collapseColocated(_ barriers: [Barrier]) -> [Barrier] {
-        var representatives: [String: Barrier] = [:]
+        var representatives: [ColocationKey: Barrier] = [:]
+        representatives.reserveCapacity(barriers.count)
         for barrier in barriers {
-            // 6 Nachkommastellen ≈ 0,11 m: fasst nur wirklich deckungsgleiche
-            // Punkte zusammen, keine benachbarten Barrieren.
-            let key = String(format: "%.6f,%.6f", barrier.latitude, barrier.longitude)
+            let key = ColocationKey(barrier)
             if let current = representatives[key], !barrier.isMoreSevere(than: current) {
                 continue
             }
@@ -220,19 +341,24 @@ final class MapViewModel: ObservableObject {
     /// Barrieren im Korridor der aktiven Route, sortiert in Laufrichtung –
     /// die Datenbasis der "Barrieren auf der Route"-Liste.
     var routeBarrierEntries: [RouteBarrierEntry] {
+        refreshDerivedCacheIfNeeded()
+        if let cachedRouteBarrierEntries { return cachedRouteBarrierEntries }
+        let value = computeRouteBarrierEntries()
+        cachedRouteBarrierEntries = value
+        return value
+    }
+
+    private func computeRouteBarrierEntries() -> [RouteBarrierEntry] {
         guard let route = activeRoute else { return [] }
+        // Wie in computeDisplayedBarriers: Route einmal umrechnen, dann alle
+        // Barrieren dagegen verorten.
+        let path = RouteService.path(of: route)
         let alongUser = locationService.currentLocation.map {
-            RouteService.distanceAlongRoute(to: $0.coordinate, on: route)
+            RouteService.offsetAndAlong(of: $0.coordinate, on: path).alongM
         }
         return displayedBarriers
             .map { barrier in
-                let along = RouteService.distanceAlongRoute(
-                    to: CLLocationCoordinate2D(
-                        latitude: barrier.latitude,
-                        longitude: barrier.longitude
-                    ),
-                    on: route
-                )
+                let along = RouteService.offsetAndAlong(of: barrier.coordinate, on: path).alongM
                 return RouteBarrierEntry(
                     barrier: barrier,
                     distanceFromStartM: along,
@@ -262,16 +388,24 @@ final class MapViewModel: ObservableObject {
     /// Datenbasis der "In der Nähe"-Liste in der Suche. Ohne Standort-Fix nach
     /// der importierten Distanz sortiert.
     func nearbyPOIs(limit: Int = 12) -> [POI] {
+        Array(sortedByUserDistance(altstadtPOIs).prefix(limit))
+    }
+
+    /// Sortiert POIs nach Luftlinie zum aktuellen Standort; ohne Standort-Fix
+    /// nach der importierten Distanz.
+    ///
+    /// Die Distanz wird EINMAL je POI berechnet und dann sortiert. Zuvor stand
+    /// sie im Vergleicher – der läuft n·log(n)-mal und legte dabei jedes Mal
+    /// zwei `CLLocation`-Objekte an; bei mehreren hundert Orten waren das
+    /// Tausende überflüssiger Objekte je Aufruf.
+    private func sortedByUserDistance(_ pois: [POI]) -> [POI] {
         guard let user = locationService.currentLocation else {
-            return Array(altstadtPOIs.sorted { $0.distanceM < $1.distanceM }.prefix(limit))
+            return pois.sorted { $0.distanceM < $1.distanceM }
         }
-        return altstadtPOIs
-            .sorted {
-                user.distance(from: CLLocation(latitude: $0.latitude, longitude: $0.longitude))
-                    < user.distance(from: CLLocation(latitude: $1.latitude, longitude: $1.longitude))
-            }
-            .prefix(limit)
-            .map { $0 }
+        return pois
+            .map { (poi: $0, distanceM: user.distance(from: CLLocation(latitude: $0.latitude, longitude: $0.longitude))) }
+            .sorted { $0.distanceM < $1.distanceM }
+            .map(\.poi)
     }
 
     /// Luftlinien-Distanz eines POI zum aktuellen Standort als String; ohne
@@ -302,6 +436,14 @@ final class MapViewModel: ObservableObject {
     ///   Orte dieser Kategorie
     /// – sonst → POIs im engen Umkreis des Standorts (nearbyDisplayRadiusM)
     var displayedPOIs: [POI] {
+        refreshDerivedCacheIfNeeded()
+        if let cachedDisplayedPOIs { return cachedDisplayedPOIs }
+        let value = computeDisplayedPOIs()
+        cachedDisplayedPOIs = value
+        return value
+    }
+
+    private func computeDisplayedPOIs() -> [POI] {
         if activeRoute != nil {
             return navigationTarget.map { [$0] } ?? []
         }
@@ -312,16 +454,10 @@ final class MapViewModel: ObservableObject {
         if let activeCategory {
             return poisForCategory(activeCategory, limit: AppConfig.nearestCategoryLimit)
         }
-        return poisNearCurrentLocation(altstadtPOIs)
-    }
-
-    /// POIs im Anzeige-Umkreis (nearbyDisplayRadiusM) um den aktuellen
-    /// Standort – dieselbe enge Begrenzung wie bei den Barrieren, damit Karte
-    /// und AR-Modus nur die unmittelbare Umgebung zeigen.
-    private func poisNearCurrentLocation(_ pois: [POI]) -> [POI] {
-        nearCurrentLocation(pois) {
-            CLLocation(latitude: $0.latitude, longitude: $0.longitude)
-        }
+        // POIs im Anzeige-Umkreis (nearbyDisplayRadiusM) – dieselbe enge
+        // Begrenzung wie bei den Barrieren, damit Karte und AR-Modus nur die
+        // unmittelbare Umgebung zeigen.
+        return nearCurrentLocation(altstadtPOIs, at: \.coordinate)
     }
 
     /// Altstadt-POIs eines Kategorie-Chips (exaktes Key-Matching), nach
@@ -331,16 +467,9 @@ final class MapViewModel: ObservableObject {
     /// die nächstgelegenen Treffer (nil = alle, z. B. für die Trefferzahl).
     func poisForCategory(_ label: String, limit: Int? = nil) -> [POI] {
         guard let chip = POICategory.chip(forLabel: label) else { return [] }
-        let matching = altstadtPOIs.filter { chip.matches(category: $0.category) }
-        let sorted: [POI]
-        if let user = locationService.currentLocation {
-            sorted = matching.sorted {
-                user.distance(from: CLLocation(latitude: $0.latitude, longitude: $0.longitude))
-                    < user.distance(from: CLLocation(latitude: $1.latitude, longitude: $1.longitude))
-            }
-        } else {
-            sorted = matching.sorted { $0.distanceM < $1.distanceM }
-        }
+        let sorted = sortedByUserDistance(
+            altstadtPOIs.filter { chip.matches(category: $0.category) }
+        )
         guard let limit else { return sorted }
         return Array(sorted.prefix(limit))
     }
@@ -562,7 +691,7 @@ final class MapViewModel: ObservableObject {
 
         let avoidCoordinates = barriers
             .filter { avoidedBarrierIds.contains($0.id) }
-            .map { CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude) }
+            .map(\.coordinate)
 
         do {
             let newRoute: ActiveRoute
@@ -838,14 +967,9 @@ final class MapViewModel: ObservableObject {
     /// Route. Gleiche Korridorbreite wie bei der aktiven Navigation.
     func barriers(on route: ActiveRoute) -> [Barrier] {
         let corridor = corridorM(for: route.kind)
+        let path = RouteService.path(of: route)
         return filteredBarriers.filter { barrier in
-            RouteService.distance(
-                from: CLLocationCoordinate2D(
-                    latitude: barrier.latitude,
-                    longitude: barrier.longitude
-                ),
-                to: route
-            ) <= corridor
+            RouteService.offsetAndAlong(of: barrier.coordinate, on: path).offsetM <= corridor
         }
     }
 
@@ -881,7 +1005,7 @@ final class MapViewModel: ObservableObject {
         avoidedBarrierIds.insert(barrier.id)
         let avoidCoordinates = barriers
             .filter { avoidedBarrierIds.contains($0.id) }
-            .map { CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude) }
+            .map(\.coordinate)
 
         isCalculatingRoute = true
         defer { isCalculatingRoute = false }

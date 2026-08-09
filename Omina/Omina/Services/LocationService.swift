@@ -195,8 +195,31 @@ final class LocationService: NSObject, ObservableObject {
             guard let motion,
                   let bearing = Self.cameraBearing(from: motion.attitude.rotationMatrix)
             else { return }
-            Task { @MainActor in self?.lookDirection = bearing }
+            Task { @MainActor in self?.updateLookDirection(bearing) }
         }
+    }
+
+    /// Kleinste Änderung der Blickrichtung, die veröffentlicht wird (Grad).
+    /// Entspricht dem Kompass-Filter von `CLLocationManager` (headingFilter).
+    private static let lookDirectionFilterDeg: CLLocationDirection = 2
+
+    /// Übernimmt eine neue Kamera-Blickrichtung nur, wenn sie sich spürbar
+    /// geändert hat.
+    ///
+    /// CoreMotion liefert 20 Lagen je Sekunde. Jede davon zu veröffentlichen
+    /// bedeutet 20 SwiftUI-Durchläufe je Sekunde in JEDER beobachtenden View –
+    /// auf der Karte also samt aller Marker und der Barrieren-Auswertung
+    /// entlang der Route, obwohl sich am Bild nichts ändert. Unterhalb von
+    /// zwei Grad ist die Drehung des Blickrichtungs-Kegels ohnehin nicht
+    /// wahrnehmbar.
+    private func updateLookDirection(_ bearing: CLLocationDirection) {
+        guard let current = lookDirection else {
+            lookDirection = bearing
+            return
+        }
+        let change = abs(ARHeadingCorrection.normalizedSignedDegrees(bearing - current))
+        guard change >= Self.lookDirectionFilterDeg else { return }
+        lookDirection = bearing
     }
 
     private func stopCameraDirectionUpdates() {

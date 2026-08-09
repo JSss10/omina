@@ -217,7 +217,9 @@ struct ARModeView: View {
         .onReceive(locationService.$currentLocation) { _ in
             evaluateProximity()
         }
-        .onChange(of: viewModel.filteredBarriers.map(\.id)) { _, _ in
+        // Zähler statt der Liste selbst: `filteredBarriers.map(\.id)` baute bei
+        // jedem Bildaufbau ein neues UUID-Array auf, nur um es zu vergleichen.
+        .onChange(of: viewModel.filteredBarriersRevision) { _, _ in
             evaluateProximity()
         }
         .onReceive(barrierNotifications.$tappedBarrierId) { barrierId in
