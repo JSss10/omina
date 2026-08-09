@@ -78,6 +78,68 @@ python3 import_ginto.py
   - Scewo BRO (scewo)
 - grade (COMPLETELY/PARTIALLY/BADLY) + conformance (0-100%)
 
+### import_zuerich_images.py
+
+Ergänzt die bestehenden POIs in `poi_accessibility` um Fotos aus dem
+[Open-Data-API von Zürich Tourismus](https://www.zuerich.com/en/open-data-version-20)
+(Version 2.0). Die ginto-Daten enthalten keine Bilder – dieses Script
+schliesst die Lücke für die Stadt und Region Zürich.
+
+```bash
+python3 import_zuerich_images.py --dry-run   # erst die Zuordnung ansehen
+python3 import_zuerich_images.py             # dann schreiben (fragt nach)
+```
+
+**Wie das API aufgebaut ist** (nur unter `/en/` verfügbar, kein API-Key nötig):
+
+| Aufruf                        | Ergebnis                                      |
+| ----------------------------- | --------------------------------------------- |
+| `GET /en/api/v2/data`         | Liste aller Kategorien (`id`, `name`, `path`) |
+| `GET /en/api/v2/data?id=<id>` | Alle Einträge einer Kategorie                 |
+
+Die Einträge sind nach Schema.org aufgebaut, mehrsprachige Felder kommen als
+Objekt (`{"de": …, "en": …}`). Die Bilder stecken in `image` (Hauptbild) und
+`photo` (weitere Bilder), die Position in `geoCoordinates`.
+
+**Zuordnung API-Eintrag → POI:** über die Distanz **und** die
+Namensähnlichkeit – beides zusammen, weil in der Altstadt viele Lokale dicht
+beieinanderliegen und Namen sich wiederholen.
+
+- ≤ 150 m und ≥ 86 % Namensähnlichkeit, oder
+- ≤ 40 m und ≥ 70 % (gleiches Gebäude, leicht abweichender Name)
+
+Verglichen wird der normalisierte Name (ohne Akzente/Satzzeichen) und der
+Kern-Name ohne generische Wörter, damit «Marktgasse Hotel» und «Hotel
+Marktgasse» zusammenfinden.
+
+**Was geschrieben wird** – ausschliesslich in `accessibility_details`:
+
+| Feld           | Inhalt                                                                 |
+| -------------- | ---------------------------------------------------------------------- |
+| `images`       | Liste `{url, caption, credit}` (max. 5, Reihenfolge: Hauptbild zuerst) |
+| `image_source` | `Zürich Tourismus (zuerich.com)` für den Bildnachweis                  |
+
+Genau dieses Format liest `POI.swift` (`POIImage`); das Detail-Sheet zeigt die
+Fotos als Karussell mit Quellenangabe darunter. Die Nennung der Quelle
+verlangt die Lizenz von Zürich Tourismus.
+
+**Optionen:**
+
+| Option                | Zweck                                                                          |
+| --------------------- | ------------------------------------------------------------------------------ |
+| `--dry-run`           | nur Zuordnung zeigen, nichts schreiben                                         |
+| `--pois-file <json>`  | POIs aus einem Import-Backup lesen (Vorschau ganz ohne Supabase)               |
+| `--categories 72,101` | nur bestimmte Kategorien abfragen (72 = Sehenswürdigkeiten, 101 = Gastronomie) |
+| `--radius-km`         | Umkreis um Zürich, in dem POIs geprüft werden (Standard 25)                    |
+| `--max-distance-m`    | maximale Distanz für einen Treffer (Standard 150)                              |
+| `--max-images`        | höchstens so viele Bilder je POI (Standard 5)                                  |
+| `--yes`               | ohne Rückfrage schreiben                                                       |
+
+Neben dem Backup-JSON schreibt das Script ein idempotentes
+`poi_images_zuerich_<zeitstempel>.sql`. Damit lassen sich die Bilder auch
+ohne Service-Key über den Supabase-SQL-Editor einspielen (die UPDATEs mergen
+per `||` in das bestehende JSONB, alles andere bleibt stehen).
+
 ## Workflow
 
 ```bash
@@ -91,9 +153,15 @@ python3 import_ginto.py
 # → fragt nach Bestätigung vor dem Schreiben in Supabase
 # → erstellt Backup-JSON
 
-# 3. In Supabase Table Editor prüfen:
+# 3. Fotos von Zürich Tourismus ergänzen (nach dem ginto-Import)
+python3 import_zuerich_images.py
+# → fragt nach Bestätigung vor dem Schreiben in Supabase
+# → erstellt Backup-JSON und ein SQL-Script
+
+# 4. In Supabase Table Editor prüfen:
 # - barriers: sollte ~50-200 Einträge haben
 # - poi_accessibility: enthält die POIs der ganzen Schweiz (ginto)
+# - accessibility_details.images: bei den Zürcher POIs mit Treffer gefüllt
 ```
 
 ## Backups

@@ -39,23 +39,55 @@ struct POI: Codable, Identifiable {
         }
     }
 
-    // MARK: - ginto-Detailinformationen (accessibility_details JSONB)
+    // MARK: - Detailinformationen (accessibility_details JSONB)
 
-    /// Bild-URLs des Ortes aus dem ginto-Import (accessibility_details.images,
-    /// als Strings oder Objekte mit "url"). Leer, wenn keine Bilder vorliegen.
-    var imageURLs: [URL] {
+    /// Fotos des Ortes aus accessibility_details.images – als reine URL-Strings
+    /// (ginto-Import) oder als Objekte mit url/caption/credit (Import aus dem
+    /// Open-Data-API von Zürich Tourismus, scripts/import_zuerich_images.py).
+    /// Leer, wenn keine Bilder vorliegen.
+    var images: [POIImage] {
         guard case .array(let items)? = accessibilityDetails?["images"] else { return [] }
         return items.compactMap { item in
             switch item {
             case .string(let urlString):
-                return URL(string: urlString)
+                guard let url = URL(string: urlString) else { return nil }
+                return POIImage(url: url, caption: nil, credit: fallbackImageCredit)
             case .object(let dict):
-                guard case .string(let urlString)? = dict["url"] else { return nil }
-                return URL(string: urlString)
+                guard case .string(let urlString)? = dict["url"],
+                      let url = URL(string: urlString)
+                else { return nil }
+                return POIImage(
+                    url: url,
+                    caption: string(dict["caption"]),
+                    credit: string(dict["credit"]) ?? fallbackImageCredit
+                )
             default:
                 return nil
             }
         }
+    }
+
+    /// Bildnachweis für alle Fotos ohne eigenen Credit
+    /// (accessibility_details.image_source, vom Import gesetzt).
+    private var fallbackImageCredit: String? {
+        string(accessibilityDetails?["image_source"])
+    }
+
+    /// Quellenangabe unter dem Foto-Karussell: die Rechteinhaber der
+    /// angezeigten Bilder, ohne Wiederholungen. Die Nennung ist von der
+    /// Lizenz der Bildquelle verlangt.
+    var imageCredit: String? {
+        var credits: [String] = []
+        for credit in images.compactMap(\.credit) where !credits.contains(credit) {
+            credits.append(credit)
+        }
+        return credits.isEmpty ? nil : credits.joined(separator: ", ")
+    }
+
+    private func string(_ value: AnyJSON?) -> String? {
+        guard case .string(let text)? = value else { return nil }
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 
     /// Link auf die ginto-Detailseite des Eintrags (accessibility_details.ginto_url).
@@ -172,6 +204,18 @@ extension POI {
         self.source = "saved"
         self.distanceM = 0
     }
+}
+
+/// Ein Foto eines Ortes mit Bildunterschrift und Rechteinhaber.
+/// Die Bilder stammen aus dem Open-Data-API von Zürich Tourismus, dessen
+/// Lizenz die Nennung der Quelle verlangt – `credit` wird deshalb immer
+/// mitgeführt und im Detail-Sheet angezeigt.
+struct POIImage: Identifiable, Hashable {
+    let url: URL
+    let caption: String?
+    let credit: String?
+
+    var id: String { url.absoluteString }
 }
 
 /// Eine ginto-Zugänglichkeits-Bewertung für ein Rollstuhl-Profil.

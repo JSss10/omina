@@ -139,38 +139,74 @@ struct POIDetailSheet: View {
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
-    /// Foto-Karussell (ginto-Bilder des Ortes) als vollbreites Hero-Bild.
-    /// Bei mehreren Bildern paged mit dezenten Indikatoren.
+    /// Foto-Karussell des Ortes als vollbreites Hero-Bild, darunter der
+    /// Bildnachweis. Bei mehreren Bildern paged mit dezenten Indikatoren.
     @ViewBuilder
     private var photoCarousel: some View {
-        let urls = poi.imageURLs
-        if !urls.isEmpty {
-            Group {
-                if urls.count == 1 {
-                    photo(urls[0])
-                } else {
-                    TabView(selection: $photoIndex) {
-                        ForEach(Array(urls.enumerated()), id: \.element.absoluteString) { index, url in
-                            photo(url).tag(index)
+        let images = poi.images
+        if !images.isEmpty {
+            VStack(alignment: .leading, spacing: AppMetrics.Space.xs) {
+                Group {
+                    if images.count == 1 {
+                        photo(images[0])
+                    } else {
+                        TabView(selection: $photoIndex) {
+                            ForEach(Array(images.enumerated()), id: \.element.id) { index, image in
+                                photo(image).tag(index)
+                            }
                         }
+                        .tabViewStyle(.page(indexDisplayMode: .always))
+                        .indexViewStyle(.page(backgroundDisplayMode: .interactive))
                     }
-                    .tabViewStyle(.page(indexDisplayMode: .always))
-                    .indexViewStyle(.page(backgroundDisplayMode: .interactive))
+                }
+                .frame(height: 200)
+                .frame(maxWidth: .infinity)
+                .background(AppColor.surfaceRaised)
+                .clipShape(RoundedRectangle(cornerRadius: AppMetrics.Radius.card, style: .continuous))
+                // Nur ein Label auf dem Container – die Seiten des Karussells
+                // bleiben für VoiceOver einzeln bedienbar.
+                .accessibilityLabel(photoAccessibilityLabel(images))
+
+                // Bildunterschrift und Quellenangabe unter dem Bild statt als
+                // Overlay – sonst läge sie hinter den Seiten-Indikatoren.
+                // Die Nennung der Quelle verlangt die Lizenz der Bildquelle.
+                if let line = photoCaptionLine(images) {
+                    Text(line)
+                        .font(AppTypography.footnote)
+                        .foregroundStyle(AppColor.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityHidden(true)
                 }
             }
-            .frame(height: 200)
-            .frame(maxWidth: .infinity)
-            .background(AppColor.surfaceRaised)
-            .clipShape(RoundedRectangle(cornerRadius: AppMetrics.Radius.card, style: .continuous))
-            .accessibilityLabel("Fotos von \(poi.name)")
         }
     }
 
-    private func photo(_ url: URL) -> some View {
-        AsyncImage(url: url) { phase in
+    /// Bildunterschrift des gerade sichtbaren Fotos plus Bildnachweis,
+    /// z. B. «Saal im Literaturhaus · Foto: Zürich Tourismus (zuerich.com)».
+    private func photoCaptionLine(_ images: [POIImage]) -> String? {
+        let current = images.indices.contains(photoIndex) ? images[photoIndex] : images.first
+        let credit = current?.credit ?? poi.imageCredit
+        let parts = [current?.caption, credit.map { "Foto: \($0)" }].compactMap { $0 }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    /// Ein Sammel-Label statt vieler Einzelbilder: VoiceOver liest die
+    /// Anzahl, die Bildunterschriften und den Bildnachweis am Stück.
+    private func photoAccessibilityLabel(_ images: [POIImage]) -> String {
+        var parts = [images.count == 1 ? "Foto von \(poi.name)"
+                                       : "\(images.count) Fotos von \(poi.name)"]
+        parts.append(contentsOf: images.compactMap(\.caption))
+        if let credit = poi.imageCredit {
+            parts.append("Bildnachweis: \(credit)")
+        }
+        return parts.joined(separator: ", ")
+    }
+
+    private func photo(_ image: POIImage) -> some View {
+        AsyncImage(url: image.url) { phase in
             switch phase {
-            case .success(let image):
-                image
+            case .success(let loaded):
+                loaded
                     .resizable()
                     .scaledToFill()
             case .failure:
@@ -284,8 +320,9 @@ struct POIDetailSheet: View {
         if let details = poi.accessibilityDetails, !details.isEmpty {
             let rows = details.keys.sorted().compactMap { key -> (String, String)? in
                 // URL-/Webseiten-Felder werden separat als «Webseite»-Zeile
-                // gezeigt (websiteRow); interne Quell-Schlüssel bleiben aussen vor.
-                guard !isWebsiteKey(key) else { return nil }
+                // gezeigt (websiteRow), Bildfelder als Foto-Karussell mit
+                // Bildnachweis; interne Quell-Schlüssel bleiben aussen vor.
+                guard !isShownElsewhere(key) else { return nil }
                 guard let text = displayValue(details[key]) else { return nil }
                 return (key, text)
             }
@@ -363,11 +400,13 @@ struct POIDetailSheet: View {
         return host
     }
 
-    /// Schlüssel, deren Wert eine Webseite/URL ist – separat als websiteRow
-    /// dargestellt und in der Detail-Tabelle ausgeblendet.
-    private func isWebsiteKey(_ key: String) -> Bool {
+    /// Schlüssel, die die Detail-Tabelle auslässt, weil sie an anderer Stelle
+    /// stehen: Webseiten/URLs als websiteRow, Bilder und Bildnachweis am
+    /// Foto-Karussell.
+    private func isShownElsewhere(_ key: String) -> Bool {
         let k = key.lowercased()
         return k.contains("url") || k == "website" || k == "homepage"
+            || k == "images" || k == "image_source"
     }
 
     private var arButton: some View {
