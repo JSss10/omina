@@ -1,10 +1,15 @@
 -- Omina – Supabase Schema v2.1
--- Stand: 13.07.2026 | Phase 2
+-- Stand: 09.08.2026 | Phase 2
 
 -- PostGIS ins Schema "extensions" statt "public" installieren:
 -- verhindert die Supabase-Advisor-Warnung "rls_disabled_in_public"
 -- für die Extension-Tabelle spatial_ref_sys. Das Schema "extensions"
 -- liegt bei Supabase standardmässig im search_path.
+--
+-- Achtung: Steckt PostGIS in einem bestehenden Projekt bereits in "public",
+-- ist das hier wegen IF NOT EXISTS ein No-Op – die Extension wandert nicht
+-- nachträglich um. Dann entweder neu aufsetzen oder die Advisor-Warnung
+-- für spatial_ref_sys bewusst stehen lassen.
 CREATE EXTENSION IF NOT EXISTS postgis WITH SCHEMA extensions;
 
 -- 1. barriers
@@ -115,7 +120,8 @@ CREATE POLICY "test_areas_read" ON test_areas FOR SELECT USING (true);
 -- 8. Explizite Grants für die Data-API-Rollen
 -- Seit 30.05.2026 vergibt Supabase für neue Tabellen keine impliziten
 -- Grants mehr (ab 30.10.2026 auch für bestehende Projekte). Ohne GRANT
--- liefert PostgREST den Fehler 42501.
+-- liefert PostgREST den Fehler 42501. RLS bleibt trotzdem massgeblich:
+-- die Policies aus Abschnitt 7 schränken ein, was die Rollen sehen.
 
 GRANT SELECT ON barriers, poi_accessibility, test_areas
     TO anon, authenticated;
@@ -128,33 +134,39 @@ GRANT SELECT, INSERT, UPDATE, DELETE
     TO service_role;
 
 -- 9. RPC-Funktionen für die App (Umkreissuche)
--- Fester search_path (public, extensions) verhindert die Advisor-Warnung
--- "function_search_path_mutable"; extensions wird für PostGIS benötigt.
+-- Deckungsgleich mit migrations/barriers_within_radius.sql und
+-- migrations/pois_within_radius.sql – dort stehen die ausführlichen
+-- Kommentare zu Aufruf und Rückgabewerten. Wer das Schema frisch aufsetzt,
+-- braucht die beiden Migrationen danach nicht mehr einzeln auszuführen.
+--
+-- Fixierter search_path (public, extensions, pg_temp) verhindert die
+-- Advisor-Warnung "function_search_path_mutable"; extensions wird für
+-- PostGIS gebraucht, pg_temp gehört ans Ende der Liste.
 
 CREATE OR REPLACE FUNCTION barriers_within_radius(
-    lat            DOUBLE PRECISION,
-    lng            DOUBLE PRECISION,
-    radius_meters  DOUBLE PRECISION
+    lat double precision,
+    lng double precision,
+    radius_meters double precision
 )
 RETURNS TABLE (
-    id             UUID,
-    type           VARCHAR,
-    subtype        VARCHAR,
-    value          DECIMAL,
-    unit           VARCHAR,
-    latitude       DOUBLE PRECISION,
-    longitude      DOUBLE PRECISION,
-    value_source   VARCHAR,
-    source         VARCHAR,
-    source_id      VARCHAR,
-    is_active      BOOLEAN,
-    last_verified  TIMESTAMP,
-    created_at     TIMESTAMP,
-    updated_at     TIMESTAMP
+    id            uuid,
+    type          varchar,
+    subtype       varchar,
+    value         decimal,
+    unit          varchar,
+    latitude      double precision,
+    longitude     double precision,
+    value_source  varchar,
+    source        varchar,
+    source_id     varchar,
+    is_active     boolean,
+    last_verified timestamp,
+    created_at    timestamp,
+    updated_at    timestamp
 )
 LANGUAGE sql
 STABLE
-SET search_path TO 'public', 'extensions'
+SET search_path = public, extensions, pg_temp
 AS $$
     SELECT
         b.id,
@@ -171,7 +183,7 @@ AS $$
         b.last_verified,
         b.created_at,
         b.updated_at
-    FROM barriers AS b
+    FROM public.barriers AS b
     WHERE b.is_active = true
       AND ST_DWithin(
           b.location,
@@ -182,26 +194,26 @@ AS $$
 $$;
 
 CREATE OR REPLACE FUNCTION pois_within_radius(
-    lat            DOUBLE PRECISION,
-    lng            DOUBLE PRECISION,
-    radius_meters  DOUBLE PRECISION,
-    search         TEXT DEFAULT NULL
+    lat double precision,
+    lng double precision,
+    radius_meters double precision,
+    search text DEFAULT NULL
 )
 RETURNS TABLE (
-    id                    UUID,
-    name                  VARCHAR,
-    category              VARCHAR,
-    latitude              DOUBLE PRECISION,
-    longitude             DOUBLE PRECISION,
-    address               VARCHAR,
-    wheelchair_accessible VARCHAR,
-    accessibility_details JSONB,
-    source                VARCHAR,
-    distance_m            DOUBLE PRECISION
+    id                    uuid,
+    name                  varchar,
+    category              varchar,
+    latitude              double precision,
+    longitude             double precision,
+    address               varchar,
+    wheelchair_accessible varchar,
+    accessibility_details jsonb,
+    source                varchar,
+    distance_m            double precision
 )
 LANGUAGE sql
 STABLE
-SET search_path TO 'public', 'extensions'
+SET search_path = public, extensions, pg_temp
 AS $$
     SELECT
         p.id,
@@ -217,7 +229,7 @@ AS $$
             p.location,
             ST_SetSRID(ST_MakePoint(lng, lat), 4326)::geography
         ) AS distance_m
-    FROM poi_accessibility AS p
+    FROM public.poi_accessibility AS p
     WHERE ST_DWithin(
           p.location,
           ST_SetSRID(ST_MakePoint(lng, lat), 4326)::geography,
@@ -229,10 +241,12 @@ AS $$
           OR p.category ILIKE '%' || search || '%'
       )
     ORDER BY distance_m
-    LIMIT 50;
+    -- Hoch genug für alle POIs der Zürcher Altstadt (ginto-Seed: ~440
+    -- Einträge), damit die Karte die ganze Altstadt abdecken kann.
+    LIMIT 500;
 $$;
 
 GRANT EXECUTE ON FUNCTION
-    barriers_within_radius(DOUBLE PRECISION, DOUBLE PRECISION, DOUBLE PRECISION),
-    pois_within_radius(DOUBLE PRECISION, DOUBLE PRECISION, DOUBLE PRECISION, TEXT)
+    barriers_within_radius(double precision, double precision, double precision),
+    pois_within_radius(double precision, double precision, double precision, text)
     TO anon, authenticated, service_role;
