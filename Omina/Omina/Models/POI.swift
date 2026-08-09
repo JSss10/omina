@@ -1,0 +1,394 @@
+// POI.swift
+// Omina
+//
+// Point of Interest aus poi_accessibility (ginto + OSM Import).
+// Geliefert von der RPC pois_within_radius mit explizitem lat/lng und Distanz.
+
+import Foundation
+import SwiftUI
+import MapKit
+import Supabase
+
+// Codable (nicht nur Decodable): erlaubt das Zwischenspeichern der
+// Altstadt-POIs im LocalDataStore für sofortige Anzeige beim nächsten Start.
+struct POI: Codable, Identifiable {
+    let id: UUID
+    let name: String
+    let category: String?
+    let latitude: Double
+    let longitude: Double
+    let address: String?
+    let wheelchairAccessible: String?
+    let accessibilityDetails: [String: AnyJSON]?
+    let source: String
+    let distanceM: Double
+
+    enum CodingKeys: String, CodingKey {
+        case id, name, category, latitude, longitude, address, source
+        case wheelchairAccessible = "wheelchair_accessible"
+        case accessibilityDetails = "accessibility_details"
+        case distanceM = "distance_m"
+    }
+
+    var accessStatus: POIAccessStatus {
+        switch wheelchairAccessible?.lowercased() {
+        case "yes":     return .accessible
+        case "limited": return .limited
+        case "no":      return .notAccessible
+        default:        return .unknown
+        }
+    }
+
+    // MARK: - Detailinformationen (accessibility_details JSONB)
+
+    /// Fotos des Ortes aus accessibility_details.images – als reine URL-Strings
+    /// (ginto-Import) oder als Objekte mit url/caption/credit (Import aus dem
+    /// Open-Data-API von Zürich Tourismus, scripts/import_zuerich.py).
+    /// Leer, wenn keine Bilder vorliegen.
+    var images: [POIImage] {
+        guard case .array(let items)? = accessibilityDetails?["images"] else { return [] }
+        return items.compactMap { item in
+            switch item {
+            case .string(let urlString):
+                guard let url = URL(string: urlString) else { return nil }
+                return POIImage(url: url, caption: nil, credit: fallbackImageCredit)
+            case .object(let dict):
+                guard case .string(let urlString)? = dict["url"],
+                      let url = URL(string: urlString)
+                else { return nil }
+                return POIImage(
+                    url: url,
+                    caption: string(dict["caption"]),
+                    credit: string(dict["credit"]) ?? fallbackImageCredit
+                )
+            default:
+                return nil
+            }
+        }
+    }
+
+    /// Bildnachweis für alle Fotos ohne eigenen Credit
+    /// (accessibility_details.image_source, vom Import gesetzt).
+    private var fallbackImageCredit: String? {
+        string(accessibilityDetails?["image_source"])
+    }
+
+    /// Quellenangabe unter dem Foto-Karussell: die Rechteinhaber der
+    /// angezeigten Bilder, ohne Wiederholungen. Die Nennung ist von der
+    /// Lizenz der Bildquelle verlangt.
+    var imageCredit: String? {
+        var credits: [String] = []
+        for credit in images.compactMap(\.credit) where !credits.contains(credit) {
+            credits.append(credit)
+        }
+        return credits.isEmpty ? nil : credits.joined(separator: ", ")
+    }
+
+    private func string(_ value: AnyJSON?) -> String? {
+        guard case .string(let text)? = value else { return nil }
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    // MARK: - Angaben aus dem Zürich-Tourismus-Import
+    // Gefüllt von scripts/import_zuerich.py, sofern der POI im Open-Data-API
+    // von Zürich Tourismus gefunden wurde. Fehlt der Eintrag dort, bleiben
+    // die Felder leer und das Detail-Sheet zeigt Platzhalter.
+
+    /// Öffnungszeiten als fertige Anzeigezeilen, z. B. «Mo-Fr 09:00-18:00».
+    var openingHours: [String] {
+        switch accessibilityDetails?["opening_hours"] {
+        case .array(let items)?:
+            return items.compactMap { string($0) }
+        case .string(let line)?:
+            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? [] : [trimmed]
+        default:
+            return []
+        }
+    }
+
+    /// Zeiten des heutigen Wochentags, z. B. «09:00–18:00» – aus der
+    /// strukturierten Fassung (opening_hours_spec, Tage 1 = Montag … 7 = Sonntag).
+    /// Datum und Kalender sind Parameter, damit die Tests einen Tag festlegen können.
+    func openingHoursToday(_ date: Date = Date(), calendar: Calendar = .current) -> String? {
+        guard case .array(let entries)? = accessibilityDetails?["opening_hours_spec"]
+        else { return nil }
+
+        // Calendar zählt Sonntag = 1, die Daten zählen ISO (Montag = 1).
+        let weekday = calendar.component(.weekday, from: date)
+        let today = ((weekday + 5) % 7) + 1
+
+        var ranges: [String] = []
+        for entry in entries {
+            guard case .object(let dict) = entry,
+                  case .array(let days)? = dict["days"],
+                  let opens = string(dict["opens"]),
+                  let closes = string(dict["closes"]),
+                  days.contains(where: { integer($0) == today })
+            else { continue }
+            let range = "\(opens)–\(closes)"
+            if !ranges.contains(range) { ranges.append(range) }
+        }
+        return ranges.isEmpty ? nil : ranges.joined(separator: ", ")
+    }
+
+    /// Telefonnummer des Ortes – im Rollstuhl-Alltag oft der schnellste Weg,
+    /// die Zugänglichkeit vorab abzuklären.
+    var phoneNumber: String? { string(accessibilityDetails?["phone"]) }
+
+    /// `tel:`-Link zur Telefonnummer, ohne Leer- und Sonderzeichen.
+    var phoneURL: URL? {
+        guard let number = phoneNumber else { return nil }
+        let allowed = number.filter { $0.isNumber || $0 == "+" }
+        return allowed.isEmpty ? nil : URL(string: "tel:\(allowed)")
+    }
+
+    /// Kurzbeschreibung des Ortes.
+    var placeDescription: String? { string(accessibilityDetails?["description"]) }
+
+    /// Detailseite des Ortes auf zuerich.com.
+    var zuerichURL: URL? {
+        guard let raw = string(accessibilityDetails?["zuerich_url"]) else { return nil }
+        return URL(string: raw)
+    }
+
+    /// Quellenangabe für die Textangaben (accessibility_details.info_source).
+    var infoCredit: String? { string(accessibilityDetails?["info_source"]) }
+
+    private func integer(_ value: AnyJSON?) -> Int? {
+        switch value {
+        case .integer(let number)?: return number
+        case .double(let number)?:  return Int(number)
+        default:                    return nil
+        }
+    }
+
+    /// Link auf die ginto-Detailseite des Eintrags (accessibility_details.ginto_url).
+    var gintoURL: URL? {
+        guard case .string(let urlString)? = accessibilityDetails?["ginto_url"] else { return nil }
+        return URL(string: urlString)
+    }
+
+    /// Webseite des Ortes für die Detailansicht. Nimmt das erste vorhandene
+    /// URL-Feld aus den Detaildaten (ohne Bezug auf die Datenquelle in der UI).
+    var websiteURL: URL? {
+        // zuerich_url als Rückfall: Kennt das Tourismus-API den Ort, aber
+        // keine eigene Webseite, führt wenigstens die Detailseite weiter.
+        let candidateKeys = ["website", "homepage", "url", "zuerich_url", "ginto_url"]
+        for key in candidateKeys {
+            if case .string(let urlString)? = accessibilityDetails?[key],
+               let url = normalizedURL(urlString) {
+                return url
+            }
+        }
+        return nil
+    }
+
+    /// Ergänzt fehlende Schemata (z. B. «www.beispiel.ch») zu einer gültigen URL.
+    private func normalizedURL(_ raw: String) -> URL? {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        if trimmed.lowercased().hasPrefix("http://") || trimmed.lowercased().hasPrefix("https://") {
+            return URL(string: trimmed)
+        }
+        return URL(string: "https://\(trimmed)")
+    }
+
+    /// Deutscher Kategorie-Name aus ginto (accessibility_details.categories[0].name),
+    /// z.B. "Café" statt des DB-Keys "coffee".
+    var categoryDisplayName: String? {
+        guard case .array(let categories)? = accessibilityDetails?["categories"],
+              case .object(let first)? = categories.first,
+              case .string(let name)? = first["name"]
+        else { return nil }
+        return name
+    }
+
+    /// ginto-Bewertungen je Rollstuhl-Profil (manual/power/scewo) mit
+    /// Einstufung und Konformität in Prozent.
+    var gintoRatings: [GintoRating] {
+        let profiles: [(key: String, label: String)] = [
+            ("manual", "Manueller Rollstuhl"),
+            ("power", "Elektrorollstuhl"),
+            ("scewo", "Scewo BRO"),
+        ]
+        return profiles.compactMap { profile in
+            guard case .object(let dict)? = accessibilityDetails?[profile.key] else { return nil }
+
+            var grade: String?
+            if case .string(let value)? = dict["grade"] { grade = value }
+
+            var conformance: Double?
+            switch dict["conformance"] {
+            case .double(let value):  conformance = value
+            case .integer(let value): conformance = Double(value)
+            default: break
+            }
+
+            guard grade != nil || conformance != nil else { return nil }
+            return GintoRating(
+                profileKey: profile.key,
+                profileLabel: profile.label,
+                grade: grade,
+                conformancePercent: conformance
+            )
+        }
+    }
+
+    /// Die ginto-Bewertung für den eigenen Rollstuhltyp – nur diese wird
+    /// im POI-Detail angezeigt, nicht alle Profile.
+    func gintoRating(for wheelchairType: WheelchairType) -> GintoRating? {
+        gintoRatings.first { $0.profileKey == wheelchairType.gintoRatingProfileKey }
+    }
+}
+
+// MARK: - Apple-Karten-Feature
+
+extension POI {
+    /// Leichter POI aus einem Apple-Karten-Feature (built-in Point of Interest).
+    /// Ohne ginto-/OSM-Zugänglichkeitsdaten – der Status bleibt «unbekannt».
+    /// Erlaubt, auch für Apples eigene POIs eine Route zu berechnen und das
+    /// gewohnte Detail-Sheet zu öffnen. Als Extension-Initializer, damit der
+    /// synthetisierte memberwise-Initializer (SeedData) erhalten bleibt.
+    init(appleFeature feature: MapFeature, distanceM: Double = 0) {
+        self.id = UUID()
+        self.name = feature.title ?? "Ausgewählter Ort"
+        self.category = feature.pointOfInterestCategory?.rawValue
+        self.latitude = feature.coordinate.latitude
+        self.longitude = feature.coordinate.longitude
+        self.address = nil
+        self.wheelchairAccessible = nil
+        self.accessibilityDetails = nil
+        self.source = "apple"
+        self.distanceM = distanceM
+    }
+
+    /// Leichter POI aus einem gespeicherten Ort (saved_places). Wird in der
+    /// Suche genutzt, wenn sich der gespeicherte Ort nicht mehr auf einen
+    /// geladenen Altstadt-POI auflösen lässt – so lässt er sich trotzdem auf
+    /// der Karte ansteuern. Ohne Zugänglichkeitsdaten (Status «unbekannt»).
+    init(savedPlace: SavedPlace) {
+        self.id = savedPlace.referenceId ?? savedPlace.id
+        self.name = savedPlace.displayName
+        self.category = nil
+        self.latitude = savedPlace.latitude
+        self.longitude = savedPlace.longitude
+        self.address = nil
+        self.wheelchairAccessible = nil
+        self.accessibilityDetails = nil
+        self.source = "saved"
+        self.distanceM = 0
+    }
+}
+
+/// Ein Foto eines Ortes mit Bildunterschrift und Rechteinhaber.
+/// Die Bilder stammen aus dem Open-Data-API von Zürich Tourismus, dessen
+/// Lizenz die Nennung der Quelle verlangt – `credit` wird deshalb immer
+/// mitgeführt und im Detail-Sheet angezeigt.
+struct POIImage: Identifiable, Hashable {
+    let url: URL
+    let caption: String?
+    let credit: String?
+
+    var id: String { url.absoluteString }
+}
+
+/// Eine ginto-Zugänglichkeits-Bewertung für ein Rollstuhl-Profil.
+struct GintoRating: Identifiable {
+    /// ginto-Profil-Schlüssel in accessibility_details: manual/power/scewo.
+    let profileKey: String
+    let profileLabel: String
+    /// ginto-Einstufung: COMPLETELY / PARTIALLY / BADLY.
+    let grade: String?
+    /// Erfüllte Zugänglichkeits-Kriterien in Prozent (0–100).
+    let conformancePercent: Double?
+
+    var id: String { profileKey }
+
+    var status: POIAccessStatus {
+        switch grade?.uppercased() {
+        case "COMPLETELY": return .accessible
+        case "PARTIALLY":  return .limited
+        case "BADLY":      return .notAccessible
+        default:           return .unknown
+        }
+    }
+
+    var gradeLabel: String {
+        switch status {
+        case .accessible:    return "Vollständig zugänglich"
+        case .limited:       return "Teilweise zugänglich"
+        case .notAccessible: return "Schlecht zugänglich"
+        case .unknown:       return "Keine Einstufung"
+        }
+    }
+}
+
+enum POIAccessStatus {
+    case accessible
+    case limited
+    case notAccessible
+    case unknown
+
+    var label: String {
+        switch self {
+        case .accessible:    return "Zugänglich für dein Profil"
+        case .limited:       return "Eingeschränkt zugänglich"
+        case .notAccessible: return "Nicht zugänglich"
+        case .unknown:       return "Zugänglichkeit unbekannt"
+        }
+    }
+
+    var shortLabel: String {
+        switch self {
+        case .accessible:    return "zugänglich für dich"
+        case .limited:       return "eingeschränkt"
+        case .notAccessible: return "nicht zugänglich"
+        case .unknown:       return "unbekannt"
+        }
+    }
+
+    /// Signalfarbe für grafische Elemente (Marker, Icons). Styleguide §2.3:
+    /// die gesättigten Status-Icon-Farben (>= 3:1 Grafikkontrast).
+    var tint: Color {
+        switch self {
+        case .accessible:    return AppColor.Status.openIcon
+        case .limited:       return AppColor.Status.limitedIcon
+        case .notAccessible: return AppColor.Status.blockedIcon
+        case .unknown:       return AppColor.textSecondary
+        }
+    }
+
+    /// Textfarbe auf der zugehörigen Statusfläche (`fillColor`). AAA auf der Fläche.
+    var textColor: Color {
+        switch self {
+        case .accessible:    return AppColor.Status.openText
+        case .limited:       return AppColor.Status.limitedText
+        case .notAccessible: return AppColor.Status.blockedText
+        case .unknown:       return AppColor.textSecondary
+        }
+    }
+
+    /// Getönte Hintergrundfläche des Status-Badges.
+    var fillColor: Color {
+        switch self {
+        case .accessible:    return AppColor.Status.openFill
+        case .limited:       return AppColor.Status.limitedFill
+        case .notAccessible: return AppColor.Status.blockedFill
+        case .unknown:       return AppColor.surfaceRaised
+        }
+    }
+
+    /// SF-Symbol mit Grundform + Symbol (P2: Farbe trägt nie allein Information).
+    /// Durchgehend gefüllte Kreise als gemeinsame Grundform: Häkchen (grün),
+    /// Ausrufezeichen (orange), Kreuz (rot).
+    var symbolName: String {
+        switch self {
+        case .accessible:    return "checkmark.circle.fill"
+        case .limited:       return "exclamationmark.circle.fill"
+        case .notAccessible: return "xmark.circle.fill"
+        case .unknown:       return "questionmark.circle.fill"
+        }
+    }
+}
