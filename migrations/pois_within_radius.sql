@@ -1,4 +1,4 @@
--- AR-Mikronavigation – Stored Function für POI-Suche im Radius
+-- Omina – Stored Function für POI-Suche im Radius
 -- Erwartet das Schema aus Database/schema.sql (Tabelle poi_accessibility).
 --
 -- search filtert case-insensitiv über Name UND Kategorie, damit die

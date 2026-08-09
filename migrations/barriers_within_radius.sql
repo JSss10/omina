@@ -1,4 +1,4 @@
--- AR-Mikronavigation – Stored Function für Map-Radius-Query
+-- Omina – Stored Function für Map-Radius-Query
 -- Erwartet das Schema aus Database/schema.sql (Spalte `location` GEOGRAPHY(POINT, 4326)).
 --
 -- Aufruf vom Client (Supabase RPC):

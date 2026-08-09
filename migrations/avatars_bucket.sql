@@ -1,4 +1,4 @@
--- AR-Mikronavigation – Storage-Bucket für Profilfotos
+-- Omina – Storage-Bucket für Profilfotos
 --
 -- Der iOS-Client (AvatarStore.swift) speichert das Profilfoto unter
 -- <user_id>/avatar.jpg. Der Bucket ist privat; die Policies erlauben jedem

@@ -154,7 +154,7 @@ OK 128 von 439 POIs im API gefunden (29 %)
 | --------------------- | -------------------------------------------------------------------------------------- |
 | `--dry-run`           | nur Zuordnung zeigen, nichts schreiben                                                 |
 | `--pois-file <json>`  | POIs aus einem Import-Backup lesen (Vorschau ganz ohne Supabase)                       |
-| `--seed-file <json>`  | zusätzlich `ARMikronav/ARMikronav/Seed/seed_pois.json` pflegen (Offline-Daten der App) |
+| `--seed-file <json>`  | zusätzlich `Omina/Omina/Seed/seed_pois.json` pflegen (Offline-Daten der App) |
 | `--categories 72,101` | nur bestimmte Kategorien abfragen (72 = Sehenswürdigkeiten, 101 = Gastronomie)         |
 | `--radius-km`         | Umkreis um Zürich, in dem POIs geprüft werden (Standard 25)                            |
 | `--max-distance-m`    | maximale Distanz für einen Treffer (Standard 150)                                      |
@@ -180,7 +180,7 @@ python3 import_ginto.py
 # → erstellt Backup-JSON
 
 # 3. POIs gegen Zürich Tourismus prüfen und ergänzen (nach dem ginto-Import)
-python3 import_zuerich.py --seed-file ../ARMikronav/ARMikronav/Seed/seed_pois.json
+python3 import_zuerich.py --seed-file ../Omina/Omina/Seed/seed_pois.json
 # → fragt nach Bestätigung vor dem Schreiben in Supabase
 # → erstellt Backup-JSON und ein SQL-Script
 # → hält die Offline-Daten der App auf demselben Stand

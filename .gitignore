@@ -20,7 +20,7 @@ DerivedData/
 Package.resolved
 
 # Konfiguration (Secrets)
-# Secrets.swift liegt unter ARMikronav/ARMikronav/Config/Secrets.swift
+# Secrets.swift liegt unter Omina/Omina/Config/Secrets.swift
 # (Vorlage: Secrets.example.swift). Niemals einchecken.
 **/Secrets.swift
 Secrets.xcconfig

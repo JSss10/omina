@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-OSM Import Script - AR-Mikronavigation
+OSM Import Script - Omina
 Laedt Barrieren-Daten aus OpenStreetMap (Overpass API) fuer das Testgebiet
 Altstadt Zuerich und schreibt sie in die Supabase barriers Tabelle.
 
@@ -56,7 +56,7 @@ OVERPASS_URLS = [
 ]
 
 REQUEST_HEADERS = {
-    "User-Agent": "ar-mikronav-osm-import/1.0 (Bachelor-Projekt AR-Mikronavigation)"
+    "User-Agent": "omina-osm-import/1.0 (Bachelor-Projekt Omina)"
 }
 
 # Overpass antwortet unter Last oft mit 504 Gateway Timeout – dann hilft
@@ -701,7 +701,7 @@ def import_to_supabase(barriers):
 # ============================================================
 def main():
     print("=" * 60)
-    print("OSM Import - AR-Mikronavigation")
+    print("OSM Import - Omina")
     print("Gebiet: Kreis 1 Stadt Zuerich (" + BBOX + ")")
     print("=" * 60)
     

@@ -1,4 +1,4 @@
--- AR-Mikronavigation – Supabase Schema v2.0
+-- Omina – Supabase Schema v2.0
 -- Stand: 28.03.2026 | Phase 2
 
 CREATE EXTENSION IF NOT EXISTS postgis;
