@@ -15,7 +15,14 @@ final class AuthService: ObservableObject {
     @Published var isAuthenticated: Bool = false
     @Published var currentUser: User? = nil
     @Published var isLoading: Bool = true
-    
+
+    /// Steht auf true, solange nach einem Wiederherstellungs-Link ein neues
+    /// Passwort gesetzt werden soll (Screen "Neues Passwort").
+    @Published var isRecoveringPassword: Bool = false
+    /// Meldung, wenn ein Deep Link nicht eingelöst werden konnte.
+    @Published var deepLinkError: String? = nil
+
+
     private let client = SupabaseService.shared.client
     
     private init() {
@@ -107,8 +114,73 @@ final class AuthService: ObservableObject {
     
     // MARK: - Password Reset
 
+    /// Schickt den Wiederherstellungs-Link. `redirectTo` führt zurück in die
+    /// App (omina://password-reset) – der Wert muss im Supabase-Dashboard
+    /// unter Authentication → URL Configuration → Redirect URLs stehen.
     func resetPassword(email: String) async throws {
-        try await client.auth.resetPasswordForEmail(email)
+        try await client.auth.resetPasswordForEmail(
+            email,
+            redirectTo: AppConfig.passwordResetRedirectURL
+        )
+    }
+
+    // MARK: - Deep Links
+
+    /// Löst einen Deep Link ein. Der Link aus der Passwort-E-Mail bringt eine
+    /// Sitzung mit: Supabase tauscht den Code darin gegen Tokens, danach darf
+    /// das Passwort neu gesetzt werden.
+    ///
+    /// Ob es ein Wiederherstellungs-Link war, entscheidet die Adresse selbst
+    /// (eigener Host bzw. `type=recovery`) – unabhängig davon, ob das Projekt
+    /// im PKCE- oder im impliziten Flow läuft.
+    func handleOpenURL(_ url: URL) async {
+        guard url.scheme?.lowercased() == AppConfig.urlScheme else { return }
+
+        let isRecovery = Self.isPasswordRecoveryLink(url)
+        do {
+            let session = try await client.auth.session(from: url)
+            self.currentUser = session.user
+            self.isAuthenticated = true
+            self.deepLinkError = nil
+            if isRecovery {
+                self.isRecoveringPassword = true
+            }
+        } catch {
+            self.deepLinkError = isRecovery
+                ? "Der Link zum Zurücksetzen ist abgelaufen oder wurde schon benutzt. Fordere einen neuen an."
+                : "Der Link konnte nicht geöffnet werden."
+        }
+    }
+
+    /// Beendet den Wiederherstellungs-Ablauf (Passwort gesetzt oder abgebrochen).
+    func finishPasswordRecovery() {
+        isRecoveringPassword = false
+    }
+
+    /// Erkennt den Wiederherstellungs-Link am eigenen Host oder – falls das
+    /// Projekt Tokens im Fragment liefert – an `type=recovery`.
+    private static func isPasswordRecoveryLink(_ url: URL) -> Bool {
+        if url.host?.lowercased() == AppConfig.passwordResetHost { return true }
+
+        let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        var items = components?.queryItems ?? []
+        if let fragment = components?.fragment,
+           let fragmentItems = URLComponents(string: "?\(fragment)")?.queryItems {
+            items += fragmentItems
+        }
+        return items.contains { $0.name == "type" && $0.value == "recovery" }
+    }
+
+    // MARK: - Neues Passwort setzen
+
+    /// Setzt das Passwort der angemeldeten Sitzung neu (Screen "Neues
+    /// Passwort"). Greift sowohl beim Ändern aus den Einstellungen als auch
+    /// nach dem Wiederherstellungs-Link, der die Sitzung mitbringt.
+    func updatePassword(_ newPassword: String) async throws {
+        let user = try await client.auth.update(
+            user: UserAttributes(password: newPassword)
+        )
+        self.currentUser = user
     }
 
     // MARK: - E-Mail-Bestätigung erneut senden

@@ -66,6 +66,12 @@ struct SettingsView: View {
 
     private var accountSection: some View {
         Section {
+            NavigationLink {
+                NewPasswordView(showsNavigationBar: true)
+            } label: {
+                Label("Passwort ändern", systemImage: "key")
+            }
+
             Button(role: .destructive) {
                 showingSignOutConfirm = true
             } label: {

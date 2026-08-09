@@ -1,7 +1,12 @@
 // SignInView.swift
 // Omina
 //
-// Anmeldung mit E-Mail und Passwort
+// Anmeldung mit E-Mail und Passwort. Aufbau nach Entwurf: Akzentleiste, Titel
+// mit Einleitung, die beiden Felder ohne eigene Label-Zeile, darunter die
+// Hilfslinks und die Stadt-Illustration; «Anmelden» steht fix am unteren Rand.
+//
+// Die Illustration (Asset "SplashCity", dieselbe wie auf dem Startbild) folgt
+// noch – bis dahin steht der Platzhalter an ihrer Stelle.
 
 import SwiftUI
 
@@ -19,98 +24,112 @@ struct SignInView: View {
     private var isFormValid: Bool {
         !email.isEmpty && !password.isEmpty
     }
-    
+
     var body: some View {
-        ScrollView {
-            VStack(spacing: 20) {
-                Text("Anmelden")
-                    .font(.largeTitle)
-                    .bold()
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.top, 20)
-                
-                Text("Melde dich mit deinem Konto an.")
-                    .font(.body)
-                    .foregroundColor(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.bottom, 8)
-                
-                // E-Mail
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("E-Mail")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                    TextField("name@beispiel.ch", text: $email)
-                        .textFieldStyle(.roundedBorder)
-                        .textContentType(.emailAddress)
-                        .keyboardType(.emailAddress)
-                        .autocapitalization(.none)
-                        .autocorrectionDisabled()
-                }
-                
-                // Passwort
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Passwort")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                    SecureField("••••••••", text: $password)
-                        .textFieldStyle(.roundedBorder)
-                        .textContentType(.password)
-                }
-                
-                // Passwort vergessen
-                Button("Passwort vergessen?") {
-                    showResetPassword = true
-                }
-                .font(.caption)
-                .frame(maxWidth: .infinity, alignment: .trailing)
+        VStack(spacing: 0) {
+            BrandAccentBar()
 
-                // Error
-                if let errorMessage = errorMessage {
-                    Text(errorMessage)
-                        .font(.caption)
-                        .foregroundColor(.red)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                
-                // Sign In Button
-                Button {
-                    Task { await handleSignIn() }
-                } label: {
-                    if isLoading {
-                        ProgressView()
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 56)
-                    } else {
-                        Text("Anmelden")
-                            .font(.headline)
-                            .foregroundColor(.white)
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 56)
+            ScrollView {
+                VStack(alignment: .leading, spacing: AppMetrics.Space.s + AppMetrics.Space.xs) {
+                    AuthHeader(
+                        title: "Willkommen zurück!",
+                        subtitle: "Melde dich an, um dein Profil weiterzunutzen."
+                    )
+
+                    AppTextField(
+                        placeholder: "E-Mail",
+                        text: $email,
+                        keyboardType: .emailAddress,
+                        textContentType: .emailAddress,
+                        autocapitalization: .never,
+                        autocorrection: false
+                    )
+
+                    AppTextField(
+                        placeholder: "Passwort",
+                        text: $password,
+                        textContentType: .password,
+                        autocapitalization: .never,
+                        autocorrection: false,
+                        isSecure: true,
+                        showsRevealToggle: true
+                    )
+
+                    helperLinks
+
+                    if let errorMessage {
+                        HStack(alignment: .top, spacing: AppMetrics.Space.s) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundStyle(AppColor.Status.blockedIcon)
+                            Text(errorMessage)
+                                .foregroundStyle(AppColor.Status.blockedText)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        .font(AppTypography.footnote)
+                        .accessibilityElement(children: .combine)
                     }
-                }
-                .background(isFormValid ? Color.accentColor : Color.gray)
-                .cornerRadius(12)
-                .disabled(!isFormValid || isLoading)
-                .padding(.top, 8)
 
-                // Alternative: Anmeldung per Einmalcode
-                NavigationLink {
-                    OTPLoginView()
-                } label: {
-                    Text("Mit E-Mail-Code anmelden")
-                        .font(.subheadline)
+                    // Die Illustration läuft im Entwurf bis an beide Ränder.
+                    AssetImage(name: "SplashCity", placeholderSymbol: "building.2")
+                        .frame(maxWidth: .infinity, minHeight: 240)
+                        .padding(.horizontal, -AppMetrics.Space.l)
+                        .padding(.top, AppMetrics.Space.m)
+                        .accessibilityHidden(true)
                 }
-                .padding(.top, 4)
-
-                Spacer()
+                .padding(.horizontal, AppMetrics.Space.l)
+                .padding(.bottom, AppMetrics.Space.m)
             }
-            .padding(.horizontal, 24)
+            .scrollDismissesKeyboard(.interactively)
+
+            footer
         }
-        .navigationBarTitleDisplayMode(.inline)
-        .sheet(isPresented: $showResetPassword) {
+        .background(AppColor.backgroundPrimary.ignoresSafeArea())
+        .toolbar(.hidden, for: .navigationBar)
+        .navigationDestination(isPresented: $showResetPassword) {
             ResetPasswordView()
         }
+    }
+
+    /// Rechts «Passwort vergessen» wie im Entwurf; links daneben der
+    /// Alternativweg über den Einmalcode, damit er erreichbar bleibt.
+    private var helperLinks: some View {
+        HStack {
+            NavigationLink {
+                OTPLoginView()
+            } label: {
+                Text("Mit Code anmelden")
+                    .font(AppTypography.subheadline)
+                    .foregroundStyle(AppColor.accentPrimary)
+            }
+
+            Spacer()
+
+            Button("Passwort vergessen") {
+                showResetPassword = true
+            }
+            .font(AppTypography.subheadline)
+            .foregroundStyle(AppColor.accentPrimary)
+        }
+        .frame(minHeight: AppMetrics.Touch.minimum)
+    }
+
+    private var footer: some View {
+        Button {
+            Task { await handleSignIn() }
+        } label: {
+            if isLoading {
+                ProgressView()
+                    .tint(AppColor.onAccent)
+            } else {
+                Text("Anmelden")
+            }
+        }
+        .buttonStyle(.appPrimary)
+        .disabled(!isFormValid || isLoading)
+        .padding(.horizontal, AppMetrics.Space.l)
+        .padding(.top, AppMetrics.Space.m)
+        .padding(.bottom, AppMetrics.Space.s)
+        .background(AppColor.backgroundPrimary)
     }
 
     private func handleSignIn() async {
@@ -123,5 +142,12 @@ struct SignInView: View {
         } catch {
             errorMessage = "Anmeldung fehlgeschlagen: \(error.localizedDescription)"
         }
+    }
+}
+
+#Preview {
+    NavigationStack {
+        SignInView()
+            .environmentObject(AuthService.shared)
     }
 }

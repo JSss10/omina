@@ -45,7 +45,10 @@ struct OnboardingPermissionsView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: AppMetrics.Space.s + AppMetrics.Space.xs) {
-                    header
+                    AuthHeader(
+                        title: "Zugriff erlauben",
+                        subtitle: "Damit Omina dich vor Barrieren warnen kann, brauchen wir einmalig deine Zustimmung. Du erteilst sie jetzt – später wirst du nicht mehr danach gefragt."
+                    )
 
                     InfoCard(
                         icon: "location.fill",
@@ -71,22 +74,6 @@ struct OnboardingPermissionsView: View {
         }
         .background(AppColor.backgroundPrimary.ignoresSafeArea())
         .toolbar(.hidden, for: .navigationBar)
-    }
-
-    private var header: some View {
-        VStack(alignment: .leading, spacing: AppMetrics.Space.m) {
-            Text("Zugriff erlauben")
-                .font(AppTypography.largeTitle)
-                .foregroundStyle(AppColor.textBrand)
-                .accessibilityAddTraits(.isHeader)
-
-            Text("Damit Omina dich vor Barrieren warnen kann, brauchen wir einmalig deine Zustimmung. Du erteilst sie jetzt – später wirst du nicht mehr danach gefragt.")
-                .font(AppTypography.body)
-                .foregroundStyle(AppColor.textSecondary)
-        }
-        .fixedSize(horizontal: false, vertical: true)
-        .padding(.top, AppMetrics.Space.xxl + AppMetrics.Space.m)
-        .padding(.bottom, AppMetrics.Space.l)
     }
 
     private var footer: some View {

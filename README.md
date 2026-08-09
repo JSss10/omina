@@ -102,6 +102,32 @@ supabase/seed/seed_pois_ginto.sql         # optional: POI-Grunddaten
 
 Alternativ die Daten frisch importieren – siehe [scripts/README.md](scripts/README.md).
 
+### Passwort zurücksetzen (Deep Link)
+
+Der Link in der „Passwort zurücksetzen"-E-Mail führt zurück in die App und
+öffnet dort den Screen **Neues Passwort**. Damit Supabase die Umleitung
+zulässt, im Dashboard unter **Authentication → URL Configuration** eintragen:
+
+| Feld          | Wert                     |
+| ------------- | ------------------------ |
+| Site URL      | `omina://password-reset` |
+| Redirect URLs | `omina://password-reset` |
+
+Das Schema `omina` steht in `Omina/Omina/Info.plist` (`CFBundleURLTypes`), die
+Adresse selbst in `AppConfig.passwordResetRedirectURL`. Wird eines von beiden
+geändert, muss der Dashboard-Eintrag mitziehen – sonst landet die Person nach
+dem Klick auf einer Fehlerseite im Browser statt in der App.
+
+**Testen:** App im Simulator starten, „Passwort vergessen" → Link senden, dann
+den Link aus der E-Mail antippen. Ohne E-Mail geht es auch direkt:
+
+```bash
+xcrun simctl openurl booted "omina://password-reset"
+```
+
+Ohne gültigen Code im Link zeigt die App den Hinweis, dass er abgelaufen ist –
+genau der Weg, den auch ein zweimal benutzter Link nimmt.
+
 ## Tests
 
 ```bash

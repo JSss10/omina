@@ -39,7 +39,10 @@ struct ConsentView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: AppMetrics.Space.s + AppMetrics.Space.xs) {
-                    header
+                    AuthHeader(
+                        title: "Datenschutz",
+                        subtitle: "Omina verarbeitet nur die Daten, die für die Barriere-Warnungen nötig sind – und nur, während du die App nutzt. Nichts davon wird weiterverkauft oder für Werbung genutzt."
+                    )
 
                     InfoCard(
                         icon: "location.fill",
@@ -80,22 +83,6 @@ struct ConsentView: View {
         // Wie im Entwurf ohne Navigationsleiste; die Akzentleiste sitzt direkt
         // unter der Statusleiste.
         .toolbar(.hidden, for: .navigationBar)
-    }
-
-    private var header: some View {
-        VStack(alignment: .leading, spacing: AppMetrics.Space.m) {
-            Text("Datenschutz")
-                .font(AppTypography.largeTitle)
-                .foregroundStyle(AppColor.textBrand)
-                .accessibilityAddTraits(.isHeader)
-
-            Text("Omina verarbeitet nur die Daten, die für die Barriere-Warnungen nötig sind – und nur, während du die App nutzt. Nichts davon wird weiterverkauft oder für Werbung genutzt.")
-                .font(AppTypography.body)
-                .foregroundStyle(AppColor.textSecondary)
-        }
-        .fixedSize(horizontal: false, vertical: true)
-        .padding(.top, AppMetrics.Space.xxl + AppMetrics.Space.m)
-        .padding(.bottom, AppMetrics.Space.l)
     }
 
     /// Zustimmung durch Fortfahren – rechtliche Grundlage ist Apples

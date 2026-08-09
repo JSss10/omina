@@ -48,6 +48,29 @@ struct RootView: View {
                 WelcomeView()
             }
         }
+        // Deep Links: Der Link aus der Passwort-E-Mail bringt die Sitzung mit
+        // (omina://password-reset).
+        .onOpenURL { url in
+            Task { await authService.handleOpenURL(url) }
+        }
+        // Nach einem gültigen Wiederherstellungs-Link legt sich der Screen
+        // "Neues Passwort" über den gerade sichtbaren Zustand.
+        .fullScreenCover(isPresented: $authService.isRecoveringPassword) {
+            NavigationStack {
+                NewPasswordView(showsCancel: true)
+            }
+        }
+        .alert(
+            "Link nicht gültig",
+            isPresented: Binding(
+                get: { authService.deepLinkError != nil },
+                set: { if !$0 { authService.deepLinkError = nil } }
+            )
+        ) {
+            Button("Verstanden", role: .cancel) {}
+        } message: {
+            Text(authService.deepLinkError ?? "")
+        }
     }
 }
 

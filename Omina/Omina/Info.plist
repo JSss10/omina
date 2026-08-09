@@ -8,5 +8,20 @@
 	<string>AR-Barrieren und zugängliche Orte im Kamerabild anzeigen</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<!-- Deep Links: Der Link aus der "Passwort zurücksetzen"-E-Mail öffnet
+	     omina://password-reset (siehe AppConfig.passwordResetRedirectURL). -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>com.jschneiter.Omina</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>omina</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>

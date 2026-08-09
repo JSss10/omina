@@ -58,7 +58,10 @@ struct SignUpView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: AppMetrics.Space.s + AppMetrics.Space.xs) {
-                    header
+                    AuthHeader(
+                        title: "Konto erstellen",
+                        subtitle: "Mit einem Konto bleiben dein Profil und deine gespeicherten Orte auf all deinen Geräten erhalten."
+                    )
                     form
                     feedback
                     legalNotice
@@ -80,22 +83,6 @@ struct SignUpView: View {
     }
 
     // MARK: - Rahmen
-
-    private var header: some View {
-        VStack(alignment: .leading, spacing: AppMetrics.Space.s) {
-            Text("Konto erstellen")
-                .font(AppTypography.largeTitle)
-                .foregroundStyle(AppColor.textBrand)
-                .accessibilityAddTraits(.isHeader)
-
-            Text("Mit einem Konto bleiben dein Profil und deine gespeicherten Orte auf all deinen Geräten erhalten.")
-                .font(AppTypography.body)
-                .foregroundStyle(AppColor.textSecondary)
-        }
-        .fixedSize(horizontal: false, vertical: true)
-        .padding(.top, AppMetrics.Space.xxl + AppMetrics.Space.m)
-        .padding(.bottom, AppMetrics.Space.l)
-    }
 
     // MARK: - Formular
 

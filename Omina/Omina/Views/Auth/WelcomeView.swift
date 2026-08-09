@@ -1,7 +1,12 @@
 // WelcomeView.swift
 // Omina
 //
-// Welcome / Sign in / Sign up Auswahl
+// Einstieg vor der Anmeldung. Aufbau nach Entwurf: Akzentleiste, Titel mit
+// Einleitung, darunter die Illustration und am unteren Rand die beiden Wege
+// ins Konto – «Anmelden» als Hauptaktion, «Registrieren» getönt darunter.
+//
+// Die Illustration (Asset "WelcomeHero") folgt noch; bis dahin steht der
+// Platzhalter an ihrer Stelle (siehe AssetMedia.swift).
 
 import SwiftUI
 
@@ -9,77 +14,62 @@ struct WelcomeView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                Spacer()
-                
-                // Logo + Titel
-                VStack(spacing: AppMetrics.Space.m) {
-                    Image(systemName: "figure.roll")
-                        .font(.system(size: 80))
-                        .foregroundColor(AppColor.accentPrimary)
+                BrandAccentBar()
 
-                    Text("Omina")
-                        .font(AppTypography.largeTitle)
-                        .foregroundColor(AppColor.textPrimary)
-                        .multilineTextAlignment(.center)
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 0) {
+                        AuthHeader(
+                            title: "Willkommen",
+                            subtitle: "Melde dich an oder erstelle ein Konto."
+                        )
 
-                    Text("Barrieren erkennen, bevor du dort ankommst.")
-                        .font(AppTypography.body)
-                        .foregroundColor(AppColor.textSecondary)
-                        .multilineTextAlignment(.center)
+                        AssetImage(name: "WelcomeHero", placeholderSymbol: "circle.hexagongrid")
+                            .frame(maxWidth: .infinity, minHeight: 260)
+                            .accessibilityHidden(true)
+                    }
+                    .padding(.horizontal, AppMetrics.Space.l)
+                    .padding(.bottom, AppMetrics.Space.m)
                 }
+                .scrollBounceBehavior(.basedOnSize)
 
-                Spacer()
-
-                // Buttons
-                VStack(spacing: AppMetrics.Touch.spacing + 4) {
-                    // Feldtest Altstadt Zürich: Testpersonen wählen ein
-                    // vorgefertigtes Profil statt sich zu registrieren.
-                    if AppConfig.fieldTestModeEnabled {
-                        NavigationLink {
-                            TestProfileSelectionView()
-                        } label: {
-                            Label("Feldtest starten", systemImage: "person.crop.circle.badge.checkmark")
-                        }
-                        .buttonStyle(.appPrimary)
-                    }
-
-                    if AppConfig.fieldTestModeEnabled {
-                        NavigationLink {
-                            IntroCarouselView()
-                        } label: {
-                            Text("Registrieren")
-                        }
-                        .buttonStyle(.appSecondary)
-                    } else {
-                        NavigationLink {
-                            IntroCarouselView()
-                        } label: {
-                            Text("Registrieren")
-                        }
-                        .buttonStyle(.appPrimary)
-                    }
-
-                    NavigationLink {
-                        SignInView()
-                    } label: {
-                        Text("Anmelden")
-                    }
-                    .buttonStyle(.appSecondary)
-
-                    // Apple Sign-in Stub (kommt später)
-                    Button {
-                        // TODO: Apple Sign-in implementieren (braucht Apple Developer Account)
-                    } label: {
-                        Label("Mit Apple anmelden", systemImage: "apple.logo")
-                    }
-                    .buttonStyle(.appQuiet(fullWidth: true))
-                    .disabled(true)
-                    .opacity(0.38)
-                }
-                .padding(.horizontal, AppMetrics.Space.l)
-                .padding(.bottom, AppMetrics.Space.xxl)
+                footer
             }
+            .background(AppColor.backgroundPrimary.ignoresSafeArea())
+            .toolbar(.hidden, for: .navigationBar)
         }
+    }
+
+    private var footer: some View {
+        VStack(spacing: AppMetrics.Space.s + AppMetrics.Space.xs) {
+            // Feldtest Altstadt Zürich: Testpersonen wählen ein vorgefertigtes
+            // Profil, statt sich zu registrieren.
+            if AppConfig.fieldTestModeEnabled {
+                NavigationLink {
+                    TestProfileSelectionView()
+                } label: {
+                    Text("Feldtest starten")
+                }
+                .buttonStyle(.appSecondary(fullWidth: true))
+            }
+
+            NavigationLink {
+                SignInView()
+            } label: {
+                Text("Anmelden")
+            }
+            .buttonStyle(.appPrimary(fullWidth: true))
+
+            NavigationLink {
+                IntroCarouselView()
+            } label: {
+                Text("Registrieren")
+            }
+            .buttonStyle(.appQuiet(fullWidth: true))
+        }
+        .padding(.horizontal, AppMetrics.Space.l)
+        .padding(.top, AppMetrics.Space.m)
+        .padding(.bottom, AppMetrics.Space.s)
+        .background(AppColor.backgroundPrimary)
     }
 }
 

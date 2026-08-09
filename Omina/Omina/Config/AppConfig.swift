@@ -61,6 +61,20 @@ enum AppConfig {
     // OTP-Länge im Supabase-Dashboard übereinstimmen (Authentication → Emails).
     static let emailOTPCodeLength = 8
 
+    // MARK: - Deep Links
+    // URL-Schema der App. Muss mit CFBundleURLSchemes in der Info.plist
+    // übereinstimmen.
+    static let urlScheme = "omina"
+
+    /// Host des Wiederherstellungs-Links – daran erkennt die App, dass ein
+    /// Link aus der Passwort-E-Mail geöffnet wurde.
+    static let passwordResetHost = "password-reset"
+
+    /// Ziel des Links in der "Passwort zurücksetzen"-E-Mail. Muss im
+    /// Supabase-Dashboard unter Authentication → URL Configuration →
+    /// Redirect URLs eingetragen sein, sonst weist Supabase die Umleitung ab.
+    static let passwordResetRedirectURL = URL(string: "\(urlScheme)://\(passwordResetHost)")!
+
     // MARK: - Rechtliches
     // Die App verwendet Apples Standard-Lizenzvertrag für lizenzierte
     // Apps (Standard-EULA) statt eigener Nutzungsbedingungen.

@@ -61,6 +61,12 @@ SF Pro über die SwiftUI-Text-Styles → Dynamic Type bis AX5 (§03).
 - `BrandAccentBar()` — die violette Leiste unter der Statusleiste auf allen
   Screens ohne Navigationsleiste. Fortschritt zeigt stattdessen
   `OnboardingProgressBar`.
+- `AuthHeader(title:subtitle:)` — Titel im Markenviolett mit erklärender Zeile,
+  Abstände nach Entwurf (Willkommen, Anmelden, Registrieren, Passwort,
+  Datenschutz, Zugriff erlauben).
+- `PasswordStrengthBar(strength:)` mit `PasswordStrength.evaluate(_:)` — fünf
+  Segmente plus Stufe als Wort, damit die Bewertung nicht nur über Farbe und
+  Menge codiert ist.
 - `StatusBadge(status:)` — vierfach codiert: Farbe + Form + Symbol + Text (P2, §2.3).
   Grundformen: Kreis (zugänglich) · Dreieck (eingeschränkt) · Achteck (Barriere).
 
