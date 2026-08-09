@@ -2,8 +2,9 @@
 // Omina
 //
 // Screen 0.1 – Startbild, solange der Auth-Check bzw. das Laden des Profils
-// läuft. Logo und App-Name sitzen in der unteren Bildschirmhälfte, darunter
-// die Stadt-Illustration am unteren Rand.
+// läuft. Das Logo-Lockup (Signet · Wortmarke · Claim) steht waagrecht zentriert
+// knapp oberhalb der Bildschirmmitte, darunter schliesst die Stadt-Illustration
+// bündig am unteren Rand ab.
 //
 // Logo (Asset "LogoMark") und Illustration (Asset "SplashCity") folgen noch –
 // bis dahin stehen ein getönter Kreis und eine leere Fläche an ihrer Stelle
@@ -12,8 +13,19 @@
 import SwiftUI
 
 struct SplashView: View {
-    /// Kantenlänge des Logos bzw. seines Platzhalter-Kreises.
-    private let logoSize: CGFloat = 90
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    // Wortmarke und Claim gehören zum Logo und nicht zur UI-Schriftskala: Sie
+    // stehen grösser als "largeTitle" (34 pt), wachsen über @ScaledMetric aber
+    // trotzdem mit Dynamic Type mit.
+    @ScaledMetric(relativeTo: .largeTitle) private var wordmarkSize: CGFloat = 40
+    @ScaledMetric(relativeTo: .title3) private var claimSize: CGFloat = 20
+    /// Kantenlänge des Signets bzw. seines Platzhalter-Kreises.
+    @ScaledMetric(relativeTo: .largeTitle) private var signetSize: CGFloat = 84
+
+    /// Der Entwurf setzt das Lockup nicht in die exakte Mitte, sondern knapp
+    /// 50 pt darüber – so bleibt es frei von der Skyline am unteren Rand.
+    private let opticalLift: CGFloat = 48
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -26,44 +38,64 @@ struct SplashView: View {
                 .accessibilityHidden(true)
                 .ignoresSafeArea(edges: .bottom)
 
-            VStack(spacing: AppMetrics.Space.xl) {
-                Spacer()
-
-                HStack(spacing: AppMetrics.Space.l) {
-                    logo
-                    Text("Omina")
-                        .font(AppTypography.title1)
-                        .foregroundColor(AppColor.textBrand)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
+            logoLockup
                 .padding(.horizontal, AppMetrics.Space.l)
-                .accessibilityElement(children: .combine)
-                .accessibilityLabel("Omina")
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .padding(.bottom, opticalLift * 2)
+        }
+        // Im Entwurf steht kein Ladeindikator; dass die App noch lädt, sagt
+        // VoiceOver zusammen mit der Marke an.
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Omina – know what’s ahead. App wird geladen.")
+    }
 
-                // Der Splash steht auch, während das Profil vom Server kommt –
-                // ohne Indikator sähe das nach eingefrorener App aus.
-                ProgressView()
-                    .tint(AppColor.accentPrimary)
-                    .accessibilityLabel("App wird geladen")
+    // MARK: - Lockup
 
-                Spacer()
+    /// Signet links, Wortmarke und Claim rechts daneben. Ab den
+    /// Accessibility-Textgrössen stapelt sich beides, sonst würde die Zeile
+    /// über den Bildschirmrand hinauslaufen.
+    @ViewBuilder
+    private var logoLockup: some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            VStack(alignment: .leading, spacing: AppMetrics.Space.m) {
+                signet
+                wordmark
+            }
+        } else {
+            HStack(spacing: AppMetrics.Space.l) {
+                signet
+                wordmark
             }
         }
     }
 
     /// App-Logo; bis es vorliegt, der getönte Kreis aus dem Entwurf.
-    @ViewBuilder
-    private var logo: some View {
-        if UIImage(named: "LogoMark") != nil {
-            Image("LogoMark")
-                .resizable()
-                .aspectRatio(contentMode: .fit)
-                .frame(width: logoSize, height: logoSize)
-        } else {
-            Circle()
-                .fill(AppColor.backgroundMuted)
-                .frame(width: logoSize, height: logoSize)
+    private var signet: some View {
+        Group {
+            if UIImage(named: "LogoMark") != nil {
+                Image("LogoMark")
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+            } else {
+                Circle()
+                    .fill(AppColor.backgroundMuted)
+            }
         }
+        .frame(width: signetSize, height: signetSize)
+    }
+
+    /// Wortmarke in Kleinbuchstaben (Marke), darunter der Claim.
+    private var wordmark: some View {
+        VStack(alignment: .leading, spacing: AppMetrics.Space.xs) {
+            Text("omina")
+                .font(.system(size: wordmarkSize, weight: .bold))
+                .foregroundStyle(AppColor.textBrand)
+
+            Text("know what’s ahead")
+                .font(.system(size: claimSize, weight: .regular))
+                .foregroundStyle(AppColor.textBrand)
+        }
+        .fixedSize(horizontal: false, vertical: true)
     }
 }
 

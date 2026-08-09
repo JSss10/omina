@@ -60,7 +60,7 @@ struct AssetVideo: View {
     /// Dateiendung der Ressource.
     var fileExtension: String = "mp4"
     /// SF-Symbol für den Platzhalter, solange das Video fehlt.
-    var placeholderSymbol: String = "play.rectangle"
+    var placeholderSymbol: String = "video.fill"
     /// Beschriftung für VoiceOver.
     var accessibilityLabel: String = "Erklärvideo"
 
@@ -98,7 +98,9 @@ struct AssetVideo: View {
 // MARK: - Platzhalter
 
 /// Getönte Fläche mit Symbol – die gemeinsame Vertretung für Bild und Video,
-/// solange das Medium fehlt. Rein dekorativ, daher für VoiceOver unsichtbar.
+/// solange das Medium fehlt. Fläche und Symbol folgen dem Entwurf der
+/// Video-Seite: Violett 100 als Grund, das Symbol darauf in der Leitfarbe.
+/// Rein dekorativ, daher für VoiceOver unsichtbar.
 private struct AssetPlaceholder: View {
     let symbol: String
 
@@ -109,8 +111,8 @@ private struct AssetPlaceholder: View {
                 Image(systemName: symbol)
                     .resizable()
                     .aspectRatio(contentMode: .fit)
-                    .frame(maxWidth: 64, maxHeight: 64)
-                    .foregroundStyle(AppColor.accentPrimary.opacity(0.4))
+                    .frame(maxWidth: 48, maxHeight: 48)
+                    .foregroundStyle(AppColor.accentPrimary)
                     .padding(AppMetrics.Space.l)
             }
             .accessibilityHidden(true)
