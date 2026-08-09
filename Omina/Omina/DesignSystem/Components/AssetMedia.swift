@@ -1,5 +1,5 @@
 // AssetMedia.swift
-// ARMikronav
+// Omina
 //
 // Hüllen für Bilder und Videos, die noch nicht vorliegen: Fehlt das Asset
 // bzw. die Bundle-Ressource, steht ein getönter Platzhalter mit SF-Symbol an
