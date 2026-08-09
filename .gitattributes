@@ -1,0 +1,23 @@
+# GitHub-Sprachstatistik (linguist)
+#
+# Ohne diese Angaben bestimmt GitHub die Repo-Sprache über die Byte-Menge und
+# meldet "PLpgSQL": die beiden Seed-Dumps und die Import-Exporte sind zusammen
+# ein Vielfaches des Swift-Codes. Als "generated" markiert zählen sie nicht mehr
+# mit – die Sprachleiste zeigt dann Swift, und die Dateien sind in Diffs und in
+# der Code-Suche standardmässig eingeklappt.
+
+supabase/seed/*.sql   linguist-generated=true
+data/exports/**       linguist-generated=true
+Omina/Omina/Seed/*.json linguist-generated=true
+
+# Datenbank-Schema und Migrationen sind handgeschrieben und sollen mitzählen,
+# aber als SQL erkannt werden (nicht als PLpgSQL-Repo-Sprache dominieren).
+supabase/*.sql            linguist-language=SQL linguist-detectable=true
+supabase/migrations/*.sql linguist-language=SQL linguist-detectable=true
+
+# Zeilenenden vereinheitlichen (Repo intern immer LF).
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.pdf binary
+*.gpx text

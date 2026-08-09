@@ -67,5 +67,9 @@ enum AppConfig {
     static let appleStandardEULAURL = URL(string: "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/")!
 
     // MARK: - Feldtest
-    static let fieldTestModeEnabled = true
+    // Schaltet "Feldtest starten" auf dem Welcome-Screen frei (Testprofil-Auswahl
+    // statt Registrierung) und die Erfassung in test_participants/test_events.
+    // Nach den drei Testtagen wieder aus – im regulären Betrieb registrieren
+    // sich Nutzer:innen normal.
+    static let fieldTestModeEnabled = false
 }

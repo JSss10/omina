@@ -47,25 +47,12 @@ main              ← Stabile Releases / Abgabeversion
 │   └── fix/barrier-logic-scewo
 ```
 
-## Initiale Commits
+Feature-Branches gehen per Pull Request nach `develop`, `develop` per Pull
+Request nach `main`. Direkte Commits auf `main` bleiben den Abgabeständen
+vorbehalten.
 
-```bash
-git add .gitignore
-git commit -m "chore: add .gitignore for Xcode/Swift project"
+## Sprache
 
-git add README.md COMMITS.md
-git commit -m "docs: add README and conventional commits guide"
-
-git add Database/
-git commit -m "chore(data): add Supabase schema with PostGIS and RLS"
-
-git add Config.example.swift
-git commit -m "chore(config): add Supabase config template"
-
-git add Omina/
-git commit -m "feat: add UserProfile model and shouldWarn barrier logic"
-
-git push
-git checkout -b develop
-git push -u origin develop
-```
+Commit-Betreffzeilen auf Englisch, Imperativ, ohne Punkt am Ende – wie die
+Beispiele oben. Der Code selbst ist auf Deutsch kommentiert, weil die
+Arbeit auf Deutsch verfasst ist.

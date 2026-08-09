@@ -55,7 +55,7 @@ struct RootView: View {
 // Consent (Datenschutz) → Berechtigungen (einmalig: Standort/Kamera/
 // Mitteilungen über Apples System-Prompts) → Onboarding (wenn kein Profil) →
 // Home. Danach werden keine eigenen Berechtigungs-Screens mehr gezeigt. Hält
-// das Profil separat, damit es als Binding an HomeView und weiter an Settings
+// das Profil separat, damit es als Binding an MainTabView und weiter an Settings
 // gereicht werden kann (S1).
 struct AuthenticatedRootView: View {
     @EnvironmentObject var authService: AuthService
@@ -94,7 +94,7 @@ struct AuthenticatedRootView: View {
                         Task { await checkProfile() }
                     }
                 case .ready:
-                    HomeView(profile: profileBinding)
+                    MainTabView(profile: profileBinding)
                 }
             }
         }

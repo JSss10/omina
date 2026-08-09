@@ -1,0 +1,106 @@
+Copyright (c) 2026 Jessica Schneiter. Alle Rechte vorbehalten.
+Copyright (c) 2026 Jessica Schneiter. All rights reserved.
+
+=====================================================================
+DEUTSCH
+=====================================================================
+
+Diese Software (der Quellcode, die Assets, das Datenbankschema und die
+Import-Scripts in diesem Repository, zusammen "die Software") ist urheber-
+rechtlich geschütztes Eigentum von Jessica Schneiter.
+
+Die Software ist KEINE Open-Source-Software. Es wird keine Lizenz zur
+Nutzung, Vervielfältigung, Änderung, Zusammenführung, Veröffentlichung,
+Verbreitung, Unterlizenzierung oder zum Verkauf erteilt.
+
+Dass dieses Repository öffentlich einsehbar ist, erteilt keinerlei Rechte
+an der Software. Öffentlich ist es ausschliesslich, damit die Bachelor-
+arbeit nachvollziehbar und die Umsetzung überprüfbar bleibt.
+
+AUSDRÜCKLICH GESTATTET IST:
+
+1. Das Lesen und Ansehen des Quellcodes zu Prüfungs-, Bewertungs- und
+   Bildungszwecken – insbesondere durch das SAE Institut Zürich, die
+   Betreuungs- und Prüfungspersonen der Bachelorarbeit sowie durch
+   Personen, die die Arbeit rezipieren.
+2. Das Anfertigen der technisch notwendigen Kopien, die beim Betrachten
+   über GitHub entstehen (Fork/Clone im Rahmen der GitHub-Nutzungs-
+   bedingungen), ausschliesslich zum Zweck nach Ziffer 1.
+
+NICHT GESTATTET IST insbesondere:
+
+- die Nutzung der Software oder von Teilen davon in eigenen Projekten,
+  ob kommerziell oder nicht;
+- das Veröffentlichen, Verbreiten oder Bereitstellen der Software oder
+  abgeleiteter Werke;
+- das Training von Modellen des maschinellen Lernens auf dieser Software;
+- das Entfernen oder Verändern dieser Lizenz- und Urheberrechtshinweise.
+
+Jede darüber hinausgehende Nutzung bedarf der vorherigen schriftlichen
+Zustimmung der Rechteinhaberin. Anfragen zu Lizenzierung, Kooperation
+oder Beteiligung: über das GitHub-Profil https://github.com/JSss10
+
+DIE SOFTWARE WIRD OHNE JEDE GEWÄHR BEREITGESTELLT, WEDER AUSDRÜCKLICH
+NOCH STILLSCHWEIGEND, EINSCHLIESSLICH DER GEWÄHRLEISTUNG DER MARKT-
+GÄNGIGKEIT UND DER EIGNUNG FÜR EINEN BESTIMMTEN ZWECK. DIE RECHTE-
+INHABERIN HAFTET NICHT FÜR ANSPRÜCHE ODER SCHÄDEN, DIE AUS DER SOFTWARE
+ODER IHRER VERWENDUNG ENTSTEHEN.
+
+Omina ist ein Prototyp aus einer Bachelorarbeit und kein Medizinprodukt
+und keine Navigationshilfe für den sicherheitskritischen Einsatz. Die
+Barrierenbewertung beruht auf offenen Daten Dritter, die unvollständig
+oder veraltet sein können.
+
+Drittanbieter-Komponenten und Datenquellen mit eigenen Lizenzbedingungen
+sind in THIRD-PARTY-NOTICES.md aufgeführt. Diese Lizenz gilt nicht für
+sie.
+
+=====================================================================
+ENGLISH (informal translation, the German text prevails)
+=====================================================================
+
+This software (the source code, assets, database schema and import
+scripts in this repository, together "the Software") is the copyrighted
+property of Jessica Schneiter.
+
+The Software is NOT open source. No licence is granted to use, copy,
+modify, merge, publish, distribute, sublicense or sell it.
+
+The fact that this repository is publicly readable grants no rights in
+the Software. It is public solely so that the bachelor thesis remains
+verifiable and its implementation reviewable.
+
+EXPRESSLY PERMITTED:
+
+1. Reading and viewing the source code for examination, assessment and
+   educational purposes – in particular by SAE Institute Zurich, the
+   supervisors and examiners of the bachelor thesis, and by readers of
+   the thesis.
+2. Making the technically necessary copies that arise from viewing the
+   repository on GitHub (fork/clone within the GitHub Terms of Service),
+   solely for the purpose in item 1.
+
+NOT PERMITTED, in particular:
+
+- using the Software or parts of it in other projects, commercial or not;
+- publishing, distributing or making available the Software or derivative
+  works;
+- training machine learning models on this Software;
+- removing or altering these licence and copyright notices.
+
+Any use beyond this requires the prior written consent of the rights
+holder. Enquiries about licensing, collaboration or investment: via the
+GitHub profile https://github.com/JSss10
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANT-
+ABILITY AND FITNESS FOR A PARTICULAR PURPOSE. THE RIGHTS HOLDER SHALL
+NOT BE LIABLE FOR ANY CLAIM OR DAMAGES ARISING FROM THE SOFTWARE OR ITS
+USE.
+
+Omina is a bachelor thesis prototype. It is not a medical device and not
+a navigation aid for safety-critical use. Its barrier assessment relies
+on third-party open data, which may be incomplete or outdated.
+
+Third-party components and data sources carry their own licence terms and
+are listed in THIRD-PARTY-NOTICES.md. This licence does not apply to them.

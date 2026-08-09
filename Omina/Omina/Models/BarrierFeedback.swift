@@ -2,7 +2,7 @@
 // Omina
 //
 // User-Rückmeldung zu einer Barriere – wird vom FeedbackService in die
-// Supabase-Tabelle `user_feedback` geschrieben (siehe Database/schema.sql).
+// Supabase-Tabelle `user_feedback` geschrieben (siehe supabase/schema.sql).
 // RLS verlangt user_id == auth.uid(), entsprechend kommt user_id stets aus
 // AuthService.shared.currentUser.id.
 

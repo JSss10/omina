@@ -1,4 +1,4 @@
-// HomeView.swift
+// MainTabView.swift
 // Omina
 //
 // Haupt-Container für authentifizierte User. Hält das MapViewModel und stellt
@@ -12,7 +12,7 @@
 import SwiftUI
 import CoreLocation
 
-struct HomeView: View {
+struct MainTabView: View {
     @EnvironmentObject var authService: AuthService
     @Binding var profile: UserProfile
 

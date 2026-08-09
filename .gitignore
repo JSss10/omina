@@ -40,6 +40,7 @@ Config.swift
 *~
 .idea/
 .vscode/
+.claude/
 
 # Archives
 *.xcarchive
@@ -47,5 +48,22 @@ Config.swift
 # Provisioning
 *.mobileprovision
 *.provisionprofile
+
 # Python (scripts/)
 __pycache__/
+*.pyc
+.venv/
+venv/
+
+# Erzeugte Import-Exporte (scripts/ schreibt nach data/exports/).
+# Die bereits eingecheckten Läufe bleiben als Beleg für die Arbeit erhalten;
+# jeder NEUE Lauf bleibt lokal, damit das Repo nicht mit jedem Import wächst.
+data/exports/*
+!data/exports/barriers_osm_20260407_142701.json
+!data/exports/pois_ginto_20260407_142744.json
+!data/exports/poi_zuerich_20260809_120144.json
+!data/exports/poi_zuerich_20260809_120144.sql
+!data/exports/poi_zuerich_20260809_120314.json
+!data/exports/poi_zuerich_20260809_120314.sql
+!data/exports/poi_zuerich_20260809_121038.json
+!data/exports/poi_zuerich_20260809_121038.sql

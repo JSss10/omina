@@ -2,7 +2,7 @@
 // Omina
 //
 // Lädt POIs aus Supabase via RPC pois_within_radius
-// (siehe migrations/pois_within_radius.sql). Freitext-Suche und
+// (siehe supabase/migrations/pois_within_radius.sql). Freitext-Suche und
 // Kategorie-Chips laufen über denselben search-Parameter.
 
 import Foundation

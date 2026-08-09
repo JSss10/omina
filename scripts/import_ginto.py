@@ -16,7 +16,21 @@ import sys
 import json
 import requests
 from datetime import datetime
+from pathlib import Path
 from supabase import create_client, Client
+
+
+# Alle erzeugten Backups und SQL-Dateien landen an einer festen Stelle im Repo
+# (data/exports/) statt im jeweiligen Arbeitsverzeichnis – so liegen sie immer
+# beieinander, egal von wo das Script gestartet wurde.
+EXPORT_DIR = Path(__file__).resolve().parent.parent / "data" / "exports"
+
+
+def export_path(filename: str) -> str:
+    """Pfad einer erzeugten Datei unter data/exports/ (Ordner wird angelegt)."""
+    EXPORT_DIR.mkdir(parents=True, exist_ok=True)
+    return str(EXPORT_DIR / filename)
+
 
 # ============================================================
 # KONFIGURATION
@@ -317,7 +331,7 @@ def main():
     print("  - BADLY (rot):         " + str(grade_counts['BADLY']))
     print("  - unknown:             " + str(grade_counts.get('unknown', 0)))
     
-    backup_file = "pois_ginto_" + datetime.now().strftime('%Y%m%d_%H%M%S') + ".json"
+    backup_file = export_path("pois_ginto_" + datetime.now().strftime('%Y%m%d_%H%M%S') + ".json")
     with open(backup_file, "w", encoding="utf-8") as f:
         json.dump(pois, f, indent=2, ensure_ascii=False, default=str)
     print("\nOK Backup gespeichert: " + backup_file)

@@ -1,7 +1,7 @@
 -- Omina – Seed: POIs (ginto-Import, Altstadt Zürich)
 -- Quelle: pois_ginto_20260407_142744.json (ginto-Export vom 07.04.2026, 439 Einträge)
 -- Für den Supabase SQL Editor: gesamtes Script einfügen und ausführen.
--- Erwartet das Schema aus Database/schema.sql (Tabelle `poi_accessibility`, PostGIS aktiviert).
+-- Erwartet das Schema aus supabase/schema.sql (Tabelle `poi_accessibility`, PostGIS aktiviert).
 --
 -- Das Script ist idempotent: bestehende ginto-POIs werden vorher entfernt,
 -- damit ein erneutes Ausführen keine Duplikate erzeugt.

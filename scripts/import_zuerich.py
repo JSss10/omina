@@ -42,7 +42,7 @@ Schluessel, die POI.swift liest:
 Verwendung:
     python3 import_zuerich.py                  # Supabase lesen + schreiben
     python3 import_zuerich.py --dry-run        # nur Vorschau
-    python3 import_zuerich.py --pois-file ../pois_ginto_20260407_142744.json
+    python3 import_zuerich.py --pois-file ../data/exports/pois_ginto_20260407_142744.json
                                                # Vorschau ohne Supabase
     python3 import_zuerich.py --seed-file ../Omina/Omina/Seed/seed_pois.json
                                                # Offline-Seed der App mitpflegen
@@ -61,9 +61,23 @@ import sys
 import time
 import unicodedata
 from datetime import datetime
+from pathlib import Path
 from difflib import SequenceMatcher
 
 import requests
+
+
+# Alle erzeugten Backups und SQL-Dateien landen an einer festen Stelle im Repo
+# (data/exports/) statt im jeweiligen Arbeitsverzeichnis – so liegen sie immer
+# beieinander, egal von wo das Script gestartet wurde.
+EXPORT_DIR = Path(__file__).resolve().parent.parent / "data" / "exports"
+
+
+def export_path(filename: str) -> str:
+    """Pfad einer erzeugten Datei unter data/exports/ (Ordner wird angelegt)."""
+    EXPORT_DIR.mkdir(parents=True, exist_ok=True)
+    return str(EXPORT_DIR / filename)
+
 
 # ============================================================
 # KONFIGURATION
@@ -944,13 +958,13 @@ def main():
 
     # 5. Backup + SQL
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    backup_file = "poi_zuerich_" + stamp + ".json"
+    backup_file = export_path("poi_zuerich_" + stamp + ".json")
     with open(backup_file, "w", encoding="utf-8") as handle:
         json.dump([{k: v for k, v in m.items() if k != "accessibility_details"}
                    for m in matches], handle, indent=2, ensure_ascii=False)
     print("\nOK Backup gespeichert: " + backup_file)
 
-    sql_file = "poi_zuerich_" + stamp + ".sql"
+    sql_file = export_path("poi_zuerich_" + stamp + ".sql")
     print("OK SQL geschrieben: " + sql_file + " ("
           + str(write_sql(matches, sql_file)) + " UPDATEs)")
 
