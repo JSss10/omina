@@ -1,0 +1,337 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Datenschutzerklärung — Omina</title>
+    <style>
+      :root {
+        --ground: #f7f5fb;
+        --surface: #ffffff;
+        --ink: #1a1523;
+        --ink-soft: #574c6b;
+        --ink-faint: #8a80a0;
+        --rule: #e2dbf2;
+        --accent: #7c3aed;
+        --accent-deep: #2e1065;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --ground: #141020;
+          --surface: #1e1830;
+          --ink: #f4f1fa;
+          --ink-soft: #b6acce;
+          --ink-faint: #8177a0;
+          --rule: #322949;
+          --accent: #a78bfa;
+          --accent-deep: #ddd6fe;
+        }
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--ground);
+        color: var(--ink);
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+        font-size: 16px;
+        line-height: 1.65;
+        -webkit-font-smoothing: antialiased;
+      }
+      main {
+        max-width: 44rem;
+        margin: 0 auto;
+        padding: 3rem 1.5rem 5rem;
+      }
+      .eyebrow {
+        font-size: 0.72rem;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--ink-faint);
+        margin-bottom: 0.6rem;
+      }
+      h1 {
+        font-size: clamp(1.7rem, 5vw, 2.3rem);
+        line-height: 1.15;
+        letter-spacing: -0.02em;
+        margin: 0 0 0.6rem;
+        color: var(--accent-deep);
+      }
+      .lead {
+        color: var(--ink-soft);
+        margin: 0 0 2.5rem;
+      }
+      h2 {
+        font-size: 1.1rem;
+        letter-spacing: -0.01em;
+        margin: 2.5rem 0 0.7rem;
+        padding-top: 1.2rem;
+        border-top: 1px solid var(--rule);
+      }
+      h3 {
+        font-size: 0.98rem;
+        margin: 1.4rem 0 0.4rem;
+      }
+      p,
+      li {
+        color: var(--ink-soft);
+      }
+      p {
+        margin: 0 0 0.9rem;
+      }
+      ul {
+        margin: 0 0 0.9rem;
+        padding-left: 1.2rem;
+      }
+      li {
+        margin-bottom: 0.35rem;
+      }
+      strong {
+        color: var(--ink);
+        font-weight: 600;
+      }
+      a {
+        color: var(--accent);
+      }
+      .tablewrap {
+        overflow-x: auto;
+        border: 1px solid var(--rule);
+        border-radius: 8px;
+        background: var(--surface);
+        margin: 0 0 1rem;
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        min-width: 30rem;
+      }
+      th,
+      td {
+        text-align: left;
+        padding: 0.6rem 0.9rem;
+        border-bottom: 1px solid var(--rule);
+        font-size: 0.9rem;
+        color: var(--ink-soft);
+        vertical-align: top;
+      }
+      th {
+        color: var(--ink);
+        font-weight: 600;
+        white-space: nowrap;
+      }
+      tr:last-child th,
+      tr:last-child td {
+        border-bottom: none;
+      }
+      footer {
+        margin-top: 3rem;
+        padding-top: 1.2rem;
+        border-top: 1px solid var(--rule);
+        font-size: 0.85rem;
+        color: var(--ink-faint);
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="eyebrow">Omina · Bachelorarbeit SAE Institut Zürich</div>
+      <h1>Datenschutzerklärung</h1>
+      <p class="lead">
+        Omina ist ein Forschungsprototyp zur AR-gestützten Mikronavigation für
+        Rollstuhlnutzende. Diese Erklärung beschreibt, welche Daten die App
+        verarbeitet, wo sie liegen und wie du sie löschen lässt.
+      </p>
+
+      <h2>Verantwortliche Stelle</h2>
+      <p>
+        Jessica Schneiter<br />
+        Bachelorarbeit, SAE Institut Zürich<br />
+        <a href="mailto:jessica.schneiter@bluewin.ch"
+          >jessica.schneiter@bluewin.ch</a
+        >
+      </p>
+      <p>
+        Omina wird nicht kommerziell betrieben. Die App entsteht im Rahmen einer
+        Abschlussarbeit und wird über TestFlight ausschliesslich an Testpersonen
+        und Prüfende verteilt.
+      </p>
+
+      <h2>Welche Daten verarbeitet werden</h2>
+
+      <div class="tablewrap">
+        <table>
+          <tbody>
+            <tr>
+              <th>Profil</th>
+              <td>
+                Rollstuhltyp, Körper- und Hilfsmittelmasse, Fähigkeiten und
+                Limits, Angabe zu Begleitung.
+                <strong>Bleibt ausschliesslich auf deinem Gerät</strong> und
+                wird nicht an einen Server übertragen.
+              </td>
+            </tr>
+            <tr>
+              <th>Konto</th>
+              <td>
+                E-Mail-Adresse, Vor- und Nachname, optional Land und
+                Telefonnummer. Für Anmeldung und Passwort-Zurücksetzen.
+              </td>
+            </tr>
+            <tr>
+              <th>Standort</th>
+              <td>
+                Nur während der Nutzung der App, nie im Hintergrund. Wird für
+                Karte, Routing und die Einblendung von Barrieren im Kamerabild
+                gebraucht.
+              </td>
+            </tr>
+            <tr>
+              <th>Kamera</th>
+              <td>
+                Nur in der AR-Ansicht. Es werden
+                <strong>keine Bilder aufgezeichnet oder übertragen</strong>.
+                Nimmst du in einem Feedback-Formular bewusst ein Foto auf, wird
+                nur dieses Foto übermittelt.
+              </td>
+            </tr>
+            <tr>
+              <th>Feedback</th>
+              <td>
+                Deine Rückmeldungen zu Barrieren samt zugehörigem Ort und
+                optionalem Foto.
+              </td>
+            </tr>
+            <tr>
+              <th>Profilbild</th>
+              <td>Nur wenn du eines auswählst oder aufnimmst.</td>
+            </tr>
+            <tr>
+              <th>Gespeicherte Orte</th>
+              <td>Von dir gemerkte Ziele und zuletzt gesuchte Orte.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>
+        Es findet
+        <strong
+          >keine Verhaltensanalyse, kein Tracking über App-Grenzen hinweg und
+          keine Werbung</strong
+        >
+        statt. Daten werden nicht verkauft und nicht zu Werbezwecken
+        weitergegeben.
+      </p>
+
+      <h2>Wo die Daten gespeichert werden</h2>
+      <ul>
+        <li>
+          <strong>Auf dem Gerät:</strong> Profil, App-Einstellungen, zuletzt
+          geladene Karten- und Ortsdaten für die Offline-Nutzung.
+        </li>
+        <li>
+          <strong>Supabase (Server-Region EU):</strong> Konto, Feedback,
+          gespeicherte Orte, Profilbild.
+        </li>
+      </ul>
+
+      <h2>Dienste von Dritten</h2>
+      <p>
+        Damit Karte, Routing und Wetteranzeige funktionieren, werden Anfragen an
+        folgende Dienste gestellt. Dabei werden die dafür nötigen
+        Standortkoordinaten übermittelt:
+      </p>
+      <ul>
+        <li>
+          <strong>Supabase</strong> — Konto, Datenbank und Dateispeicher, Region
+          EU.
+        </li>
+        <li>
+          <strong>OpenRouteService</strong> — Berechnung rollstuhlgerechter
+          Routen. Erhält Start- und Zielkoordinaten.
+        </li>
+        <li>
+          <strong>Open-Meteo</strong> — Wetter auf dem Startbildschirm. Erhält
+          die ungefähren Koordinaten.
+        </li>
+        <li><strong>ginto Guide</strong> — Zugänglichkeitsdaten zu Orten.</li>
+        <li>
+          <strong>Apple MapKit</strong> — Kartendarstellung und Suche,
+          unterliegt Apples Datenschutzbestimmungen.
+        </li>
+        <li>
+          <strong>OpenStreetMap</strong> — Grundlage der Barrierendaten. Die
+          Daten sind bereits in der App enthalten, es werden keine Anfragen im
+          Betrieb gestellt.
+        </li>
+      </ul>
+
+      <h2>Feldtest-Modus</h2>
+      <p>
+        Für begleitete Testtage enthält Omina einen Feldtest-Modus, der
+        Nutzungsereignisse zu Forschungszwecken aufzeichnet. Dieser Modus ist in
+        der über TestFlight verteilten Fassung
+        <strong>deaktiviert</strong> und wurde ausschliesslich mit vorab
+        informierten Testpersonen eingesetzt.
+      </p>
+
+      <h2>Rechtsgrundlage und Zweck</h2>
+      <p>
+        Die Verarbeitung erfolgt auf Grundlage deiner Einwilligung, die du beim
+        ersten Start erteilst, und dient allein dem Betrieb der App sowie der
+        wissenschaftlichen Auswertung im Rahmen der Bachelorarbeit. Eine
+        Einwilligung kannst du jederzeit widerrufen, indem du dein Konto löschen
+        lässt.
+      </p>
+
+      <h2>Aufbewahrung</h2>
+      <p>
+        Serverseitige Daten werden bis zum Abschluss und zur Bewertung der
+        Bachelorarbeit aufbewahrt und danach gelöscht, spätestens jedoch auf
+        deine Anfrage hin. Lokale Daten liegen so lange auf deinem Gerät, bis du
+        sie in der App löschst oder die App entfernst.
+      </p>
+
+      <h2>Deine Rechte</h2>
+      <p>
+        Du hast das Recht auf Auskunft, Berichtigung, Löschung und
+        Datenübertragbarkeit sowie das Recht, der Verarbeitung zu widersprechen.
+      </p>
+      <ul>
+        <li>
+          <strong>Lokale Daten sofort löschen:</strong> in der App unter
+          Einstellungen → Datenschutz → „Konto und Daten löschen". Profil und
+          Einstellungen werden entfernt und du wirst abgemeldet.
+        </li>
+        <li>
+          <strong>Serverdaten löschen:</strong> kurze Mail mit deiner
+          registrierten Adresse an
+          <a
+            href="mailto:jessica.schneiter@bluewin.ch?subject=Omina%20%E2%80%93%20Konto%20l%C3%B6schen"
+            >jessica.schneiter@bluewin.ch</a
+          >. Die Löschung erfolgt innerhalb von 14 Tagen.
+        </li>
+      </ul>
+
+      <h2>Berechtigungen</h2>
+      <p>
+        Omina fragt Standort- und Kamerazugriff ab und kann Mitteilungen senden,
+        um dich vor einer kritischen Barriere zu warnen. Jede Berechtigung
+        kannst du in den iOS-Einstellungen jederzeit entziehen; die App bleibt
+        mit eingeschränktem Funktionsumfang nutzbar.
+      </p>
+
+      <h2>Änderungen</h2>
+      <p>
+        Diese Erklärung kann angepasst werden, wenn sich der Funktionsumfang der
+        App ändert. Es gilt jeweils die hier veröffentlichte Fassung.
+      </p>
+
+      <footer>
+        Stand: 10. August 2026 · Omina, Bachelorarbeit SAE Institut Zürich
+      </footer>
+    </main>
+  </body>
+</html>
