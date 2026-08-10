@@ -374,10 +374,9 @@ struct MapView: View {
                     onShowBarriers: { showingRouteBarriers = true },
                     onStop: { viewModel.stopNavigation() }
                 )
-                // Volle Breite während der Navigation: Die Karten-Bedienelemente
-                // sind ausgeblendet, die Abbiege-Anweisung bekommt so mehr Platz.
-                .padding(.horizontal)
-                .padding(.bottom, 12)
+                // Das Panel sitzt wie ein Sheet bündig am unteren Rand über die
+                // ganze Breite (Entwurf); die Karten-Bedienelemente sind
+                // während der Navigation ohnehin ausgeblendet.
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }

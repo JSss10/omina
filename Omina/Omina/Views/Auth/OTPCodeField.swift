@@ -12,6 +12,9 @@ struct OTPCodeField: View {
     @Binding var code: String
     var length: Int = 6
     var onComplete: (() -> Void)? = nil
+    /// Meldet, ob das Feld gerade bearbeitet wird – die Fusszeile zeigt dann
+    /// die Bestätigen-Aktion über der Tastatur (Entwurf).
+    var onFocusChange: ((Bool) -> Void)? = nil
 
     @FocusState private var isFocused: Bool
 
@@ -34,33 +37,43 @@ struct OTPCodeField: View {
                     }
                 }
 
-            HStack(spacing: 10) {
+            HStack(spacing: AppMetrics.Space.s) {
                 ForEach(0..<length, id: \.self) { index in
-                    digitBox(at: index)
+                    digitSlot(at: index)
                 }
             }
             .contentShape(Rectangle())
             .onTapGesture { isFocused = true }
         }
-        .frame(height: 56)
         .onAppear { isFocused = true }
+        .onChange(of: isFocused) { _, focused in onFocusChange?(focused) }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Bestätigungscode, \(code.count) von \(length) Ziffern eingegeben")
     }
 
-    private func digitBox(at index: Int) -> some View {
+    /// Eine Stelle als getönter Kreis (Entwurf). Die Stelle, die als Nächstes
+    /// dran ist, trägt den gefüllten Punkt – so sieht man ohne Cursor, wo man
+    /// gerade steht.
+    private func digitSlot(at index: Int) -> some View {
         let digits = Array(code)
-        let isActive = isFocused && index == min(code.count, length - 1)
+        let isNext = isFocused && index == min(code.count, length - 1) && index >= digits.count
 
-        return Text(index < digits.count ? String(digits[index]) : " ")
-            .font(.title2.monospacedDigit().bold())
-            .frame(maxWidth: .infinity)
-            .frame(height: 56)
-            .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 10))
-            .overlay(
-                RoundedRectangle(cornerRadius: 10)
-                    .stroke(isActive ? Color.accentColor : Color(.systemGray4),
-                            lineWidth: isActive ? 2 : 0.5)
-            )
+        return ZStack {
+            Circle()
+                .fill(AppColor.surfaceTinted)
+
+            if index < digits.count {
+                Text(String(digits[index]))
+                    .font(AppTypography.title3.monospacedDigit())
+                    .foregroundStyle(AppColor.textBrand)
+                    .minimumScaleFactor(0.6)
+            } else if isNext {
+                Circle()
+                    .fill(AppColor.textBrand)
+                    .frame(width: 10, height: 10)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .aspectRatio(1, contentMode: .fit)
     }
 }

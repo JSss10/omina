@@ -33,6 +33,8 @@ struct ARModeView: View {
     @State private var selectedPOI: POI?
     /// Suche – dasselbe Sheet wie in der Kartenansicht.
     @State private var showingSearch = false
+    /// Turn-by-turn-Liste der aktiven Route (Kopfzeile des Routen-Panels).
+    @State private var showingRouteSteps = false
 
     var body: some View {
         Group {
@@ -143,12 +145,11 @@ struct ARModeView: View {
                     ARRoutePanel(
                         route: route,
                         progress: viewModel.routeProgress,
-                        maneuver: viewModel.nextManeuver,
                         alongAnchorM: viewModel.routeAnchorAlongM,
                         onStop: { viewModel.stopNavigation() },
-                        onMapTap: onClose
+                        onMapTap: onClose,
+                        onShowSteps: { showingRouteSteps = true }
                     )
-                    .padding(.bottom, 12)
                 }
             } else {
                 AROverlayView(
@@ -236,6 +237,16 @@ struct ARModeView: View {
         // POI-Detail (im AR-Bild gibt es keinen Kartenausschnitt, auf den man
         // zentrieren könnte) – von dort führen "Route in AR starten" und
         // "Route anzeigen" weiter.
+        .sheet(isPresented: $showingRouteSteps) {
+            if let route = viewModel.activeRoute {
+                RouteStepsListSheet(
+                    route: route,
+                    progress: viewModel.routeProgress,
+                    currentStepIndex: viewModel.currentStepIndex
+                )
+                .trackScreen("ar_route_steps")
+            }
+        }
         .sheet(isPresented: $showingSearch) {
             SearchSheet(viewModel: viewModel) { poi in
                 selectedPOI = poi

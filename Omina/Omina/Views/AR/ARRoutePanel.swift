@@ -1,10 +1,10 @@
 // ARRoutePanel.swift
 // Omina
 //
-// Bottom-Panel während der AR-Navigation: Kartenstreifen mit Routenverlauf,
-// darunter die geteilte RouteInfoBar mit Richtungspfeil, Zielname,
-// Restzeit/-distanz und Stop-Button. Ein Tipp auf den Kartenstreifen wechselt
-// zurück zur Kartenansicht (ersetzt den früheren "Zur Karte"-Button).
+// Bottom-Panel während der AR-Navigation, Aufbau nach Entwurf: dieselbe
+// Kopfzeile, Zusammenfassung und Fortschrittsleiste wie in der Kartenansicht
+// (MapRoutePanel), darunter der Kartenstreifen mit dem Routenverlauf. Ein Tipp
+// auf den Streifen wechselt zurück zur Kartenansicht.
 //
 // Der Kartenstreifen verhält sich wie die grosse Karte im Folgen-Modus: Er
 // zentriert auf den eigenen Standort und dreht sich mit der eigenen
@@ -21,13 +21,14 @@ import Combine
 struct ARRoutePanel: View {
     let route: ActiveRoute
     let progress: RouteProgress?
-    var maneuver: RouteManeuver? = nil
     /// Bisher zurückgelegte Weglänge auf der Route – hält das Einrasten des
     /// Standortpunkts auf demselben Routenast wie in der Kartenansicht.
     var alongAnchorM: CLLocationDistance? = nil
     let onStop: () -> Void
     /// Tipp auf den Kartenstreifen → zurück zur Kartenansicht.
     var onMapTap: (() -> Void)? = nil
+    /// Öffnet die Wegbeschreibung als Liste (Kopfzeile rechts).
+    var onShowSteps: (() -> Void)? = nil
 
     @StateObject private var locationService = LocationService.shared
     @State private var cameraPosition: MapCameraPosition
@@ -39,33 +40,49 @@ struct ARRoutePanel: View {
     init(
         route: ActiveRoute,
         progress: RouteProgress?,
-        maneuver: RouteManeuver? = nil,
         alongAnchorM: CLLocationDistance? = nil,
         onStop: @escaping () -> Void,
-        onMapTap: (() -> Void)? = nil
+        onMapTap: (() -> Void)? = nil,
+        onShowSteps: (() -> Void)? = nil
     ) {
         self.route = route
         self.progress = progress
-        self.maneuver = maneuver
         self.alongAnchorM = alongAnchorM
         self.onStop = onStop
         self.onMapTap = onMapTap
+        self.onShowSteps = onShowSteps
         _cameraPosition = State(initialValue: .region(Self.fittedRegion(for: route)))
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            routeMap
-                .frame(height: 130)
+        VStack(spacing: AppMetrics.Space.m) {
+            RoutePanelHeader(
+                hasArrived: progress?.hasArrived ?? false,
+                onStop: onStop,
+                onShowSteps: onShowSteps
+            )
 
-            RouteInfoBar(route: route, progress: progress, maneuver: maneuver, onStop: onStop)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
+            RouteSummaryRow(route: route, progress: progress)
+            RouteProgressBar(route: route, progress: progress)
+
+            // Kartenstreifen: zeigt denselben Ausschnitt wie das Kamerabild,
+            // ein Tipp darauf wechselt zur Kartenansicht.
+            routeMap
+                .frame(height: 150)
+                .clipShape(RoundedRectangle(cornerRadius: AppMetrics.Radius.card, style: .continuous))
         }
-        .background(.regularMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 20))
-        .shadow(radius: 6)
-        .padding(.horizontal, 12)
+        .padding(.horizontal, AppMetrics.Space.l)
+        .padding(.top, AppMetrics.Space.m)
+        .padding(.bottom, AppMetrics.Space.l)
+        .background(
+            AppColor.backgroundPrimary,
+            in: UnevenRoundedRectangle(
+                topLeadingRadius: AppMetrics.Radius.sheet + AppMetrics.Space.s,
+                topTrailingRadius: AppMetrics.Radius.sheet + AppMetrics.Space.s,
+                style: .continuous
+            )
+        )
+        .shadow(color: AppColor.textBrand.opacity(0.2), radius: 12, y: -2)
     }
 
     // MARK: - Karte

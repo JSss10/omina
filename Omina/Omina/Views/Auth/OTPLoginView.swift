@@ -1,13 +1,19 @@
 // OTPLoginView.swift
 // Omina
 //
-// Anmeldung per Einmalcode (OTP): E-Mail eingeben, Einmalcode
-// erhalten, Code eingeben – ganz ohne Passwort.
+// Anmeldung per Einmalcode: E-Mail eingeben, Code erhalten, Code eingeben –
+// ganz ohne Passwort. Aufbau nach Entwurf: Akzentleiste, Titel mit Einleitung,
+// die Stellen des Codes als getönte Kreise, darunter der Hinweis mit dem Link
+// zum erneuten Senden.
+//
+// Die Fusszeile richtet sich nach dem Zustand: Während der Eingabe steht
+// «Bestätigen» über der Tastatur, sonst «Zurück» und «Weiter» nebeneinander.
 
 import SwiftUI
 
 struct OTPLoginView: View {
     @EnvironmentObject var authService: AuthService
+    @Environment(\.dismiss) private var dismiss
 
     @State private var email = ""
     @State private var code = ""
@@ -15,91 +21,158 @@ struct OTPLoginView: View {
     @State private var isLoading = false
     @State private var message: String?
     @State private var isError = false
+    /// Wird das Code-Feld gerade bearbeitet? Steuert die Fusszeile.
+    @State private var isEnteringCode = false
 
     private var isEmailValid: Bool {
         email.contains("@") && email.contains(".") && !email.contains(" ")
     }
 
+    private var isActionEnabled: Bool {
+        codeSent ? code.count == AppConfig.emailOTPCodeLength : isEmailValid
+    }
+
     var body: some View {
-        ScrollView {
-            VStack(spacing: 20) {
-                Text("Mit Code anmelden")
-                    .font(.largeTitle)
-                    .bold()
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.top, 20)
+        VStack(spacing: 0) {
+            BrandAccentBar()
 
-                Text(codeSent
-                     ? "Wir haben einen \(AppConfig.emailOTPCodeLength)-stelligen Code an \(email) geschickt."
-                     : "Wir senden dir einen \(AppConfig.emailOTPCodeLength)-stelligen Einmalcode per E-Mail – kein Passwort nötig.")
-                    .font(.body)
-                    .foregroundColor(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.bottom, 8)
+            ScrollView {
+                VStack(alignment: .leading, spacing: AppMetrics.Space.l) {
+                    AuthHeader(title: title, subtitle: subtitle)
 
-                if !codeSent {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("E-Mail")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                        TextField("name@beispiel.ch", text: $email)
-                            .textFieldStyle(.roundedBorder)
-                            .textContentType(.emailAddress)
-                            .keyboardType(.emailAddress)
-                            .autocapitalization(.none)
-                            .autocorrectionDisabled()
+                    if codeSent {
+                        OTPCodeField(
+                            code: $code,
+                            length: AppConfig.emailOTPCodeLength,
+                            onComplete: { Task { await verifyCode() } },
+                            onFocusChange: { isEnteringCode = $0 }
+                        )
+
+                        resendRow
+                    } else {
+                        AppTextField(
+                            placeholder: "E-Mail",
+                            text: $email,
+                            keyboardType: .emailAddress,
+                            textContentType: .emailAddress,
+                            autocapitalization: .never,
+                            autocorrection: false
+                        )
                     }
+
+                    if let message {
+                        HStack(alignment: .top, spacing: AppMetrics.Space.s) {
+                            Image(systemName: isError ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
+                                .foregroundStyle(isError ? AppColor.Status.blockedIcon : AppColor.Status.openIcon)
+                            Text(message)
+                                .foregroundStyle(isError ? AppColor.Status.blockedText : AppColor.Status.openText)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        .font(AppTypography.footnote)
+                        .accessibilityElement(children: .combine)
+                    }
+                }
+                .padding(.horizontal, AppMetrics.Space.l)
+                .padding(.bottom, AppMetrics.Space.m)
+            }
+            .scrollBounceBehavior(.basedOnSize)
+            .scrollDismissesKeyboard(.interactively)
+
+            footer
+        }
+        .background(AppColor.backgroundPrimary.ignoresSafeArea())
+        .toolbar(.hidden, for: .navigationBar)
+    }
+
+    private var title: String {
+        codeSent ? "Code eingeben" : "Mit Code anmelden"
+    }
+
+    private var subtitle: String {
+        codeSent
+            ? "Wir haben dir einen \(AppConfig.emailOTPCodeLength)-stelligen Code an \(email) geschickt."
+            : "Wir senden dir einen \(AppConfig.emailOTPCodeLength)-stelligen Einmalcode per E-Mail – kein Passwort nötig."
+    }
+
+    /// Hinweis mit dem Link zum erneuten Senden (Entwurf: Text, darunter der
+    /// violette Link).
+    private var resendRow: some View {
+        VStack(alignment: .leading, spacing: AppMetrics.Space.s) {
+            Text("Keinen Code erhalten? Prüfe den Spam-Ordner.")
+                .font(AppTypography.body)
+                .foregroundStyle(AppColor.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Button("Code erneut senden") {
+                Task { await sendCode() }
+            }
+            .font(AppTypography.body)
+            .foregroundStyle(AppColor.accentPrimary)
+            .frame(minHeight: AppMetrics.Touch.minimum, alignment: .leading)
+            .disabled(isLoading)
+        }
+    }
+
+    // MARK: - Fusszeile
+
+    /// Während der Code-Eingabe steht die Bestätigen-Aktion über der Tastatur;
+    /// sonst führen «Zurück» und «Weiter» durch den Ablauf.
+    @ViewBuilder
+    private var footer: some View {
+        if isEnteringCode {
+            Button {
+                Task { await verifyCode() }
+            } label: {
+                if isLoading {
+                    ProgressView()
+                        .tint(AppColor.onAccent)
                 } else {
-                    OTPCodeField(code: $code, length: AppConfig.emailOTPCodeLength) {
-                        Task { await verifyCode() }
+                    NavigationActionLabel(title: "Bestätigen")
+                }
+            }
+            .buttonStyle(.appPrimary)
+            .disabled(!isActionEnabled || isLoading)
+            .padding(.horizontal, AppMetrics.Space.l)
+            .padding(.top, AppMetrics.Space.m)
+            .padding(.bottom, AppMetrics.Space.s)
+            .background(AppColor.backgroundPrimary)
+        } else {
+            HStack(spacing: AppMetrics.Space.m - AppMetrics.Space.xs) {
+                Button {
+                    if codeSent {
+                        // Zurück zur E-Mail-Eingabe statt gleich aus dem Screen.
+                        codeSent = false
+                        code = ""
+                        message = nil
+                    } else {
+                        dismiss()
                     }
+                } label: {
+                    NavigationActionLabel(title: "Zurück", direction: .back)
                 }
-
-                if let message {
-                    Text(message)
-                        .font(.caption)
-                        .foregroundColor(isError ? .red : .green)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
+                .buttonStyle(.appSecondary(fullWidth: true))
 
                 Button {
                     Task { codeSent ? await verifyCode() : await sendCode() }
                 } label: {
                     if isLoading {
                         ProgressView()
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 56)
+                            .tint(AppColor.onAccent)
                     } else {
-                        Text(codeSent ? "Anmelden" : "Code senden")
-                            .font(.headline)
-                            .foregroundColor(.white)
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 56)
+                        NavigationActionLabel(title: codeSent ? "Anmelden" : "Weiter")
                     }
                 }
-                .background(isActionEnabled ? Color.accentColor : Color.gray)
-                .cornerRadius(12)
+                .buttonStyle(.appPrimary(fullWidth: true))
                 .disabled(!isActionEnabled || isLoading)
-                .padding(.top, 8)
-
-                if codeSent {
-                    Button("Code erneut senden") {
-                        Task { await sendCode() }
-                    }
-                    .font(.subheadline)
-                    .disabled(isLoading)
-                }
-
-                Spacer()
             }
-            .padding(.horizontal, 24)
+            .padding(.horizontal, AppMetrics.Space.l)
+            .padding(.top, AppMetrics.Space.m)
+            .padding(.bottom, AppMetrics.Space.s)
+            .background(AppColor.backgroundPrimary)
         }
-        .navigationBarTitleDisplayMode(.inline)
     }
 
-    private var isActionEnabled: Bool {
-        codeSent ? code.count == AppConfig.emailOTPCodeLength : isEmailValid
-    }
+    // MARK: - Aktionen
 
     private func sendCode() async {
         isLoading = true
