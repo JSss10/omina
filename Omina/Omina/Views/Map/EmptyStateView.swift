@@ -14,28 +14,29 @@ struct EmptyStateView: View {
         VStack(spacing: 14) {
             Image(systemName: "magnifyingglass.circle")
                 .font(.system(size: 44))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(AppColor.accentPrimary)
 
             Text("Keine Barrieren in der Nähe")
-                .font(.headline)
+                .font(AppTypography.headline)
+                .foregroundStyle(AppColor.textBrand)
 
             Text("Erweitere den Suchradius oder bewege dich in ein anderes Gebiet.")
-                .font(.subheadline)
+                .font(AppTypography.subheadline)
                 .multilineTextAlignment(.center)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(AppColor.textSecondary)
 
-            Button {
+            Button("Filter öffnen") {
                 onOpenFilter()
-            } label: {
-                Label("Filter öffnen", systemImage: "line.3.horizontal.decrease.circle")
             }
-            .buttonStyle(.bordered)
-            .controlSize(.regular)
-            .padding(.top, 4)
+            .buttonStyle(.appQuiet(fullWidth: true))
+            .padding(.top, AppMetrics.Space.xs)
         }
-        .padding(20)
+        .padding(AppMetrics.Space.l)
         .frame(maxWidth: 320)
-        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 16))
+        .background(
+            AppColor.backgroundPrimary,
+            in: RoundedRectangle(cornerRadius: AppMetrics.Radius.card, style: .continuous)
+        )
         .shadow(radius: 6)
         .padding(.horizontal, 24)
     }

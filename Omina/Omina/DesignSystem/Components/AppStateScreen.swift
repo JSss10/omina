@@ -58,13 +58,13 @@ struct AppStateScreen: View {
 
             VStack(spacing: AppMetrics.Space.s) {
                 Text(title)
-                    .font(AppTypography.title2)
-                    .foregroundColor(AppColor.textPrimary)
+                    .font(AppTypography.title3)
+                    .foregroundColor(AppColor.textBrand)
                     // Überschrift des Zustands: VoiceOver springt per Rotor
                     // direkt hierher, der Text darunter erklärt ihn.
                     .accessibilityAddTraits(.isHeader)
                 Text(message)
-                    .font(AppTypography.subheadline)
+                    .font(AppTypography.body)
                     .foregroundColor(AppColor.textSecondary)
             }
             .multilineTextAlignment(.center)
@@ -81,7 +81,7 @@ struct AppStateScreen: View {
 
     private var icon: some View {
         Image(systemName: symbol)
-            .font(.system(size: 40, weight: .regular))
+            .font(.system(size: 44, weight: .regular))
             .foregroundColor(AppColor.accentPrimary)
             .rotationEffect(.degrees(rotation))
             .accessibilityHidden(true)

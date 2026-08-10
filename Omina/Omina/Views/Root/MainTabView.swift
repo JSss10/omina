@@ -90,7 +90,7 @@ struct MainTabView: View {
                 .tag(Tab.ar)
 
             NavigationStack {
-                SavedPlacesListView()
+                SavedPlacesListView(profile: profile)
             }
             .safeAreaInset(edge: .bottom) { tabBarSpacer }
             .toolbar(.hidden, for: .tabBar)

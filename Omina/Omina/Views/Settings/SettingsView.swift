@@ -283,7 +283,7 @@ struct SettingsView: View {
             }
 
             NavigationLink {
-                SavedPlacesListView()
+                SavedPlacesListView(profile: profile, showsNavigationBar: true)
             } label: {
                 Label("Gespeicherte Orte", systemImage: "bookmark")
             }
