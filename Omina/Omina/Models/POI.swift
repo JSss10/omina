@@ -144,8 +144,51 @@ struct POI: Codable, Identifiable {
         return allowed.isEmpty ? nil : URL(string: "tel:\(allowed)")
     }
 
-    /// Kurzbeschreibung des Ortes.
+    /// E-Mail-Adresse des Ortes.
+    var emailAddress: String? { string(accessibilityDetails?["email"]) }
+
+    /// `mailto:`-Link zur E-Mail-Adresse.
+    var emailURL: URL? {
+        guard let address = emailAddress else { return nil }
+        return URL(string: "mailto:\(address)")
+    }
+
+    /// Ausführlicher Beschreibungstext des Ortes (Zürich Tourismus,
+    /// `description`), bereits von HTML befreit.
     var placeDescription: String? { string(accessibilityDetails?["description"]) }
+
+    /// Einzeiliger Aufhänger (`disambiguatingDescription`) – steht im Detail
+    /// direkt unter dem Namen, noch vor dem langen Text.
+    var placeSummary: String? { string(accessibilityDetails?["summary"]) }
+
+    /// Kurzfassung für Listen (`textTeaser`).
+    var placeTeaser: String? { string(accessibilityDetails?["teaser"]) }
+
+    /// Stichpunkte zum Ort (`detailedInformation`), z. B. «Grosse Terrasse».
+    var highlights: [String] {
+        guard case .array(let items)? = accessibilityDetails?["highlights"] else { return [] }
+        return items.compactMap { string($0) }
+    }
+
+    /// Preisniveau, sofern angegeben.
+    var priceRange: String? { string(accessibilityDetails?["price_range"]) }
+
+    /// Adresse aus dem Tourismus-API («Limmatquai 61, 8001 Zürich») – genauer
+    /// als die ginto-Adresse, deshalb im Detail bevorzugt.
+    var placeAddressLine: String? { string(accessibilityDetails?["address_line"]) }
+
+    /// Stand der übernommenen Angaben (`dateModified`), als Datum geparst.
+    var infoUpdatedAt: Date? {
+        guard let raw = string(accessibilityDetails?["updated_at"]) else { return nil }
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        if let date = formatter.date(from: raw) { return date }
+        // Das API liefert teils ohne Sekunden/Zeitzone («2025-04-15T14:17»).
+        let fallback = DateFormatter()
+        fallback.locale = Locale(identifier: "en_US_POSIX")
+        fallback.dateFormat = "yyyy-MM-dd'T'HH:mm"
+        return fallback.date(from: raw)
+    }
 
     /// Detailseite des Ortes auf zuerich.com.
     var zuerichURL: URL? {

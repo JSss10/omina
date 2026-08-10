@@ -31,10 +31,15 @@ Schluessel, die POI.swift liest:
     image_source        Bildnachweis
     opening_hours       Anzeigezeilen, z. B. ["Mo-Fr 09:00-18:00"]
     opening_hours_spec  strukturiert [{days: [1..7], opens, closes}]
-    phone, email        Kontakt
+    phone, email        Kontakt (auch aus dem Adressblock)
     website             Webseite des Ortes
-    description         Kurzbeschreibung
+    description         Beschreibungstext, von HTML befreit
+    summary             Einzeiler (disambiguatingDescription)
+    teaser              Kurzfassung fuer Listen (textTeaser)
+    highlights          Stichpunkte (detailedInformation)
+    street_address, postal_code, locality, address_line   Adresse
     price_range         Preisniveau
+    updated_at          Stand der Angaben (dateModified)
     zuerich_name        gefundener Name im API (Nachvollziehbarkeit)
     zuerich_url         Detailseite auf zuerich.com
     info_source         Quellenangabe fuer die Textangaben
@@ -52,6 +57,7 @@ Voraussetzungen:
 """
 
 import argparse
+import html
 import json
 import math
 import os
@@ -111,7 +117,10 @@ IMAGE_SOURCE = "Zürich Tourismus (zuerich.com)"
 INFO_SOURCE = IMAGE_SOURCE
 
 # Kurzbeschreibung im Detail-Sheet: laenger als das liest im Sheet niemand.
-MAX_DESCRIPTION_CHARS = 500
+MAX_DESCRIPTION_CHARS = 1200
+
+# Hoechstzahl der Stichpunkte aus `detailedInformation`.
+MAX_HIGHLIGHTS = 6
 
 # Sprachreihenfolge fuer mehrsprachige Felder.
 LANGUAGES = ("de", "en", "fr", "it")
@@ -401,25 +410,84 @@ def extract_opening_hours(node):
         if days and opens and closes:
             spec.append({"days": days, "opens": opens, "closes": closes})
 
-    # Anzeigezeilen: bevorzugt der Freitext des API, sonst aus der Struktur.
-    lines = []
+    # `openingHours` kommt als kompakte Zeile ("Mo,Tu,We,Th,Fr 13:00:00-22:00:00").
+    # Daraus entsteht beides: die Struktur (fuer "heute geoeffnet") und die
+    # lesbare deutsche Zeile.
     raw_hours = node.get("openingHours")
     if isinstance(raw_hours, (list, tuple)):
         candidates = [local_text(h) for h in raw_hours]
     else:
         candidates = [local_text(raw_hours)]
+
+    parsed = []
+    leftovers = []
     for line in candidates:
+        if not line:
+            continue
+        entry = parse_opening_hours_line(line)
+        if entry:
+            if entry not in spec:
+                spec.append(entry)
+            if entry not in parsed:
+                parsed.append(entry)
+        elif line not in leftovers:
+            leftovers.append(line)
+
+    # Anzeigezeilen aus der Struktur, sonst der unveraenderte Freitext.
+    lines = []
+    for item in parsed or spec:
+        line = opening_hours_line(item)
         if line and line not in lines:
             lines.append(line)
-
-    if not lines:
-        for item in spec:
-            label = day_range_label(item["days"])
-            line = ((label + " ") if label else "") + item["opens"] + "-" + item["closes"]
-            if line not in lines:
-                lines.append(line)
+    for line in leftovers:
+        if line not in lines:
+            lines.append(line)
 
     return lines, spec
+
+
+def parse_opening_hours_line(line):
+    """"Mo,Tu,We,Th,Fr 13:00:00-22:00:00" -> {days, opens, closes}, sonst None.
+    Akzeptiert Aufzaehlungen (Mo,Tu) ebenso wie Spannen (Mo-Fr)."""
+    match = re.match(
+        r"^\s*([A-Za-z,\-\s]+?)\s+(\d{1,2}:\d{2}(?::\d{2})?)\s*[-–]\s*(\d{1,2}:\d{2}(?::\d{2})?)\s*$",
+        line,
+    )
+    if not match:
+        return None
+
+    days = set()
+    for token in match.group(1).split(","):
+        token = token.strip()
+        if not token:
+            continue
+        if "-" in token:
+            start, _, end = token.partition("-")
+            first, last = day_number(start), day_number(end)
+            if not first or not last:
+                return None
+            span = range(first, last + 1) if first <= last else list(range(first, 8)) + list(range(1, last + 1))
+            days.update(span)
+        else:
+            number = day_number(token)
+            if not number:
+                return None
+            days.add(number)
+
+    opens, closes = clock_time(match.group(2)), clock_time(match.group(3))
+    if not days or not opens or not closes:
+        return None
+    return {"days": sorted(days), "opens": opens, "closes": closes}
+
+
+def opening_hours_line(item):
+    """{days, opens, closes} -> "Mo-Fr: 13:00 - 22:00 Uhr"."""
+    label = day_range_label(item.get("days") or [])
+    opens, closes = item.get("opens"), item.get("closes")
+    if not opens or not closes:
+        return None
+    times = opens + " – " + closes + " Uhr"
+    return (label + ": " + times) if label else times
 
 
 # ------------------------------------------------------------
@@ -451,18 +519,73 @@ def extract_links(node):
     return website, zuerich_url
 
 
-def extract_description(node):
-    """Kurzbeschreibung, auf eine im Sheet lesbare Laenge gekuerzt."""
-    text = (local_text(node.get("disambiguatingDescription"))
-            or local_text(node.get("description"))
-            or local_text(node.get("detailedInformation")))
+def plain_text(value, limit=None):
+    """Fliesstext ohne HTML und Entities, optional gekuerzt. Das API liefert
+    `description` als HTML-Absatz mit maskierten Umlauten."""
+    text = local_text(value)
     if not text:
         return None
-    text = re.sub(r"<[^>]+>", " ", text)          # vereinzelt steckt HTML drin
+    text = html.unescape(text)
+    text = re.sub(r"<br\s*/?>", " ", text, flags=re.IGNORECASE)
+    text = re.sub(r"</p\s*>", " ", text, flags=re.IGNORECASE)
+    text = re.sub(r"<[^>]+>", " ", text)
     text = " ".join(text.split())
-    if len(text) > MAX_DESCRIPTION_CHARS:
-        text = text[:MAX_DESCRIPTION_CHARS].rsplit(" ", 1)[0] + "…"
+    if limit and len(text) > limit:
+        text = text[:limit].rsplit(" ", 1)[0] + "…"
     return text or None
+
+
+def extract_description(node):
+    """Ausfuehrlicher Beschreibungstext (`description`), sonst der Teaser."""
+    return (plain_text(node.get("description"), MAX_DESCRIPTION_CHARS)
+            or plain_text(node.get("textTeaser"), MAX_DESCRIPTION_CHARS)
+            or plain_text(node.get("disambiguatingDescription"), MAX_DESCRIPTION_CHARS))
+
+
+def extract_highlights(node):
+    """Stichpunkte aus `detailedInformation` (deutsche Liste)."""
+    value = node.get("detailedInformation")
+    if isinstance(value, dict):
+        for language in LANGUAGES:
+            candidate = value.get(language)
+            if isinstance(candidate, list) and candidate:
+                value = candidate
+                break
+    if not isinstance(value, list):
+        single = plain_text(value)
+        return [single] if single else []
+
+    items = []
+    for item in value:
+        text = plain_text(item)
+        if text and text not in items:
+            items.append(text)
+    return items[:MAX_HIGHLIGHTS]
+
+
+def extract_address(node):
+    """Adressblock des API: Strasse, PLZ, Ort und die Kontaktangaben, die dort
+    statt auf oberster Ebene stehen."""
+    address = node.get("address")
+    if isinstance(address, list):
+        address = address[0] if address else None
+    if not isinstance(address, dict):
+        return {}
+
+    street = local_text(address.get("streetAddress"))
+    postal = local_text(address.get("postalCode"))
+    locality = local_text(address.get("addressLocality"))
+
+    lines = [part for part in (street, " ".join(filter(None, (postal, locality)))) if part]
+    return {
+        "street_address": street,
+        "postal_code": postal,
+        "locality": locality,
+        "address_line": ", ".join(lines) if lines else None,
+        "phone": local_text(address.get("telephone")),
+        "email": local_text(address.get("email")),
+        "url": local_text(address.get("url")),
+    }
 
 
 def entry_to_place(node, max_images):
@@ -475,6 +598,16 @@ def entry_to_place(node, max_images):
 
     opening_hours, opening_hours_spec = extract_opening_hours(node)
     website, zuerich_url = extract_links(node)
+    address = extract_address(node)
+
+    # Kontakt und Webseite stehen bei vielen Eintraegen im Adressblock statt
+    # auf oberster Ebene - beides pruefen, sonst fehlen sie in der App.
+    address_url = address.get("url")
+    if address_url and address_url.startswith("http"):
+        if is_zuerich_com(address_url):
+            zuerich_url = zuerich_url or address_url
+        else:
+            website = website or address_url
 
     place = {
         "identifier": entry_key(node),
@@ -484,12 +617,21 @@ def entry_to_place(node, max_images):
         "images": extract_images(node, max_images),
         "opening_hours": opening_hours,
         "opening_hours_spec": opening_hours_spec,
-        "phone": local_text(node.get("telephone")),
-        "email": local_text(node.get("email")),
+        "phone": local_text(node.get("telephone")) or address.get("phone"),
+        "email": local_text(node.get("email")) or address.get("email"),
         "website": website,
         "zuerich_url": zuerich_url,
         "description": extract_description(node),
-        "price_range": local_text(node.get("priceRange")),
+        "summary": plain_text(node.get("disambiguatingDescription")),
+        "teaser": plain_text(node.get("textTeaser")),
+        "highlights": extract_highlights(node),
+        "price_range": (local_text(node.get("priceRange"))
+                        or local_text(node.get("price"))),
+        "street_address": address.get("street_address"),
+        "postal_code": address.get("postal_code"),
+        "locality": address.get("locality"),
+        "address_line": address.get("address_line"),
+        "updated_at": local_text(node.get("dateModified")),
     }
 
     # Ein Eintrag ohne jede verwertbare Angabe bringt dem POI nichts.
@@ -507,8 +649,11 @@ def place_payload(place):
         payload["opening_hours"] = place["opening_hours"]
     if place["opening_hours_spec"]:
         payload["opening_hours_spec"] = place["opening_hours_spec"]
-    for field in ("phone", "email", "website", "description",
-                  "price_range", "zuerich_url"):
+    if place.get("highlights"):
+        payload["highlights"] = place["highlights"]
+    for field in ("phone", "email", "website", "description", "summary",
+                  "teaser", "price_range", "zuerich_url", "street_address",
+                  "postal_code", "locality", "address_line", "updated_at"):
         if place.get(field):
             payload[field] = place[field]
 

@@ -3,10 +3,12 @@
 //
 // Listenansicht der Barrieren entlang der aktiven Route, sortiert in
 // Laufrichtung – damit man vor dem Losfahren weiss, was auf einen zukommt.
-// Jede Zeile zeigt Typ + Wert, die Position auf der Route und ob die
-// Barriere fürs eigene Profil kritisch ist. Tippen öffnet das Detail-Sheet
-// (BarrierDetailSheet), dort gibt es auch die Alternativroute für Barrieren,
-// die heute nicht machbar sind.
+// Aufbau nach Entwurf: Kopfzeile «Barrieren auf der Route», darunter je
+// Barriere eine getönte Karte mit Symbolkreis, Typ, Position und dem Status
+// fürs eigene Profil.
+//
+// Tippen öffnet das Detail-Sheet (BarrierDetailSheet), dort gibt es auch die
+// Alternativroute für Barrieren, die heute nicht machbar sind.
 
 import SwiftUI
 
@@ -18,128 +20,140 @@ struct RouteBarrierListSheet: View {
     /// Tap auf eine Zeile: Sheet schliessen und Barrieren-Detail öffnen.
     let onSelect: (Barrier) -> Void
 
+    @Environment(\.dismiss) private var dismiss
+
     var body: some View {
-        NavigationStack {
-            Group {
-                if entries.isEmpty {
-                    emptyState
-                } else {
-                    list
+        VStack(spacing: 0) {
+            SheetHeader(title: "Barrieren auf der Route", onClose: { dismiss() })
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: AppMetrics.Space.s + AppMetrics.Space.xs) {
+                    if entries.isEmpty {
+                        emptyState
+                    } else {
+                        ForEach(entries) { entry in
+                            Button {
+                                onSelect(entry.barrier)
+                            } label: {
+                                BarrierRouteRow(
+                                    entry: entry,
+                                    isCritical: shouldWarn(barrier: entry.barrier, profile: profile),
+                                    isAvoided: avoidedBarrierIds.contains(entry.barrier.id)
+                                )
+                            }
+                            .buttonStyle(.plain)
+                        }
+
+                        Text("Tippe eine Barriere an für Details – und für eine Alternativroute, wenn du sie heute nicht bewältigen kannst.")
+                            .font(AppTypography.footnote)
+                            .foregroundStyle(AppColor.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .padding(.top, AppMetrics.Space.s)
+                    }
                 }
+                .padding(.horizontal, AppMetrics.Space.l)
+                .padding(.top, AppMetrics.Space.s)
+                .padding(.bottom, AppMetrics.Space.xl)
             }
-            .navigationTitle("Barrieren auf der Route")
-            .navigationBarTitleDisplayMode(.inline)
         }
+        .background(AppColor.backgroundPrimary)
+        .presentationBackground(AppColor.backgroundPrimary)
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
     }
 
-    // MARK: - Sections
-
-    private var list: some View {
-        List {
-            Section {
-                ForEach(entries) { entry in
-                    Button {
-                        onSelect(entry.barrier)
-                    } label: {
-                        BarrierRouteRow(
-                            entry: entry,
-                            isCritical: shouldWarn(barrier: entry.barrier, profile: profile),
-                            isAvoided: avoidedBarrierIds.contains(entry.barrier.id)
-                        )
-                    }
-                    .buttonStyle(.plain)
-                }
-            } footer: {
-                Text("Tippe eine Barriere an für Details – und für eine Alternativroute, wenn du sie heute nicht bewältigen kannst.")
-            }
-        }
-        .listStyle(.insetGrouped)
-    }
-
     private var emptyState: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: AppMetrics.Space.s + AppMetrics.Space.xs) {
             Image(systemName: "checkmark.seal.fill")
-                .font(.system(size: 44))
+                .font(.system(size: 40))
                 .foregroundStyle(AppColor.Status.openIcon)
             Text("Keine bekannten Barrieren")
-                .font(.headline)
+                .font(AppTypography.headline)
+                .foregroundStyle(AppColor.textBrand)
             Text("Auf dieser Route sind aktuell keine Barrieren erfasst.")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .font(AppTypography.subheadline)
+                .foregroundStyle(AppColor.textSecondary)
                 .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(32)
+        .frame(maxWidth: .infinity)
+        .padding(AppMetrics.Space.xl)
     }
 }
 
-/// Zeile einer Barriere in der Routen-Liste: Typ-Icon, Wert, Position auf
-/// der Route und Status-Badge (kritisch/passierbar/wird umgangen).
+/// Karte einer Barriere in der Routen-Liste: Symbolkreis, Typ, Wert samt
+/// Position und der Status fürs eigene Profil – Symbol und Text, nie nur Farbe.
 private struct BarrierRouteRow: View {
     let entry: MapViewModel.RouteBarrierEntry
     let isCritical: Bool
     let isAvoided: Bool
 
     var body: some View {
-        HStack(spacing: 12) {
-            ZStack {
-                Circle()
-                    .fill(entry.barrier.type.tint)
-                    .frame(width: 40, height: 40)
-                Image(systemName: entry.barrier.type.symbolName)
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(.white)
-            }
+        HStack(spacing: AppMetrics.Space.m) {
+            Image(systemName: entry.barrier.type.symbolName)
+                .font(.system(size: 20, weight: .regular))
+                .foregroundStyle(AppColor.accentPrimary)
+                .frame(width: 56, height: 56)
+                .background(AppColor.accentMuted, in: Circle())
 
-            VStack(alignment: .leading, spacing: 3) {
+            VStack(alignment: .leading, spacing: 2) {
                 Text(entry.barrier.type.localizedLabel)
-                    .font(.subheadline.weight(.semibold))
-                if let value = valueText {
-                    Text(value)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
-                Text(positionText)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .font(AppTypography.body)
+                    .foregroundStyle(AppColor.textBrand)
+
+                Text(detailLine)
+                    .font(AppTypography.subheadline)
+                    .foregroundStyle(AppColor.textSecondary)
                     .monospacedDigit()
+
+                HStack(spacing: AppMetrics.Space.s - 2) {
+                    Image(systemName: statusSymbol)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(statusTint)
+                    Text(statusLabel)
+                        .font(AppTypography.subheadline)
+                        .foregroundStyle(AppColor.textSecondary)
+                }
             }
 
-            Spacer(minLength: 8)
-
-            statusBadge
+            Spacer(minLength: AppMetrics.Space.s)
 
             Image(systemName: "chevron.right")
-                .font(.footnote.weight(.semibold))
-                .foregroundStyle(.tertiary)
+                .font(.system(size: 20, weight: .regular))
+                .foregroundStyle(AppColor.textBrand)
         }
-        .padding(.vertical, 4)
+        .padding(AppMetrics.Space.m)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            AppColor.surfaceTinted,
+            in: RoundedRectangle(cornerRadius: AppMetrics.Radius.card, style: .continuous)
+        )
+        .contentShape(RoundedRectangle(cornerRadius: AppMetrics.Radius.card, style: .continuous))
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityText)
         .accessibilityAddTraits(.isButton)
     }
 
-    @ViewBuilder
-    private var statusBadge: some View {
-        if isAvoided {
-            badge("Wird umgangen", fill: AppColor.Violet.v100, text: AppColor.accentPrimary)
-        } else if isCritical {
-            badge("Kritisch für dich", fill: AppColor.Status.blockedFill, text: AppColor.Status.blockedText)
-        } else {
-            badge("Passierbar", fill: AppColor.Status.openFill, text: AppColor.Status.openText)
-        }
+    /// Wert und Position in einer Zeile, z. B. «Kopfsteinpflaster in 200 m».
+    private var detailLine: String {
+        let position = positionText
+        guard let value = valueText else { return position }
+        return "\(value) \(position.lowercased())"
     }
 
-    private func badge(_ label: String, fill: Color, text: Color) -> some View {
-        Text(label)
-            .font(.caption2.weight(.semibold))
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(fill, in: Capsule())
-            .foregroundStyle(text)
-            .lineLimit(1)
-            .fixedSize()
+    private var statusSymbol: String {
+        if isAvoided { return "arrow.triangle.branch" }
+        return isCritical ? "exclamationmark.triangle.fill" : "checkmark.circle.fill"
+    }
+
+    private var statusTint: Color {
+        if isAvoided { return AppColor.accentPrimary }
+        return isCritical ? AppColor.Status.blockedIcon : AppColor.Status.openIcon
+    }
+
+    private var statusLabel: String {
+        if isAvoided { return "Wird umgangen" }
+        return isCritical ? "Kritisch für dich" : "Passierbar für dich"
     }
 
     // MARK: - Formatierung
@@ -182,14 +196,8 @@ private struct BarrierRouteRow: View {
     }
 
     private var accessibilityText: String {
-        var parts = [entry.barrier.type.localizedLabel]
-        if let value = valueText { parts.append(value) }
-        parts.append(positionText)
-        if isAvoided {
-            parts.append("wird umgangen")
-        } else {
-            parts.append(isCritical ? "kritisch für dich" : "passierbar")
-        }
+        var parts = [entry.barrier.type.localizedLabel, detailLine, statusLabel]
+        parts.removeAll { $0.isEmpty }
         return parts.joined(separator: ", ")
     }
 }

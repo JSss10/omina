@@ -18,10 +18,17 @@ struct SheetHeader: View {
     /// Häkchen rechts. Ohne Aktion bleibt der Platz frei, damit der Titel
     /// trotzdem mittig sitzt.
     var onConfirm: (() -> Void)?
+    /// Eigene Schaltfläche links statt des Schliessen-Kreuzes – im Entwurf
+    /// steht dort teils das Teilen-Symbol, das Kreuz wandert nach rechts.
+    var leading: AnyView?
 
     var body: some View {
         HStack(spacing: AppMetrics.Space.s) {
-            SheetCircleButton(symbol: "xmark", label: "Schliessen", action: onClose)
+            if let leading {
+                leading
+            } else {
+                SheetCircleButton(symbol: "xmark", label: "Schliessen", action: onClose)
+            }
 
             Spacer(minLength: 0)
 
@@ -35,6 +42,9 @@ struct SheetHeader: View {
 
             if let onConfirm {
                 SheetCircleButton(symbol: "checkmark", label: "Fertig", action: onConfirm)
+            } else if leading != nil {
+                // Eigene Schaltfläche links → das Kreuz steht rechts.
+                SheetCircleButton(symbol: "xmark", label: "Schliessen", action: onClose)
             } else {
                 // Platzhalter in Buttongrösse: hält den Titel in der Mitte.
                 Color.clear.frame(width: AppMetrics.Touch.minimum, height: AppMetrics.Touch.minimum)

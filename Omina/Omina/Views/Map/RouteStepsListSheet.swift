@@ -1,12 +1,13 @@
 // RouteStepsListSheet.swift
 // Omina
 //
-// Turn-by-turn-Listenansicht der aktiven Route: zeigt in Reihenfolge, wo und
-// wann man wo hin muss – Manöver (Icon + Anweisung), die Strasse/den Weg, dem
-// man folgt ("wo durch"), und die Distanz je Schritt. Der aktuell zurückgelegte
-// Schritt ist hervorgehoben, bereits passierte sind gedämpft mit Häkchen. Oben
-// eine Zusammenfassung mit Ziel-POI, Restzeit, Ankunftszeit und Restdistanz.
-// Öffnet sich aus dem Navigations-Panel (MapRoutePanel) als Medium-Sheet.
+// Turn-by-turn-Listenansicht der aktiven Route, Aufbau nach Entwurf: Kopfzeile
+// «Wegbeschreibung», darunter eine Zeile mit Ziel, Ankunft und Distanz, dann
+// die Schritte in einer getönten Karte – Symbol, Anweisung und die Distanz
+// je Schritt.
+//
+// Der Schritt, den man gerade zurücklegt, ist hervorgehoben; erledigte stehen
+// gedämpft mit Häkchen. Öffnet sich aus dem Navigations-Panel (MapRoutePanel).
 
 import SwiftUI
 
@@ -16,81 +17,99 @@ struct RouteStepsListSheet: View {
     /// Index des Schritts, den der User gerade zurücklegt (Hervorhebung).
     let currentStepIndex: Int?
 
+    @Environment(\.dismiss) private var dismiss
+
     var body: some View {
-        NavigationStack {
-            Group {
-                if route.steps.isEmpty {
-                    emptyState
-                } else {
-                    list
+        VStack(spacing: 0) {
+            SheetHeader(title: "Wegbeschreibung", onClose: { dismiss() })
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: AppMetrics.Space.m) {
+                    summaryRow
+
+                    if route.steps.isEmpty {
+                        emptyState
+                    } else {
+                        stepsCard
+                    }
                 }
+                .padding(.horizontal, AppMetrics.Space.l)
+                .padding(.top, AppMetrics.Space.s)
+                .padding(.bottom, AppMetrics.Space.xl)
             }
-            .navigationTitle("Wegbeschreibung")
-            .navigationBarTitleDisplayMode(.inline)
         }
+        .background(AppColor.backgroundPrimary)
+        .presentationBackground(AppColor.backgroundPrimary)
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
     }
 
-    // MARK: - Liste
+    // MARK: - Zusammenfassung
 
-    private var list: some View {
-        List {
-            Section {
-                ForEach(route.steps) { step in
-                    RouteStepRow(step: step, state: state(for: step))
-                }
-            } header: {
-                summaryHeader
-            }
-        }
-        .listStyle(.plain)
-    }
-
-    /// Zusammenfassung über der Liste: Ziel, Restzeit, Ankunft, Restdistanz.
-    private var summaryHeader: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Label(route.destinationName, systemImage: "mappin.circle.fill")
-                .font(.headline)
-                .foregroundStyle(AppColor.textPrimary)
+    /// Ziel, Ankunftszeit und Restdistanz nebeneinander (Entwurf).
+    private var summaryRow: some View {
+        HStack(spacing: AppMetrics.Space.s) {
+            Text(route.destinationName)
+                .font(AppTypography.body.weight(.semibold))
+                .foregroundStyle(AppColor.textBrand)
                 .lineLimit(1)
 
-            HStack(spacing: 8) {
-                Text(remainingTimeText)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(AppColor.accentPrimary)
-                Text("·")
-                    .foregroundStyle(.secondary)
-                Text("Ankunft \(arrivalText)")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                Text("·")
-                    .foregroundStyle(.secondary)
-                Text(remainingDistanceText)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
-            .monospacedDigit()
-            .textCase(nil)
+            Spacer(minLength: AppMetrics.Space.s)
+
+            Text("Ankunft \(arrivalText)")
+                .font(AppTypography.body)
+                .foregroundStyle(AppColor.textBrand)
+                .monospacedDigit()
+
+            Spacer(minLength: AppMetrics.Space.s)
+
+            Text(remainingDistanceText)
+                .font(AppTypography.body)
+                .foregroundStyle(AppColor.textBrand)
+                .monospacedDigit()
         }
-        .padding(.vertical, 8)
+        .padding(.vertical, AppMetrics.Space.s)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Ziel \(route.destinationName), noch \(remainingTimeText), Ankunft \(arrivalText), \(remainingDistanceText)")
     }
 
+    // MARK: - Schritte
+
+    private var stepsCard: some View {
+        VStack(spacing: 0) {
+            ForEach(Array(route.steps.enumerated()), id: \.element.id) { index, step in
+                RouteStepRow(step: step, state: state(for: step))
+
+                if index < route.steps.count - 1 {
+                    Rectangle()
+                        .fill(AppColor.borderDecorative)
+                        .frame(height: 1)
+                        .padding(.leading, 44 + AppMetrics.Space.m + AppMetrics.Space.m)
+                }
+            }
+        }
+        .background(
+            AppColor.surfaceTinted,
+            in: RoundedRectangle(cornerRadius: AppMetrics.Radius.card, style: .continuous)
+        )
+    }
+
     private var emptyState: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: AppMetrics.Space.s + AppMetrics.Space.xs) {
             Image(systemName: "point.topleft.down.to.point.bottomright.curvepath")
-                .font(.system(size: 44))
+                .font(.system(size: 40))
                 .foregroundStyle(AppColor.accentPrimary)
             Text("Keine Wegbeschreibung verfügbar")
-                .font(.headline)
+                .font(AppTypography.headline)
+                .foregroundStyle(AppColor.textBrand)
             Text("Für diese Route liegen keine einzelnen Schritte vor. Folge der violetten Linie auf der Karte.")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .font(AppTypography.subheadline)
+                .foregroundStyle(AppColor.textSecondary)
                 .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(32)
+        .frame(maxWidth: .infinity)
+        .padding(AppMetrics.Space.xl)
     }
 
     // MARK: - Zustand je Schritt
@@ -121,7 +140,8 @@ struct RouteStepsListSheet: View {
     }
 }
 
-/// Eine Zeile der Turn-by-turn-Liste.
+/// Eine Zeile der Turn-by-turn-Liste: Manöver-Symbol im Kreis, Anweisung und
+/// die Distanz rechts.
 private struct RouteStepRow: View {
     enum State {
         case done
@@ -133,70 +153,69 @@ private struct RouteStepRow: View {
     let state: State
 
     var body: some View {
-        HStack(spacing: 14) {
+        HStack(spacing: AppMetrics.Space.m) {
             icon
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(step.instruction)
-                    .font(.subheadline.weight(state == .current ? .bold : .semibold))
-                    .foregroundStyle(state == .done ? AnyShapeStyle(.secondary) : AnyShapeStyle(AppColor.textPrimary))
+                    .font(AppTypography.body)
+                    .foregroundStyle(state == .done ? AppColor.textSecondary : AppColor.textBrand)
                     .lineLimit(2)
                 if let way = step.wayText {
                     Text(way)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
+                        .font(AppTypography.footnote)
+                        .foregroundStyle(AppColor.textSecondary)
                         .lineLimit(1)
                 }
             }
 
-            Spacer(minLength: 8)
+            Spacer(minLength: AppMetrics.Space.s)
 
             if step.maneuver != .arrive {
                 Text(DistanceFormatter.string(fromMeters: step.distanceM))
-                    .font(.footnote.weight(.medium))
+                    .font(AppTypography.body)
                     .foregroundStyle(state == .current ? AppColor.accentPrimary : AppColor.textSecondary)
                     .monospacedDigit()
             }
         }
-        .padding(.vertical, 6)
-        .padding(.horizontal, state == .current ? 10 : 0)
+        .padding(AppMetrics.Space.m)
+        .frame(minHeight: AppMetrics.Touch.primary)
         .background(
             state == .current
-                ? AnyShapeStyle(AppColor.Violet.v50)
-                : AnyShapeStyle(Color.clear),
-            in: RoundedRectangle(cornerRadius: 12)
+                ? AnyShapeStyle(AppColor.accentMuted.opacity(0.5))
+                : AnyShapeStyle(Color.clear)
         )
-        .listRowInsets(EdgeInsets(top: 2, leading: 16, bottom: 2, trailing: 16))
         .opacity(state == .done ? 0.6 : 1)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityText)
     }
 
-    /// Manöver-Icon im Kreis; erledigte Schritte zeigen ein Häkchen, der
+    /// Manöver-Symbol im Kreis; erledigte Schritte zeigen ein Häkchen, der
     /// aktuelle Schritt ist im Akzentviolett gefüllt.
     private var icon: some View {
         ZStack {
             Circle()
                 .fill(iconFill)
-                .frame(width: 38, height: 38)
+                .frame(width: 44, height: 44)
             Image(systemName: state == .done ? "checkmark" : step.maneuver.symbolName)
-                .font(.system(size: 16, weight: .semibold))
+                .font(.system(size: 17, weight: .regular))
                 .foregroundStyle(iconForeground)
         }
+        .accessibilityHidden(true)
     }
 
     private var iconFill: AnyShapeStyle {
         switch state {
-        case .current: return AnyShapeStyle(AppColor.accentPrimary)
-        case .done:    return AnyShapeStyle(AppColor.Status.openFill)
-        case .upcoming: return AnyShapeStyle(AppColor.Violet.v100)
+        case .current:  return AnyShapeStyle(AppColor.accentPrimary)
+        case .done:     return AnyShapeStyle(AppColor.Status.openFill)
+        case .upcoming: return AnyShapeStyle(AppColor.accentMuted)
         }
     }
 
     private var iconForeground: AnyShapeStyle {
         switch state {
-        case .current: return AnyShapeStyle(AppColor.onAccent)
-        case .done:    return AnyShapeStyle(AppColor.Status.openIcon)
+        case .current:  return AnyShapeStyle(AppColor.onAccent)
+        case .done:     return AnyShapeStyle(AppColor.Status.openIcon)
         case .upcoming: return AnyShapeStyle(AppColor.accentPrimary)
         }
     }
