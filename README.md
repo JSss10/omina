@@ -212,9 +212,14 @@ omina/
 │   │   └── Testing/                # GPX-Standorte für Xcode
 │   ├── OminaTests/                 # Unit-Tests
 │   └── OminaUITests/               # UI-Tests
+├── dashboard/                      # Web-Auswertung der Feldtage (Vite + TS)
+│   ├── src/lib/                    # Supabase-Zugriff, Auswertungslogik, CSV
+│   ├── src/components/             # KPIs, Diagramme, Testpersonen, Protokoll
+│   └── src/styles/                 # Design-Tokens, portiert aus dem iOS-Styleguide
 ├── supabase/
 │   ├── schema.sql                  # Tabellen, PostGIS, RLS
-│   ├── migrations/                 # RPCs, Storage-Bucket, Feldtest-Tabellen
+│   ├── migrations/                 # RPCs, Storage-Bucket, Feldtest-Tabellen,
+│   │                               # Leserecht fürs Dashboard
 │   └── seed/                       # Grunddaten als SQL-Dump
 ├── scripts/                        # Python-Importe (OSM, ginto, Zürich Tourismus)
 ├── data/exports/                   # Erzeugte Import-Backups (Beleg für die Arbeit)
