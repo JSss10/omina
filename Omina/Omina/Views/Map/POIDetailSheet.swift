@@ -5,12 +5,12 @@
 // ganze Breite mit Teilen- und Schliessen-Schaltfläche, darunter Name mit
 // Distanz, Kategorie und Adresse, die Zugänglichkeit in einer Zeile und die
 // drei Aktionen als Kacheln. Danach folgen die Angaben aus dem Open-Data-API
-// von Zürich Tourismus: Beschreibung, Stichpunkte, Öffnungszeiten, Kontakt
-// und Preisniveau.
+// von Zürich Tourismus: Beschreibung, Stichpunkte, Öffnungszeiten, Kontakt,
+// Preisniveau und die Detailwerte zur Zugänglichkeit.
 //
-// Die Zugänglichkeit steht ausschliesslich oben in der Statuszeile unter der
-// Adresse – der ausführliche Bewertungsblock am Ende des Sheets ist bewusst
-// weggefallen.
+// Die zusammenfassende ginto-Bewertung am Ende des Sheets ist bewusst
+// weggefallen: Die Einordnung trägt die Statuszeile oben unter der Adresse,
+// die Tabelle darunter die nachprüfbaren Messwerte.
 //
 // Styling gemäss Styleguide v1.0: ausschliesslich Design-Tokens (AppColor,
 // AppTypography, AppMetrics) und die gemeinsamen Komponenten.
@@ -55,6 +55,7 @@ struct POIDetailSheet: View {
                     openingHoursCard
                     contactSection
                     eurokeyHint
+                    detailsCard
                     infoSourceNote
                 }
                 .padding(AppMetrics.Space.l)
@@ -636,6 +637,93 @@ struct POIDetailSheet: View {
             if case .string(let s) = value, s.lowercased().contains("eurokey") { return true }
         }
         return false
+    }
+
+    // MARK: - Detailwerte
+
+    /// Die konkreten Messwerte aus dem Import (Türbreite, Eingang, WC …) als
+    /// Tabelle. Die zusammenfassende ginto-Bewertung steht bewusst nicht mehr
+    /// darüber – die Einordnung trägt die Statuszeile oben, hier stehen nur
+    /// noch die nachprüfbaren Angaben.
+    @ViewBuilder
+    private var detailsCard: some View {
+        if let details = poi.accessibilityDetails, !details.isEmpty {
+            let rows = details.keys.sorted().compactMap { key -> (String, String)? in
+                guard !isShownElsewhere(key) else { return nil }
+                guard let text = displayValue(details[key]) else { return nil }
+                return (key, text)
+            }
+            if !rows.isEmpty {
+                VStack(spacing: 0) {
+                    ForEach(Array(rows.enumerated()), id: \.offset) { index, row in
+                        HStack(alignment: .top, spacing: AppMetrics.Space.m) {
+                            Text(displayKey(row.0))
+                                .font(AppTypography.body)
+                                .foregroundStyle(AppColor.textPrimary)
+                            Spacer(minLength: AppMetrics.Space.m)
+                            Text(row.1)
+                                .font(AppTypography.body)
+                                .foregroundStyle(AppColor.textSecondary)
+                                .multilineTextAlignment(.trailing)
+                        }
+                        .padding(.horizontal, AppMetrics.Space.m)
+                        .padding(.vertical, AppMetrics.Space.s + AppMetrics.Space.xs)
+
+                        if index < rows.count - 1 {
+                            Rectangle()
+                                .fill(AppColor.borderDecorative)
+                                .frame(height: 1)
+                                .padding(.leading, AppMetrics.Space.m)
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .background(
+                    AppColor.surfaceTinted,
+                    in: RoundedRectangle(cornerRadius: AppMetrics.Radius.card, style: .continuous)
+                )
+            }
+        }
+    }
+
+    /// Schlüssel, die anderswo stehen: Kontakt, Fotos, Zeiten, Texte und die
+    /// internen Import-Merkmale.
+    private func isShownElsewhere(_ key: String) -> Bool {
+        let handled: Set<String> = [
+            "website", "homepage",
+            "images", "image_source",
+            "opening_hours", "opening_hours_spec",
+            "phone", "email", "description", "summary", "teaser", "highlights",
+            "price_range", "street_address", "postal_code", "locality",
+            "address_line", "updated_at",
+            "info_source", "zuerich_name",
+        ]
+        let k = key.lowercased()
+        return k.contains("url") || handled.contains(k)
+    }
+
+    /// Bekannte ginto/OSM-Schlüssel eingedeutscht; Rest als Fallback roh.
+    private func displayKey(_ key: String) -> String {
+        switch key.lowercased() {
+        case "door_width", "doorwidth":   return "Türbreite"
+        case "entrance", "entry":         return "Eingang"
+        case "wc", "toilet", "restroom":  return "WC"
+        case "ramp":                      return "Rampe"
+        case "elevator", "lift":          return "Aufzug"
+        case "parking":                   return "Parkplatz"
+        default:
+            return key.replacingOccurrences(of: "_", with: " ").capitalized
+        }
+    }
+
+    private func displayValue(_ value: AnyJSON?) -> String? {
+        switch value {
+        case .string(let s): return s
+        case .double(let d): return d == d.rounded() ? "\(Int(d))" : String(format: "%.1f", d)
+        case .integer(let i): return "\(i)"
+        case .bool(let b):   return b ? "ja" : "nein"
+        default:             return nil
+        }
     }
 
     /// Quellenangabe und Stand der übernommenen Angaben.
