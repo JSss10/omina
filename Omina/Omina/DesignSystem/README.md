@@ -67,6 +67,15 @@ SF Pro über die SwiftUI-Text-Styles → Dynamic Type bis AX5 (§03).
 - `PasswordStrengthBar(strength:)` mit `PasswordStrength.evaluate(_:)` — fünf
   Segmente plus Stufe als Wort, damit die Bewertung nicht nur über Farbe und
   Menge codiert ist.
+- `SearchBar(placeholder:…)`, `FilterIconButton(activeCount:…)` und
+  `CategoryPill(label:symbol:isSelected:)` — die Bedienzeile aus Suche, Filter
+  (mit Plakette für die Zahl gesetzter Filter) und Kategorie-Chips; gleich auf
+  Homescreen, Karte und im Such-Sheet.
+- `OminaTabBar(items:selection:)` — schwebende violette Navigationsleiste;
+  der aktive Eintrag sitzt im weissen Kreis. Ersetzt die System-Tab-Leiste
+  optisch, die Auswahl läuft weiter über dieselbe Bindung.
+- `SheetHeader`, `SheetSection`, `SheetRowIcon`, `SheetToggleRow` — Kopfzeile,
+  Abschnitt und Zeilen der Karten-Sheets (Filter, Routen, Suche).
 - `StatusBadge(status:)` — vierfach codiert: Farbe + Form + Symbol + Text (P2, §2.3).
   Grundformen: Kreis (zugänglich) · Dreieck (eingeschränkt) · Achteck (Barriere).
 

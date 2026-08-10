@@ -46,6 +46,8 @@ struct MapView: View {
     /// angezeigten POIs in der Nähe ist.
     @State private var focusedPOI: POI?
     @State private var showingSearch = false
+    /// Kategorie, mit der die Suche geöffnet wird (Chip vom Homescreen).
+    @State private var pendingCategory: String?
     /// Karteneinstellungen (Kartenmodus, Darstellung) – über den Ebenen-Button
     /// links oben. Sichtbarkeit und Barrieretypen liegen im Filter-Sheet
     /// (Icon in der Suchleiste bzw. über den Empty-State).
@@ -342,10 +344,12 @@ struct MapView: View {
         // Bedienstapel rechts über der Suchleiste: Routen planen und zurück
         // zum eigenen Standort. Während der Navigation übernimmt das
         // Routen-Panel unten, der Stapel verschwindet.
-        .overlay(alignment: .trailing) {
+        // Im Entwurf sitzt der Stapel unten rechts, direkt über der Suchleiste.
+        .overlay(alignment: .bottomTrailing) {
             if viewModel.activeRoute == nil {
                 mapControlStack
                     .padding(.trailing, 16)
+                    .padding(.bottom, AppMetrics.Touch.primary + 28)
             }
         }
         // Suchleiste unten – der Einstieg in Suche und Filter.
@@ -464,10 +468,20 @@ struct MapView: View {
             ])
         }
         .sheet(isPresented: $showingSearch) {
-            SearchSheet(viewModel: viewModel) { poi in
+            SearchSheet(
+                viewModel: viewModel,
+                initialCategory: pendingCategory
+            ) { poi in
                 focus(on: poi)
             }
             .trackScreen("search")
+        }
+        // Kategorie-Chip vom Homescreen: Suche mit dieser Kategorie öffnen.
+        .onChange(of: viewModel.pendingCategory) { _, category in
+            guard category != nil else { return }
+            pendingCategory = category
+            viewModel.pendingCategory = nil
+            showingSearch = true
         }
         .sheet(isPresented: $showingMapSettings) {
             MapSettingsSheet(mapPreferences: mapPreferences)
@@ -502,55 +516,23 @@ struct MapView: View {
             Button {
                 showingSearch = true
             } label: {
-                HStack(spacing: 10) {
-                    Image(systemName: "magnifyingglass")
-                        .font(.system(size: 17, weight: .semibold))
-                        .foregroundStyle(AppColor.accentPrimary)
-                    Text("Wohin möchtest du?")
-                        .font(AppTypography.body)
-                        .foregroundStyle(AppColor.textSecondary)
-                        .lineLimit(1)
-                    Spacer(minLength: 0)
-                }
-                .padding(.horizontal, 16)
-                .frame(height: AppMetrics.Touch.primary)
-                .background(AppColor.surfaceTinted, in: Capsule())
-                .contentShape(Capsule())
+                SearchBar(
+                    placeholder: "Wohin möchtest du?",
+                    background: AppColor.backgroundPrimary
+                )
+                .shadow(color: .black.opacity(0.18), radius: 8, y: 2)
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Orte suchen")
 
-            Button {
+            FilterIconButton(
+                activeCount: viewModel.activeFilterCount,
+                background: AppColor.backgroundPrimary
+            ) {
                 showingFilter = true
-            } label: {
-                Image(systemName: "line.3.horizontal.decrease")
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(filtersActive ? AppColor.onAccent : AppColor.accentPrimary)
-                    .frame(width: AppMetrics.Touch.primary, height: AppMetrics.Touch.primary)
-                    .background(
-                        filtersActive
-                            ? AnyShapeStyle(AppColor.accentPrimary)
-                            : AnyShapeStyle(AppColor.surfaceTinted),
-                        in: Circle()
-                    )
             }
-            .accessibilityLabel("Filter")
-            .accessibilityAddTraits(filtersActive ? .isSelected : [])
+            .shadow(color: .black.opacity(0.18), radius: 8, y: 2)
         }
-        .padding(8)
-        .background(
-            Self.controlBackground,
-            in: RoundedRectangle(cornerRadius: AppMetrics.Radius.sheet + 12, style: .continuous)
-        )
-        .shadow(color: .black.opacity(0.18), radius: 8, y: 2)
-    }
-
-    /// Ob aktuell ein Filter greift (für die Hervorhebung des Filter-Icons):
-    /// Orte oder Barrieren ausgeblendet, oder nicht alle Barrieretypen aktiv.
-    private var filtersActive: Bool {
-        !viewModel.poisVisible
-            || !viewModel.barriersVisible
-            || viewModel.filterState.enabledTypes.count != BarrierType.allCases.count
     }
 
     /// Bedienstapel rechts: Routen planen und auf den eigenen Standort

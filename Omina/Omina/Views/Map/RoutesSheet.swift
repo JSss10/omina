@@ -109,9 +109,11 @@ struct RoutesSheet: View {
 
     // MARK: - Start, Ziel, Stopps
 
+    /// Start, Ziel und Stopps als Kette: Die violette Linie verbindet die
+    /// Symbole und zeigt, dass die Zeilen eine Route bilden (Entwurf).
     private var stopsCard: some View {
         VStack(spacing: 0) {
-            SheetInfoRow(
+            stopRow(
                 symbol: "location.fill",
                 title: "Mein Standort",
                 subtitle: locationService.currentLocation == nil
@@ -119,27 +121,93 @@ struct RoutesSheet: View {
                     : "Start der Route"
             )
 
-            SheetActionRow(
-                symbol: "mappin.and.ellipse",
-                title: destination?.name ?? "Ziel wählen",
-                subtitle: destination?.address,
-                accessibilityHint: "Öffnet die Ortssuche"
-            ) {
+            Button {
                 showingSearch = true
+            } label: {
+                stopRow(
+                    symbol: "mappin.and.ellipse",
+                    title: destination?.name ?? "Ziel wählen",
+                    subtitle: destination?.address,
+                    showsChevron: true
+                )
             }
+            .buttonStyle(.plain)
+            .accessibilityLabel(destination?.name ?? "Ziel wählen")
+            .accessibilityHint("Öffnet die Ortssuche")
 
-            SheetActionRow(
+            stopRow(
                 symbol: "plus",
                 title: "Stopp hinzufügen",
                 subtitle: "Noch nicht verfügbar",
                 isEnabled: false,
-                showsDivider: false
-            ) {}
+                isLast: true
+            )
         }
+        .padding(AppMetrics.Space.m)
         .background(
             AppColor.surfaceTinted,
             in: RoundedRectangle(cornerRadius: AppMetrics.Radius.card, style: .continuous)
         )
+    }
+
+    private func stopRow(
+        symbol: String,
+        title: String,
+        subtitle: String?,
+        isEnabled: Bool = true,
+        isLast: Bool = false,
+        showsChevron: Bool = false
+    ) -> some View {
+        HStack(alignment: .top, spacing: AppMetrics.Space.m) {
+            VStack(spacing: 0) {
+                SheetRowIcon(symbol: symbol, isEnabled: isEnabled, isFilled: true)
+
+                if !isLast {
+                    Rectangle()
+                        .fill(AppColor.accentMuted)
+                        .frame(width: 2)
+                        .frame(maxHeight: .infinity)
+                        .padding(.vertical, 2)
+                        .accessibilityHidden(true)
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(spacing: AppMetrics.Space.s) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(title)
+                            .font(AppTypography.body)
+                            .foregroundStyle(AppColor.textBrand)
+                        if let subtitle {
+                            Text(subtitle)
+                                .font(AppTypography.footnote)
+                                .foregroundStyle(AppColor.textSecondary)
+                        }
+                    }
+                    .multilineTextAlignment(.leading)
+
+                    Spacer(minLength: 0)
+
+                    if showsChevron {
+                        Image(systemName: "chevron.right")
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(AppColor.textSecondary)
+                    }
+                }
+                .frame(minHeight: 40)
+
+                if !isLast {
+                    Rectangle()
+                        .fill(AppColor.borderDecorative)
+                        .frame(height: 1)
+                        .padding(.top, AppMetrics.Space.s)
+                        .padding(.bottom, AppMetrics.Space.s)
+                }
+            }
+        }
+        .opacity(isEnabled ? 1 : 0.5)
+        .contentShape(Rectangle())
+        .accessibilityElement(children: .combine)
     }
 
     // MARK: - Wegvarianten
@@ -199,7 +267,7 @@ struct RoutesSheet: View {
                 VStack(alignment: .leading, spacing: AppMetrics.Space.xs) {
                     Text(durationText(option.route.expectedTravelTimeS))
                         .font(AppTypography.title2)
-                        .foregroundColor(AppColor.textPrimary)
+                        .foregroundColor(AppColor.textBrand)
 
                     Text("\(arrivalText(option.route.expectedTravelTimeS)) Ankunft | \(DistanceFormatter.string(fromMeters: option.route.totalDistanceM))")
                         .font(AppTypography.subheadline)
@@ -212,9 +280,9 @@ struct RoutesSheet: View {
 
                 Image(systemName: "chevron.right")
                     .font(.system(size: 16, weight: .semibold))
-                    .foregroundColor(AppColor.onAccent)
-                    .frame(width: 36, height: 36)
-                    .background(AppColor.accentPrimary, in: Circle())
+                    .foregroundColor(AppColor.accentPrimary)
+                    .frame(width: 44, height: 44)
+                    .background(AppColor.accentMuted, in: Circle())
             }
             .padding(AppMetrics.Space.m)
             .frame(maxWidth: .infinity, alignment: .leading)

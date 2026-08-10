@@ -1,22 +1,35 @@
 // HomeDashboardView.swift
 // Omina
 //
-// Homescreen (Start-Tab): begrüsst den User mit Name und Profilfoto, zeigt
-// das aktuelle Wetter am Standort (Open-Meteo, inkl. UV-Index), die letzten
-// Navigationsziele und die neuesten Barrieren-Meldungen aus der ganzen
-// Zürcher Altstadt. Karten-Interaktionen (Ziel ansteuern, Barriere ansehen)
-// laufen über den onOpenMap-Callback des HomeView.
+// Homescreen (Start-Tab), Aufbau nach Entwurf: oben Profilbild, Begrüssung
+// und das Wetter als Kapsel, darunter Suche mit Filter und die Kategorien als
+// Chips. Dann die letzten Ziele als Bildkarten und zuunterst die neuesten
+// Barrieren-Meldungen als Zeilen.
+//
+// Karten-Interaktionen (Suche öffnen, Ziel ansteuern, Barriere ansehen) laufen
+// über den onOpenMap-Callback.
 
 import SwiftUI
 import CoreLocation
 
 struct HomeDashboardView: View {
-    /// Wechselt zum Karten-Tab (z. B. Tap auf ein Ziel oder eine Barriere).
+    /// Wechselt zum Karten-Tab (Tap auf Suche, Ziel oder Barriere).
     let onOpenMap: () -> Void
+    /// Öffnet die Karte mit vorgewählter Kategorie (Chip-Reihe).
+    let onSelectCategory: (String) -> Void
+    /// Anzahl gesetzter Kartenfilter – als Plakette an der Filter-Schaltfläche.
+    var activeFilterCount: Int = 0
 
     @StateObject private var viewModel = HomeDashboardViewModel()
     @StateObject private var recentDestinations = RecentDestinationsStore.shared
     @StateObject private var avatarStore = AvatarStore.shared
+
+    /// Zuletzt gewählte Kategorie – hebt den Chip hervor.
+    @State private var selectedCategory: String?
+
+    /// Sortierung der beiden Listen – im Entwurf jeweils rechts neben dem Titel.
+    @State private var destinationSort: ListSort = .newest
+    @State private var barrierSort: ListSort = .newest
 
     // Feldtest: Nur während eines aktiven Testlaufs erscheint oben rechts der
     // "Test beenden"-Button. Er lädt offene Tracking-Events hoch und setzt das
@@ -24,6 +37,21 @@ struct HomeDashboardView: View {
     @ObservedObject private var fieldTest = FieldTestService.shared
     @State private var showEndTestConfirmation = false
     @State private var isEndingTest = false
+
+    /// Sortierreihenfolge der Listen auf dem Homescreen.
+    enum ListSort: String, CaseIterable, Identifiable {
+        case newest, nearest, name
+
+        var id: String { rawValue }
+
+        var label: String {
+            switch self {
+            case .newest:  return "Neueste zuerst"
+            case .nearest: return "Nächste zuerst"
+            case .name:    return "Nach Name"
+            }
+        }
+    }
 
     var body: some View {
         if fieldTest.isActive {
@@ -53,11 +81,15 @@ struct HomeDashboardView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: AppMetrics.Space.l) {
                 header
-                weatherCard
+                searchRow
+                categoryRow
+
+                sectionDivider
                 recentDestinationsSection
+
+                sectionDivider
                 newBarriersSection
             }
-            .padding(.horizontal, AppMetrics.Space.m)
             .padding(.top, AppMetrics.Space.s)
             .padding(.bottom, AppMetrics.Space.xl)
         }
@@ -69,6 +101,462 @@ struct HomeDashboardView: View {
             viewModel.start()
             avatarStore.loadIfNeeded()
         }
+    }
+
+    /// Feine Linie zwischen den Blöcken (Entwurf).
+    private var sectionDivider: some View {
+        Rectangle()
+            .fill(AppColor.borderDecorative)
+            .frame(height: 1)
+            .padding(.horizontal, AppMetrics.Space.l)
+            .accessibilityHidden(true)
+    }
+
+    // MARK: - Begrüssung und Wetter
+
+    private var header: some View {
+        HStack(spacing: AppMetrics.Space.m) {
+            avatar
+
+            VStack(alignment: .leading, spacing: 0) {
+                Text(viewModel.salutation + ",")
+                    .foregroundStyle(AppColor.textBrand)
+                Text(viewModel.firstName ?? "willkommen")
+                    .foregroundStyle(AppColor.accentPrimary)
+            }
+            .font(AppTypography.title3)
+            .lineLimit(1)
+            .minimumScaleFactor(0.8)
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(viewModel.greeting)
+
+            Spacer(minLength: AppMetrics.Space.s)
+
+            weatherPill
+        }
+        .padding(.horizontal, AppMetrics.Space.l)
+    }
+
+    /// Profilbild (in den Einstellungen erfasst), sonst Initialen-Monogramm.
+    private var avatar: some View {
+        ZStack {
+            if let photo = avatarStore.image {
+                Image(uiImage: photo)
+                    .resizable()
+                    .scaledToFill()
+            } else {
+                Circle()
+                    .fill(AppColor.surfaceTinted)
+                if viewModel.initials.isEmpty {
+                    Image(systemName: "person.fill")
+                        .font(.title3)
+                        .foregroundStyle(AppColor.accentPrimary)
+                } else {
+                    Text(viewModel.initials)
+                        .font(AppTypography.headline)
+                        .foregroundStyle(AppColor.accentPrimary)
+                }
+            }
+        }
+        .frame(width: 56, height: 56)
+        .clipShape(Circle())
+        .accessibilityHidden(true)
+    }
+
+    /// Wetter als Kapsel: Temperatur links, das Wettersymbol rechts im
+    /// violetten Kreis. Ohne Daten bleibt die Kapsel mit Hinweis stehen.
+    private var weatherPill: some View {
+        HStack(spacing: AppMetrics.Space.s) {
+            Circle()
+                .fill(AppColor.accentPrimary)
+                .frame(width: 8, height: 8)
+
+            Text(viewModel.weather.map { "\(Int($0.temperatureC.rounded())) °C" } ?? "–")
+                .font(AppTypography.body)
+                .foregroundStyle(AppColor.textBrand)
+                .monospacedDigit()
+
+            Image(systemName: viewModel.weather?.symbolName ?? "cloud.slash")
+                .font(.system(size: 20, weight: .regular))
+                .foregroundStyle(AppColor.onAccent)
+                .frame(width: 56, height: 56)
+                .background(AppColor.accentPrimary, in: Circle())
+        }
+        .padding(.leading, AppMetrics.Space.m)
+        .background(AppColor.surfaceTinted, in: Capsule())
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(weatherAccessibilityText)
+    }
+
+    private var weatherAccessibilityText: String {
+        guard let weather = viewModel.weather else {
+            return "Wetter derzeit nicht verfügbar"
+        }
+        var text = "Aktuelles Wetter"
+        if let place = viewModel.weatherPlaceName {
+            text += " in \(place)"
+        }
+        text += ": \(Int(weather.temperatureC.rounded())) Grad, \(weather.conditionDescription),"
+        text += " gefühlt \(Int(weather.feelsLikeC.rounded())) Grad,"
+        text += " UV-Index \(Int(weather.uvIndex.rounded())) (\(weather.uvCategory))"
+        return text
+    }
+
+    // MARK: - Suche und Kategorien
+
+    private var searchRow: some View {
+        HStack(spacing: AppMetrics.Space.s + AppMetrics.Space.xs) {
+            Button {
+                onOpenMap()
+            } label: {
+                SearchBar(placeholder: "Suchst du nach etwas Bestimmten?")
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Orte suchen")
+            .accessibilityHint("Öffnet die Suche auf der Karte")
+
+            FilterIconButton(activeCount: activeFilterCount) {
+                onOpenMap()
+            }
+        }
+        .padding(.horizontal, AppMetrics.Space.l)
+    }
+
+    /// Kategorien als Chips – ein Tap führt mit der Kategorie auf die Karte.
+    private var categoryRow: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: AppMetrics.Space.s + AppMetrics.Space.xs) {
+                ForEach(POICategory.chipLabels, id: \.self) { chip in
+                    CategoryPill(
+                        label: chip,
+                        symbol: POICategory.symbol(forChip: chip),
+                        isSelected: selectedCategory == chip
+                    ) {
+                        selectedCategory = chip
+                        onSelectCategory(chip)
+                    }
+                }
+            }
+            .padding(.horizontal, AppMetrics.Space.l)
+        }
+        .scrollClipDisabled()
+    }
+
+    // MARK: - Letzte Ziele
+
+    private var recentDestinationsSection: some View {
+        VStack(alignment: .leading, spacing: AppMetrics.Space.m) {
+            sectionHeader("Letzte Ziele", sort: $destinationSort)
+
+            if sortedDestinations.isEmpty {
+                emptyRow(
+                    symbol: "mappin.slash",
+                    text: "Noch keine Ziele – starte eine Navigation auf der Karte."
+                )
+                .padding(.horizontal, AppMetrics.Space.l)
+            } else {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: AppMetrics.Space.m) {
+                        ForEach(sortedDestinations) { destination in
+                            destinationCard(destination)
+                        }
+                    }
+                    .padding(.horizontal, AppMetrics.Space.l)
+                }
+                .scrollClipDisabled()
+            }
+        }
+    }
+
+    /// Bildkarte eines Ziels; ohne Foto bleibt die getönte Fläche stehen.
+    private func destinationCard(_ destination: RecentDestination) -> some View {
+        Button {
+            onOpenMap()
+        } label: {
+            ZStack(alignment: .bottom) {
+                Group {
+                    if let url = destination.imageURL {
+                        AsyncImage(url: url) { image in
+                            image
+                                .resizable()
+                                .scaledToFill()
+                        } placeholder: {
+                            destinationPlaceholder
+                        }
+                    } else {
+                        destinationPlaceholder
+                    }
+                }
+                .frame(width: 160, height: 190)
+                .clipped()
+
+                Text(destination.name)
+                    .font(AppTypography.subheadline)
+                    .foregroundStyle(AppColor.textBrand)
+                    .lineLimit(1)
+                    .padding(.horizontal, AppMetrics.Space.m)
+                    .padding(.vertical, AppMetrics.Space.s)
+                    .background(AppColor.backgroundPrimary, in: Capsule())
+                    .padding(.horizontal, AppMetrics.Space.s)
+                    .padding(.bottom, AppMetrics.Space.m)
+            }
+            .frame(width: 160, height: 190)
+            .clipShape(RoundedRectangle(cornerRadius: AppMetrics.Radius.card, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: AppMetrics.Radius.card, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(destination.name), \(destinationSubtitle(destination)), öffnet die Karte")
+        .accessibilityAddTraits(.isButton)
+    }
+
+    private var destinationPlaceholder: some View {
+        ZStack {
+            AppColor.surfaceTinted
+            Image(systemName: "photo")
+                .font(.system(size: 28))
+                .foregroundStyle(AppColor.accentPrimary)
+        }
+    }
+
+    private var sortedDestinations: [RecentDestination] {
+        let all = recentDestinations.destinations
+        switch destinationSort {
+        case .newest:
+            return all
+        case .name:
+            return all.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        case .nearest:
+            return all.sorted {
+                (viewModel.distance(latitude: $0.latitude, longitude: $0.longitude) ?? .greatestFiniteMagnitude)
+                    < (viewModel.distance(latitude: $1.latitude, longitude: $1.longitude) ?? .greatestFiniteMagnitude)
+            }
+        }
+    }
+
+    private func destinationSubtitle(_ destination: RecentDestination) -> String {
+        var parts = [destination.visitedAt.formatted(.relative(presentation: .named).locale(.appGerman))]
+        if let distance = viewModel.distanceText(
+            latitude: destination.latitude,
+            longitude: destination.longitude
+        ) {
+            parts.append(distance)
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    // MARK: - Neue Barrieren
+
+    private var newBarriersSection: some View {
+        VStack(alignment: .leading, spacing: AppMetrics.Space.m) {
+            sectionHeader("Neue Barrieren", sort: $barrierSort)
+
+            Group {
+                if viewModel.isLoadingBarriers && viewModel.newBarriers.isEmpty {
+                    loadingRow
+                } else if let error = viewModel.barriersError {
+                    errorRow(error)
+                } else if viewModel.newBarriers.isEmpty {
+                    emptyRow(
+                        symbol: "checkmark.seal.fill",
+                        text: "Keine neuen Barrieren-Meldungen in der Altstadt."
+                    )
+                } else {
+                    VStack(spacing: AppMetrics.Space.s + AppMetrics.Space.xs) {
+                        ForEach(sortedBarriers) { barrier in
+                            barrierRow(barrier)
+                        }
+                    }
+                }
+            }
+            .padding(.horizontal, AppMetrics.Space.l)
+        }
+    }
+
+    private var sortedBarriers: [Barrier] {
+        let all = viewModel.newBarriers
+        switch barrierSort {
+        case .newest:
+            return all
+        case .name:
+            return all.sorted { $0.type.localizedLabel < $1.type.localizedLabel }
+        case .nearest:
+            return all.sorted {
+                (viewModel.distance(latitude: $0.latitude, longitude: $0.longitude) ?? .greatestFiniteMagnitude)
+                    < (viewModel.distance(latitude: $1.latitude, longitude: $1.longitude) ?? .greatestFiniteMagnitude)
+            }
+        }
+    }
+
+    /// Eine Barrieren-Meldung: Symbol im getönten Kreis, Typ, Detailzeile.
+    private func barrierRow(_ barrier: Barrier) -> some View {
+        Button {
+            onOpenMap()
+        } label: {
+            HStack(spacing: AppMetrics.Space.m) {
+                Image(systemName: barrier.type.symbolName)
+                    .font(.system(size: 20, weight: .regular))
+                    .foregroundStyle(AppColor.accentPrimary)
+                    .frame(width: 56, height: 56)
+                    .background(AppColor.accentMuted, in: Circle())
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(barrier.type.localizedLabel)
+                        .font(AppTypography.body)
+                        .foregroundStyle(AppColor.textBrand)
+                    if let subtitle = barrierSubtitle(barrier) {
+                        Text(subtitle)
+                            .font(AppTypography.subheadline)
+                            .foregroundStyle(AppColor.textSecondary)
+                            .lineLimit(2)
+                    }
+                }
+
+                Spacer(minLength: AppMetrics.Space.s)
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 20, weight: .regular))
+                    .foregroundStyle(AppColor.textBrand)
+            }
+            .padding(AppMetrics.Space.m)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                AppColor.surfaceTinted,
+                in: RoundedRectangle(cornerRadius: AppMetrics.Radius.card, style: .continuous)
+            )
+            .contentShape(RoundedRectangle(cornerRadius: AppMetrics.Radius.card, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(barrierAccessibilityText(barrier))
+        .accessibilityAddTraits(.isButton)
+    }
+
+    /// Messwert, Distanz und Meldedatum der Barriere als eine Zeile.
+    private func barrierSubtitle(_ barrier: Barrier) -> String? {
+        var parts: [String] = []
+        switch barrier.type {
+        case .steps:
+            if let v = barrier.value { parts.append("\(Int(v)) Stufen") }
+        case .curb, .curbMissing:
+            if let v = barrier.value { parts.append("\(Int(v)) cm hoch") }
+        case .incline:
+            if let v = barrier.value { parts.append("\(Int(v)) % Steigung") }
+        case .narrow:
+            if let v = barrier.value { parts.append("\(Int(v)) cm Durchgang") }
+        case .surface:
+            if let s = barrier.subtype {
+                parts.append(BarrierType.localizedSurface(s))
+            }
+        case .temporary:
+            break
+        }
+        if let distance = viewModel.distanceText(
+            latitude: barrier.latitude,
+            longitude: barrier.longitude
+        ) {
+            parts.append("in \(distance)")
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    private func barrierAccessibilityText(_ barrier: Barrier) -> String {
+        var parts = [barrier.type.localizedLabel]
+        if let subtitle = barrierSubtitle(barrier) { parts.append(subtitle) }
+        parts.append("öffnet die Karte")
+        return parts.joined(separator: ", ")
+    }
+
+    // MARK: - Bausteine
+
+    /// Abschnittskopf mit Titel links und der Sortierung rechts.
+    private func sectionHeader(_ title: String, sort: Binding<ListSort>) -> some View {
+        HStack {
+            Text(title)
+                .font(AppTypography.title3)
+                .foregroundStyle(AppColor.textBrand)
+                .accessibilityAddTraits(.isHeader)
+
+            Spacer()
+
+            Menu {
+                Picker("Sortieren", selection: sort) {
+                    ForEach(ListSort.allCases) { option in
+                        Text(option.label).tag(option)
+                    }
+                }
+            } label: {
+                HStack(spacing: AppMetrics.Space.s) {
+                    Text("Sortieren")
+                        .font(AppTypography.body)
+                    Image(systemName: "line.3.horizontal.decrease")
+                        .font(.system(size: 17, weight: .regular))
+                }
+                .foregroundStyle(AppColor.textBrand)
+                .frame(minHeight: AppMetrics.Touch.minimum)
+            }
+            .accessibilityLabel("Sortieren: \(sort.wrappedValue.label)")
+        }
+        .padding(.horizontal, AppMetrics.Space.l)
+    }
+
+    private var loadingRow: some View {
+        HStack(spacing: AppMetrics.Space.m) {
+            ProgressView()
+                .tint(AppColor.accentPrimary)
+            Text("Meldungen werden geladen …")
+                .font(AppTypography.subheadline)
+                .foregroundStyle(AppColor.textSecondary)
+            Spacer(minLength: 0)
+        }
+        .padding(AppMetrics.Space.m)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            AppColor.surfaceTinted,
+            in: RoundedRectangle(cornerRadius: AppMetrics.Radius.card, style: .continuous)
+        )
+    }
+
+    private func errorRow(_ message: String) -> some View {
+        HStack(spacing: AppMetrics.Space.m) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(AppColor.Status.limitedIcon)
+            Text(message)
+                .font(AppTypography.subheadline)
+                .foregroundStyle(AppColor.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+            Button("Erneut") {
+                Task { await viewModel.loadBarriers() }
+            }
+            .font(AppTypography.subheadline)
+            .foregroundStyle(AppColor.accentPrimary)
+        }
+        .padding(AppMetrics.Space.m)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            AppColor.surfaceTinted,
+            in: RoundedRectangle(cornerRadius: AppMetrics.Radius.card, style: .continuous)
+        )
+    }
+
+    private func emptyRow(symbol: String, text: String) -> some View {
+        HStack(spacing: AppMetrics.Space.m) {
+            Image(systemName: symbol)
+                .font(.title3)
+                .foregroundStyle(AppColor.accentPrimary)
+            Text(text)
+                .font(AppTypography.subheadline)
+                .foregroundStyle(AppColor.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+        }
+        .padding(AppMetrics.Space.m)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            AppColor.surfaceTinted,
+            in: RoundedRectangle(cornerRadius: AppMetrics.Radius.card, style: .continuous)
+        )
     }
 
     // MARK: - Feldtest: Test beenden
@@ -122,486 +610,5 @@ struct HomeDashboardView: View {
             await FieldTestService.shared.endTest()
             isEndingTest = false
         }
-    }
-
-    // MARK: - Begrüssung
-
-    private var header: some View {
-        HStack(spacing: AppMetrics.Space.m) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(Date().formatted(.dateTime.locale(.appGerman).weekday(.wide).day().month(.wide)))
-                    .font(AppTypography.footnote.weight(.semibold))
-                    .foregroundStyle(AppColor.accentPrimary)
-                    .textCase(.uppercase)
-                Text(viewModel.greeting)
-                    .font(AppTypography.title1)
-                    .foregroundStyle(AppColor.textPrimary)
-                    .lineLimit(2)
-                    .minimumScaleFactor(0.8)
-            }
-
-            Spacer(minLength: AppMetrics.Space.m)
-
-            avatar
-        }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(viewModel.greeting) Heute ist \(Date().formatted(.dateTime.locale(.appGerman).weekday(.wide).day().month(.wide)))")
-    }
-
-    /// Profilbild (in den Einstellungen erfasst), sonst Initialen-Monogramm.
-    private var avatar: some View {
-        ZStack {
-            if let photo = avatarStore.image {
-                Image(uiImage: photo)
-                    .resizable()
-                    .scaledToFill()
-            } else {
-                Circle()
-                    .fill(
-                        LinearGradient(
-                            colors: [AppColor.Violet.v500, AppColor.Violet.v700],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                if viewModel.initials.isEmpty {
-                    Image(systemName: "person.fill")
-                        .font(.title3)
-                        .foregroundStyle(AppColor.onAccent)
-                } else {
-                    Text(viewModel.initials)
-                        .font(.headline)
-                        .foregroundStyle(AppColor.onAccent)
-                }
-            }
-        }
-        .frame(width: 56, height: 56)
-        .clipShape(Circle())
-        .overlay(
-            Circle().stroke(AppColor.Violet.v100, lineWidth: 3)
-        )
-        .shadow(color: AppColor.accentPrimary.opacity(0.25), radius: 8, y: 3)
-        .accessibilityHidden(true)
-    }
-
-    // MARK: - Wetter
-
-    @ViewBuilder
-    private var weatherCard: some View {
-        heroCard {
-            if let weather = viewModel.weather {
-                VStack(spacing: AppMetrics.Space.m) {
-                    HStack(spacing: AppMetrics.Space.m) {
-                        Image(systemName: weather.symbolName)
-                            .font(.system(size: 34))
-                            .symbolRenderingMode(.multicolor)
-                            .frame(width: 60, height: 60)
-                            .background(.white.opacity(0.18), in: Circle())
-
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("\(Int(weather.temperatureC.rounded())) °C")
-                                .font(.system(size: 40, weight: .bold))
-                                .foregroundStyle(AppColor.onAccent)
-                            Text(weather.conditionDescription)
-                                .font(AppTypography.subheadline)
-                                .foregroundStyle(AppColor.onAccent.opacity(0.85))
-                        }
-
-                        Spacer()
-
-                        VStack(alignment: .trailing, spacing: 6) {
-                            if let place = viewModel.weatherPlaceName {
-                                Label(place, systemImage: "location.fill")
-                                    .font(AppTypography.footnote)
-                                    .foregroundStyle(AppColor.onAccent.opacity(0.9))
-                            }
-                            Label("\(Int(weather.windSpeedKmh.rounded())) km/h", systemImage: "wind")
-                                .font(AppTypography.footnote)
-                                .foregroundStyle(AppColor.onAccent.opacity(0.9))
-                        }
-                    }
-
-                    HStack(spacing: AppMetrics.Space.s) {
-                        weatherStat(
-                            symbol: "sun.max.trianglebadge.exclamationmark",
-                            label: "UV-Index",
-                            value: String(format: "%.0f · %@", weather.uvIndex.rounded(), weather.uvCategory)
-                        )
-                        weatherStat(
-                            symbol: "thermometer.medium",
-                            label: "Gefühlt",
-                            value: "\(Int(weather.feelsLikeC.rounded())) °C"
-                        )
-                        weatherStat(
-                            symbol: "humidity.fill",
-                            label: "Luftfeuchte",
-                            value: "\(weather.humidityPercent) %"
-                        )
-                    }
-                }
-                .accessibilityElement(children: .combine)
-                .accessibilityLabel(weatherAccessibilityText(weather))
-            } else if viewModel.isLoadingWeather {
-                HStack(spacing: AppMetrics.Space.m) {
-                    ProgressView()
-                        .tint(AppColor.onAccent)
-                    Text("Wetter wird geladen…")
-                        .font(AppTypography.subheadline)
-                        .foregroundStyle(AppColor.onAccent.opacity(0.9))
-                    Spacer()
-                }
-            } else {
-                HStack(alignment: .top, spacing: AppMetrics.Space.m) {
-                    Image(systemName: "cloud.slash")
-                        .font(.title2)
-                        .foregroundStyle(AppColor.onAccent.opacity(0.9))
-                    Text(viewModel.weatherError ?? "Wetter derzeit nicht verfügbar.")
-                        .font(AppTypography.subheadline)
-                        .foregroundStyle(AppColor.onAccent.opacity(0.9))
-                        .fixedSize(horizontal: false, vertical: true)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    Button("Erneut") {
-                        Task { await viewModel.loadWeather() }
-                    }
-                    .font(AppTypography.subheadline.weight(.semibold))
-                    .foregroundStyle(AppColor.onAccent)
-                }
-            }
-        }
-    }
-
-    /// Mini-Statistik in der Wetterkarte (UV-Index, gefühlte Temperatur, …),
-    /// als getönte Kachel auf dem Violett-Verlauf.
-    private func weatherStat(symbol: String, label: String, value: String) -> some View {
-        VStack(spacing: 3) {
-            Image(systemName: symbol)
-                .font(AppTypography.subheadline)
-                .foregroundStyle(AppColor.onAccent)
-            Text(value)
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(AppColor.onAccent)
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
-            Text(label)
-                .font(.caption2)
-                .foregroundStyle(AppColor.onAccent.opacity(0.8))
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 10)
-        .background(.white.opacity(0.15), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-    }
-
-    private func weatherAccessibilityText(_ weather: CurrentWeather) -> String {
-        var text = "Aktuelles Wetter"
-        if let place = viewModel.weatherPlaceName {
-            text += " in \(place)"
-        }
-        text += ": \(Int(weather.temperatureC.rounded())) Grad, \(weather.conditionDescription),"
-        text += " gefühlt \(Int(weather.feelsLikeC.rounded())) Grad,"
-        text += " Wind \(Int(weather.windSpeedKmh.rounded())) Kilometer pro Stunde,"
-        text += " UV-Index \(Int(weather.uvIndex.rounded())) (\(weather.uvCategory)),"
-        text += " Luftfeuchtigkeit \(weather.humidityPercent) Prozent"
-        return text
-    }
-
-    // MARK: - Letzte Ziele
-
-    private var recentDestinationsSection: some View {
-        VStack(alignment: .leading, spacing: AppMetrics.Space.s) {
-            sectionTitle("Letzte Ziele", symbol: "clock.arrow.circlepath")
-
-            if recentDestinations.destinations.isEmpty {
-                card {
-                    HStack(spacing: AppMetrics.Space.m) {
-                        Image(systemName: "mappin.slash")
-                            .font(.title2)
-                            .foregroundStyle(AppColor.textSecondary)
-                        Text("Noch keine Ziele – starte eine Navigation auf der Karte.")
-                            .font(AppTypography.subheadline)
-                            .foregroundStyle(AppColor.textSecondary)
-                        Spacer()
-                    }
-                }
-            } else {
-                card(padding: 0) {
-                    VStack(spacing: 0) {
-                        ForEach(recentDestinations.destinations.prefix(5)) { destination in
-                            Button {
-                                onOpenMap()
-                            } label: {
-                                destinationRow(destination)
-                            }
-                            .buttonStyle(.plain)
-
-                            if destination.id != recentDestinations.destinations.prefix(5).last?.id {
-                                Divider()
-                                    .overlay(AppColor.borderDecorative)
-                                    .padding(.leading, 60)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    private func destinationRow(_ destination: RecentDestination) -> some View {
-        HStack(spacing: AppMetrics.Space.m) {
-            ZStack {
-                Circle()
-                    .fill(AppColor.Violet.v100)
-                    .frame(width: 40, height: 40)
-                Image(systemName: "mappin.circle.fill")
-                    .font(.title2)
-                    .foregroundStyle(AppColor.accentPrimary)
-            }
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(destination.name)
-                    .font(AppTypography.headline)
-                    .foregroundStyle(AppColor.textPrimary)
-                    .lineLimit(1)
-                Text(destinationSubtitle(destination))
-                    .font(AppTypography.footnote)
-                    .foregroundStyle(AppColor.textSecondary)
-            }
-
-            Spacer()
-
-            Image(systemName: "chevron.right")
-                .font(.footnote.weight(.semibold))
-                .foregroundStyle(AppColor.textSecondary)
-        }
-        .padding(.horizontal, AppMetrics.Space.m)
-        .padding(.vertical, 12)
-        .contentShape(Rectangle())
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(destination.name), \(destinationSubtitle(destination)), öffnet die Karte")
-        .accessibilityAddTraits(.isButton)
-    }
-
-    private func destinationSubtitle(_ destination: RecentDestination) -> String {
-        var parts = [destination.visitedAt.formatted(.relative(presentation: .named).locale(.appGerman))]
-        if let distance = viewModel.distanceText(
-            latitude: destination.latitude,
-            longitude: destination.longitude
-        ) {
-            parts.append(distance)
-        }
-        return parts.joined(separator: " · ")
-    }
-
-    // MARK: - Neue Barrieren
-
-    private var newBarriersSection: some View {
-        VStack(alignment: .leading, spacing: AppMetrics.Space.s) {
-            sectionTitle("Neue Barrieren", symbol: "exclamationmark.triangle.fill")
-
-            if viewModel.isLoadingBarriers && viewModel.newBarriers.isEmpty {
-                card {
-                    HStack(spacing: AppMetrics.Space.m) {
-                        ProgressView()
-                        Text("Meldungen werden geladen…")
-                            .font(AppTypography.subheadline)
-                            .foregroundStyle(AppColor.textSecondary)
-                    }
-                }
-            } else if let error = viewModel.barriersError {
-                card {
-                    HStack(spacing: AppMetrics.Space.m) {
-                        Image(systemName: "exclamationmark.triangle")
-                            .font(.title2)
-                            .foregroundStyle(AppColor.textSecondary)
-                        Text(error)
-                            .font(AppTypography.subheadline)
-                            .foregroundStyle(AppColor.textSecondary)
-                        Spacer()
-                        Button("Erneut") {
-                            Task { await viewModel.loadBarriers() }
-                        }
-                        .font(AppTypography.subheadline)
-                        .foregroundStyle(AppColor.accentPrimary)
-                    }
-                }
-            } else if viewModel.newBarriers.isEmpty {
-                card {
-                    HStack(spacing: AppMetrics.Space.m) {
-                        Image(systemName: "checkmark.seal.fill")
-                            .font(.title2)
-                            .foregroundStyle(AppColor.Status.openIcon)
-                        Text("Keine neuen Barrieren-Meldungen in der Altstadt.")
-                            .font(AppTypography.subheadline)
-                            .foregroundStyle(AppColor.textSecondary)
-                        Spacer()
-                    }
-                }
-            } else {
-                card(padding: 0) {
-                    VStack(spacing: 0) {
-                        ForEach(viewModel.newBarriers) { barrier in
-                            Button {
-                                onOpenMap()
-                            } label: {
-                                barrierRow(barrier)
-                            }
-                            .buttonStyle(.plain)
-
-                            if barrier.id != viewModel.newBarriers.last?.id {
-                                Divider()
-                                    .overlay(AppColor.borderDecorative)
-                                    .padding(.leading, 68)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    private func barrierRow(_ barrier: Barrier) -> some View {
-        HStack(spacing: AppMetrics.Space.m) {
-            ZStack {
-                Circle()
-                    .fill(barrier.type.tint)
-                    .frame(width: 40, height: 40)
-                Image(systemName: barrier.type.symbolName)
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(.white)
-            }
-
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: AppMetrics.Space.s) {
-                    Text(barrier.type.localizedLabel)
-                        .font(AppTypography.headline)
-                        .foregroundStyle(AppColor.textPrimary)
-                    if isNew(barrier) {
-                        Text("Neu")
-                            .font(.caption2.weight(.semibold))
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 3)
-                            .background(AppColor.Status.limitedFill, in: Capsule())
-                            .foregroundStyle(AppColor.Status.limitedText)
-                    }
-                }
-                if let subtitle = barrierSubtitle(barrier) {
-                    Text(subtitle)
-                        .font(AppTypography.footnote)
-                        .foregroundStyle(AppColor.textSecondary)
-                }
-            }
-
-            Spacer()
-
-            Image(systemName: "chevron.right")
-                .font(.footnote.weight(.semibold))
-                .foregroundStyle(AppColor.textSecondary)
-        }
-        .padding(.horizontal, AppMetrics.Space.m)
-        .padding(.vertical, 12)
-        .contentShape(Rectangle())
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(barrierAccessibilityText(barrier))
-        .accessibilityAddTraits(.isButton)
-    }
-
-    /// Gemeldet innerhalb der letzten 7 Tage → "Neu"-Badge.
-    private func isNew(_ barrier: Barrier) -> Bool {
-        guard let verified = barrier.lastVerified else { return false }
-        return Date().timeIntervalSince(verified) < HomeDashboardViewModel.newBadgeInterval
-    }
-
-    /// Messwert, Distanz und Meldedatum der Barriere als eine Zeile.
-    private func barrierSubtitle(_ barrier: Barrier) -> String? {
-        var parts: [String] = []
-        switch barrier.type {
-        case .steps:
-            if let v = barrier.value { parts.append("\(Int(v)) Stufen") }
-        case .curb, .curbMissing:
-            if let v = barrier.value { parts.append("\(Int(v)) cm hoch") }
-        case .incline:
-            if let v = barrier.value { parts.append("\(Int(v)) % Steigung") }
-        case .narrow:
-            if let v = barrier.value { parts.append("\(Int(v)) cm Durchgang") }
-        case .surface:
-            if let s = barrier.subtype {
-                parts.append(BarrierType.localizedSurface(s))
-            }
-        case .temporary:
-            break
-        }
-        if let distance = viewModel.distanceText(
-            latitude: barrier.latitude,
-            longitude: barrier.longitude
-        ) {
-            parts.append(distance)
-        }
-        if let verified = barrier.lastVerified {
-            parts.append("gemeldet " + verified.formatted(.relative(presentation: .named).locale(.appGerman)))
-        }
-        return parts.isEmpty ? nil : parts.joined(separator: " · ")
-    }
-
-    private func barrierAccessibilityText(_ barrier: Barrier) -> String {
-        var parts = [barrier.type.localizedLabel]
-        if isNew(barrier) { parts.append("neue Meldung") }
-        if let subtitle = barrierSubtitle(barrier) { parts.append(subtitle) }
-        parts.append("öffnet die Karte")
-        return parts.joined(separator: ", ")
-    }
-
-    // MARK: - Bausteine
-
-    private func sectionTitle(_ title: String, symbol: String? = nil) -> some View {
-        HStack(spacing: AppMetrics.Space.s) {
-            if let symbol {
-                Image(systemName: symbol)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(AppColor.accentPrimary)
-            }
-            Text(title)
-                .font(AppTypography.title2)
-                .foregroundStyle(AppColor.textPrimary)
-        }
-        .accessibilityElement(children: .combine)
-        .accessibilityAddTraits(.isHeader)
-        .accessibilityLabel(title)
-    }
-
-    private func card<Content: View>(
-        padding: CGFloat = AppMetrics.Space.m,
-        @ViewBuilder content: () -> Content
-    ) -> some View {
-        content()
-            .padding(padding)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                AppColor.surfaceRaised,
-                in: RoundedRectangle(cornerRadius: AppMetrics.Radius.card, style: .continuous)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: AppMetrics.Radius.card, style: .continuous)
-                    .stroke(AppColor.borderDecorative, lineWidth: 1)
-            )
-            .shadow(color: AppColor.textPrimary.opacity(0.05), radius: 10, y: 4)
-    }
-
-    /// Hervorgehobene Wetterkarte mit kräftigem Violett-Verlauf – gibt dem
-    /// Homescreen einen freundlichen, modernen Auftakt. Text in OnAccent
-    /// (weiss) hält den AAA-Kontrast auf dem Violett.
-    private func heroCard<Content: View>(
-        @ViewBuilder content: () -> Content
-    ) -> some View {
-        content()
-            .padding(AppMetrics.Space.m)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                LinearGradient(
-                    colors: [AppColor.Violet.v600, AppColor.Violet.v800],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                ),
-                in: RoundedRectangle(cornerRadius: AppMetrics.Radius.card, style: .continuous)
-            )
-            .shadow(color: AppColor.accentPrimary.opacity(0.3), radius: 16, y: 8)
     }
 }

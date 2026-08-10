@@ -58,15 +58,19 @@ final class HomeDashboardViewModel: ObservableObject {
         return result.uppercased()
     }
 
-    /// Tageszeitabhängige Begrüssung inkl. Vorname.
-    var greeting: String {
+    /// Tageszeitabhängige Anrede ohne Namen – im Entwurf steht sie in der
+    /// ersten Zeile, der Vorname violett darunter.
+    var salutation: String {
         let hour = Calendar.current.component(.hour, from: Date())
-        let salutation: String
         switch hour {
-        case 5..<11: salutation = "Guten Morgen"
-        case 11..<18: salutation = "Guten Tag"
-        default: salutation = "Guten Abend"
+        case 5..<11:  return "Guten Morgen"
+        case 11..<18: return "Guten Tag"
+        default:      return "Guten Abend"
         }
+    }
+
+    /// Tageszeitabhängige Begrüssung inkl. Vorname (VoiceOver, Ansagen).
+    var greeting: String {
         if let firstName {
             return "\(salutation), \(firstName)!"
         }
@@ -179,5 +183,11 @@ final class HomeDashboardViewModel: ObservableObject {
         guard let user = locationService.currentLocation else { return nil }
         let meters = user.distance(from: CLLocation(latitude: latitude, longitude: longitude))
         return DistanceFormatter.awayString(fromMeters: meters)
+    }
+
+    /// Rohdistanz in Metern – Grundlage fürs Sortieren nach Nähe.
+    func distance(latitude: Double, longitude: Double) -> Double? {
+        guard let user = locationService.currentLocation else { return nil }
+        return user.distance(from: CLLocation(latitude: latitude, longitude: longitude))
     }
 }

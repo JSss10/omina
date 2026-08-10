@@ -16,6 +16,10 @@ struct RecentDestination: Codable, Identifiable, Equatable {
     let latitude: Double
     let longitude: Double
     let visitedAt: Date
+    /// Foto des Ortes für die Bildkarte auf dem Homescreen. Fehlt bei Zielen,
+    /// die vor dieser Version gespeichert wurden – dort steht die getönte
+    /// Fläche.
+    var imageURL: URL?
 
     var coordinate: CLLocationCoordinate2D {
         CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
@@ -37,7 +41,7 @@ final class RecentDestinationsStore: ObservableObject {
 
     /// Trägt ein Ziel ein (neuestes zuerst). Ein bereits vorhandener Ort mit
     /// gleichem Namen rückt nach vorne statt doppelt zu erscheinen.
-    func record(name: String, latitude: Double, longitude: Double) {
+    func record(name: String, latitude: Double, longitude: Double, imageURL: URL? = nil) {
         let trimmed = name.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty else { return }
 
@@ -50,7 +54,8 @@ final class RecentDestinationsStore: ObservableObject {
                 name: trimmed,
                 latitude: latitude,
                 longitude: longitude,
-                visitedAt: Date()
+                visitedAt: Date(),
+                imageURL: imageURL
             ),
             at: 0
         )

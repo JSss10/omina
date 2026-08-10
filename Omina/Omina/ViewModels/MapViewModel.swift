@@ -26,6 +26,21 @@ final class MapViewModel: ObservableObject {
     @Published var barriersVisible = true
     @Published var poisVisible = true
 
+    /// Kategorie, die vom Homescreen aus vorgewählt wurde. Die Karte öffnet
+    /// damit die Suche und setzt den Wert danach zurück.
+    @Published var pendingCategory: String?
+
+    /// Wie viele Filter gerade greifen – ausgeblendete Orte, ausgeblendete
+    /// Barrieren und jeder abgewählte Barrieretyp zählen einzeln. Steht als
+    /// Plakette an der Filter-Schaltfläche (Entwurf).
+    var activeFilterCount: Int {
+        var count = 0
+        if !poisVisible { count += 1 }
+        if !barriersVisible { count += 1 }
+        count += BarrierType.allCases.count - filterState.enabledTypes.count
+        return count
+    }
+
     /// Zählt jede Änderung an der Barrieren-Grundmenge oder am Filter mit –
     /// also genau die Fälle, in denen sich `filteredBarriers` ändern kann.
     /// Views beobachten diesen Zähler statt die Liste selbst zu vergleichen
@@ -865,7 +880,8 @@ final class MapViewModel: ObservableObject {
         RecentDestinationsStore.shared.record(
             name: poi.name,
             latitude: poi.latitude,
-            longitude: poi.longitude
+            longitude: poi.longitude,
+            imageURL: poi.images.first?.url
         )
     }
 

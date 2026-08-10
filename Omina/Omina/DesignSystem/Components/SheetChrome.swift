@@ -26,8 +26,8 @@ struct SheetHeader: View {
             Spacer(minLength: 0)
 
             Text(title)
-                .font(AppTypography.headline)
-                .foregroundColor(AppColor.textPrimary)
+                .font(AppTypography.title3)
+                .foregroundColor(AppColor.textBrand)
                 .lineLimit(1)
                 .accessibilityAddTraits(.isHeader)
 
@@ -87,7 +87,7 @@ struct SheetSection<Content: View>: View {
         VStack(alignment: .leading, spacing: AppMetrics.Space.s) {
             Text(title)
                 .font(AppTypography.headline)
-                .foregroundColor(AppColor.accentPrimary)
+                .foregroundColor(AppColor.textBrand)
                 .accessibilityAddTraits(.isHeader)
 
             VStack(spacing: 0) {
@@ -114,16 +114,19 @@ struct SheetSection<Content: View>: View {
 struct SheetRowIcon: View {
     let symbol: String
     var isEnabled: Bool = true
+    /// Volle Akzentfläche mit hellem Symbol (Entwurf: Start und Ziel im
+    /// Routen-Sheet); sonst der helle Kreis mit violettem Symbol.
+    var isFilled: Bool = false
 
     var body: some View {
         ZStack {
             Circle()
-                .fill(AppColor.accentPrimary.opacity(0.14))
+                .fill(isFilled ? AppColor.accentPrimary : AppColor.accentMuted)
             Image(systemName: symbol)
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundColor(AppColor.accentPrimary)
+                .font(.system(size: 17, weight: .regular))
+                .foregroundColor(isFilled ? AppColor.onAccent : AppColor.accentPrimary)
         }
-        .frame(width: 36, height: 36)
+        .frame(width: 40, height: 40)
         .opacity(isEnabled ? 1 : 0.4)
         .accessibilityHidden(true)
     }
@@ -136,7 +139,7 @@ private struct SheetRowDivider: View {
         Rectangle()
             .fill(AppColor.borderDecorative)
             .frame(height: 1)
-            .padding(.leading, 36 + AppMetrics.Space.m + AppMetrics.Space.m)
+            .padding(.leading, 40 + AppMetrics.Space.m + AppMetrics.Space.m)
     }
 }
 
@@ -167,98 +170,6 @@ struct SheetToggleRow: View {
             }
         }
         .accessibilityLabel(title)
-    }
-}
-
-/// Zeile ohne Aktion – nennt einen festen Wert (z. B. "Mein Standort" als
-/// Startpunkt). Bewusst nicht gedimmt: Sie ist gültig, nur nicht änderbar.
-struct SheetInfoRow: View {
-    let symbol: String
-    let title: String
-    var subtitle: String?
-    var showsDivider: Bool = true
-
-    var body: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: AppMetrics.Space.m) {
-                SheetRowIcon(symbol: symbol)
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(title)
-                        .font(AppTypography.body)
-                        .foregroundColor(AppColor.textPrimary)
-                    if let subtitle {
-                        Text(subtitle)
-                            .font(AppTypography.footnote)
-                            .foregroundColor(AppColor.textSecondary)
-                    }
-                }
-
-                Spacer(minLength: AppMetrics.Space.s)
-            }
-            .padding(.horizontal, AppMetrics.Space.m)
-            .padding(.vertical, 10)
-            .frame(minHeight: AppMetrics.Touch.minimum)
-            .accessibilityElement(children: .combine)
-
-            if showsDivider {
-                SheetRowDivider()
-            }
-        }
-    }
-}
-
-/// Antippbare Zeile (Ziel wählen, Stopp hinzufügen). `isEnabled == false`
-/// zeigt die Zeile gedämpft und nennt im Hinweis, dass sie noch nicht geht.
-struct SheetActionRow: View {
-    let symbol: String
-    let title: String
-    var subtitle: String?
-    var isEnabled: Bool = true
-    var showsDivider: Bool = true
-    var accessibilityHint: String?
-    let action: () -> Void
-
-    var body: some View {
-        VStack(spacing: 0) {
-            Button(action: action) {
-                HStack(spacing: AppMetrics.Space.m) {
-                    SheetRowIcon(symbol: symbol, isEnabled: isEnabled)
-
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(title)
-                            .font(AppTypography.body)
-                            .foregroundColor(AppColor.textPrimary)
-                        if let subtitle {
-                            Text(subtitle)
-                                .font(AppTypography.footnote)
-                                .foregroundColor(AppColor.textSecondary)
-                        }
-                    }
-                    .multilineTextAlignment(.leading)
-
-                    Spacer(minLength: AppMetrics.Space.s)
-
-                    if isEnabled {
-                        Image(systemName: "chevron.right")
-                            .font(.footnote.weight(.semibold))
-                            .foregroundColor(AppColor.textSecondary)
-                    }
-                }
-                .padding(.horizontal, AppMetrics.Space.m)
-                .padding(.vertical, 10)
-                .frame(minHeight: AppMetrics.Touch.minimum)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .disabled(!isEnabled)
-            .opacity(isEnabled ? 1 : 0.5)
-            .accessibilityHint(accessibilityHint ?? "")
-
-            if showsDivider {
-                SheetRowDivider()
-            }
-        }
     }
 }
 

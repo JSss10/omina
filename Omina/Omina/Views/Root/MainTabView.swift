@@ -2,12 +2,14 @@
 // Omina
 //
 // Haupt-Container für authentifizierte User. Hält das MapViewModel und stellt
-// die Tab-Navigation bereit: Home (Homescreen), Karte, Kamera (AR), Orte
-// und Profil. Karte und Kamera laufen im Vollbild – dort wird die Tab-Leiste
-// ausgeblendet, die Navigation ist also nur auf Home, Orte und
-// Profil sichtbar. Filter- und Barrieren-State bleiben beim Tab-Wechsel
-// erhalten, weil Karte und AR auf dem gleichen ViewModel laufen. Das
-// Profil-Binding fliesst von hier weiter ins Profil (Settings/Abmelden, S1).
+// die Navigation bereit: Home (Homescreen), Karte, Kamera (AR), Orte und
+// Profil. Statt der System-Tab-Leiste liegt die schwebende Kapsel aus dem
+// Entwurf über dem Inhalt (OminaTabBar); Karte und Kamera laufen im Vollbild
+// und zeigen sie nicht.
+//
+// Filter- und Barrieren-State bleiben beim Tab-Wechsel erhalten, weil Karte
+// und AR auf dem gleichen ViewModel laufen. Das Profil-Binding fliesst von
+// hier weiter ins Profil (Settings/Abmelden, S1).
 
 import SwiftUI
 import CoreLocation
@@ -24,78 +26,93 @@ struct MainTabView: View {
         case home, map, ar, saved, profile
     }
 
+    /// Höhe, die die schwebende Leiste im Inhalt freihält.
+    private let tabBarInset: CGFloat = 76
+
+    private let tabItems: [OminaTabBar<Tab>.Item] = [
+        .init(tab: .home, symbol: "house", label: "Start"),
+        .init(tab: .map, symbol: "map", label: "Karte"),
+        .init(tab: .ar, symbol: "camera.viewfinder", label: "Kamera"),
+        .init(tab: .saved, symbol: "bookmark", label: "Orte"),
+        .init(tab: .profile, symbol: "person", label: "Profil")
+    ]
+
     init(profile: Binding<UserProfile>) {
         _profile = profile
-        // Aktiver Tab ohne getönte Hintergrund-/Auswahlfläche: nur Icon und
-        // Label wechseln auf die Akzentfarbe, keine Kapsel dahinter.
-        let appearance = UITabBarAppearance()
-        appearance.configureWithDefaultBackground()
-        appearance.selectionIndicatorTintColor = .clear
-        UITabBar.appearance().standardAppearance = appearance
-        UITabBar.appearance().scrollEdgeAppearance = appearance
+    }
+
+    /// Karte und AR laufen im Vollbild – dort steht die Leiste nicht im Weg.
+    private var showsTabBar: Bool {
+        selectedTab != .map && selectedTab != .ar
     }
 
     var body: some View {
-        tabView
-            // Standort-Berechtigung nur noch über Apples System-Prompt: beim
-            // ersten Betreten fragen (notDetermined), danach kein eigener
-            // Erklärungs-Screen mehr. Die Erklärung erfolgt einmalig im
-            // Consent-Screen des Onboardings.
-            .task {
-                if locationService.authorizationStatus == .notDetermined {
-                    locationService.requestAuthorization()
-                }
+        ZStack(alignment: .bottom) {
+            tabView
+
+            if showsTabBar {
+                OminaTabBar(items: tabItems, selection: $selectedTab)
+                    .padding(.horizontal, AppMetrics.Space.l)
+                    .padding(.bottom, AppMetrics.Space.s)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
             }
+        }
+        .animation(.easeInOut(duration: 0.2), value: showsTabBar)
+        // Standort-Berechtigung nur noch über Apples System-Prompt: beim
+        // ersten Betreten fragen (notDetermined), danach kein eigener
+        // Erklärungs-Screen mehr. Die Erklärung erfolgt einmalig im
+        // Consent-Screen des Onboardings.
+        .task {
+            if locationService.authorizationStatus == .notDetermined {
+                locationService.requestAuthorization()
+            }
+        }
     }
 
-    // Fünf Tabs; Karte und Kamera blenden die Tab-Leiste aus (Vollbild), damit
-    // die Navigation nur auf Home, Orte und Profil erscheint.
+    /// Fünf Tabs ohne System-Leiste – die Auswahl läuft über OminaTabBar.
     private var tabView: some View {
         TabView(selection: $selectedTab) {
             HomeDashboardView(
-                onOpenMap: { selectedTab = .map }
+                onOpenMap: { selectedTab = .map },
+                onSelectCategory: openMap(with:),
+                activeFilterCount: viewModel.activeFilterCount
             )
-            .tabItem {
-                Label("Home", systemImage: "house.fill")
-            }
+            .safeAreaInset(edge: .bottom) { tabBarSpacer }
+            .toolbar(.hidden, for: .tabBar)
             .tag(Tab.home)
 
             mapContent
-                .tabItem {
-                    Label("Karte", systemImage: "map.fill")
-                }
+                .toolbar(.hidden, for: .tabBar)
                 .tag(Tab.map)
 
             arContent
                 .toolbar(.hidden, for: .tabBar)
-                .tabItem {
-                    Label("Kamera", systemImage: "arkit")
-                }
                 .tag(Tab.ar)
 
             NavigationStack {
                 SavedPlacesListView()
             }
-            .tabItem {
-                Label("Orte", systemImage: "bookmark.fill")
-            }
+            .safeAreaInset(edge: .bottom) { tabBarSpacer }
+            .toolbar(.hidden, for: .tabBar)
             .tag(Tab.saved)
 
             SettingsView(profile: $profile)
                 .environmentObject(authService)
-                .tabItem {
-                    Label("Profil", systemImage: "person.fill")
-                }
+                .safeAreaInset(edge: .bottom) { tabBarSpacer }
+                .toolbar(.hidden, for: .tabBar)
                 .tag(Tab.profile)
         }
     }
 
+    /// Hält am unteren Rand Platz frei, damit die schwebende Leiste keine
+    /// Inhalte verdeckt.
+    private var tabBarSpacer: some View {
+        Color.clear.frame(height: tabBarInset)
+    }
+
     private var mapContent: some View {
-        // Die Tab-Leiste (Navbar) bleibt auf der Karte sichtbar – der frühere
-        // Home-Button ist damit überflüssig und entfällt. Die Karte respektiert
-        // unten die Safe Area, damit Bedienelemente über der Tab-Leiste liegen.
-        // Der AR-Modus ist über den "Kamera"-Tab erreichbar; ein eigener AR-FAB
-        // auf der Karte entfällt daher.
+        // Die Karte läuft im Vollbild; Bedienelemente sitzen als Overlay darauf.
+        // Der AR-Modus ist über den "Kamera"-Eintrag erreichbar.
         MapView(profile: profile, viewModel: viewModel, onStartARRoute: startARRoute)
     }
 
@@ -113,6 +130,13 @@ struct MainTabView: View {
         } else {
             Color.black.ignoresSafeArea()
         }
+    }
+
+    /// Kategorie-Chip vom Homescreen: Karte öffnen und die Suche mit dieser
+    /// Kategorie vorbelegen.
+    private func openMap(with category: String) {
+        viewModel.pendingCategory = category
+        selectedTab = .map
     }
 
     /// "Route in AR starten" aus dem POI-Detail: Route berechnen,

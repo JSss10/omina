@@ -14,6 +14,8 @@ import SwiftUI
 
 struct SearchSheet: View {
     @ObservedObject var viewModel: MapViewModel
+    /// Kategorie, mit der das Sheet startet (Chip vom Homescreen).
+    var initialCategory: String?
     let onSelect: (POI) -> Void
 
     @Environment(\.dismiss) private var dismiss
@@ -69,39 +71,23 @@ struct SearchSheet: View {
             if focused { detent = .large }
         }
         .task { await loadSavedPlaces() }
+        .task {
+            // Mit vorgewählter Kategorie geöffnet: gleich die passenden Orte
+            // zeigen, statt erst den Ausgangszustand.
+            if let initialCategory { runCategory(initialCategory) }
+        }
         .sheet(isPresented: $showingFilter) {
             FilterSheet(viewModel: viewModel)
                 .trackScreen("filter")
         }
     }
 
-    /// Icon-Button rechts neben der Suchleiste: öffnet das Filter-Sheet.
-    /// Hebt sich (Akzent-Füllung) hervor, sobald ein Filter aktiv ist –
-    /// Orte/Barrieren ausgeblendet oder nicht alle Barrieretypen sichtbar.
+    /// Icon-Button rechts neben der Suchleiste: öffnet das Filter-Sheet. Die
+    /// Plakette nennt die Zahl der gesetzten Filter.
     private var filterButton: some View {
-        Button {
+        FilterIconButton(activeCount: viewModel.activeFilterCount) {
             showingFilter = true
-        } label: {
-            Image(systemName: "line.3.horizontal.decrease")
-                .font(.system(size: 18, weight: .semibold))
-                .foregroundStyle(filtersActive ? AppColor.onAccent : AppColor.accentPrimary)
-                .frame(width: AppMetrics.Touch.minimum, height: AppMetrics.Touch.minimum)
-                .background(
-                    filtersActive
-                        ? AnyShapeStyle(AppColor.accentPrimary)
-                        : AnyShapeStyle(AppColor.surfaceTinted),
-                    in: Circle()
-                )
         }
-        .accessibilityLabel("Filter")
-        .accessibilityAddTraits(filtersActive ? .isSelected : [])
-    }
-
-    /// Ob aktuell ein Filter greift (für die Hervorhebung des Filter-Buttons).
-    private var filtersActive: Bool {
-        !viewModel.poisVisible
-            || !viewModel.barriersVisible
-            || viewModel.filterState.enabledTypes.count != BarrierType.allCases.count
     }
 
     // MARK: - Inhalt (Ergebnisse oder Ausgangszustand)
@@ -125,32 +111,16 @@ struct SearchSheet: View {
     // MARK: - Suchfeld & Kategorien
 
     private var searchField: some View {
-        HStack(spacing: 10) {
-            Image(systemName: "magnifyingglass")
-                .font(.system(size: 17, weight: .semibold))
-                .foregroundStyle(AppColor.accentPrimary)
-            TextField("Suchst du nach etwas Bestimmten?", text: $query)
-                .font(AppTypography.body)
-                .focused($searchFieldFocused)
-                .submitLabel(.search)
-                .autocorrectionDisabled()
-                .onSubmit {
-                    activeChip = nil
-                    runSearch(query)
-                }
-            if !query.isEmpty {
-                Button {
-                    resetToBrowse()
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundStyle(AppColor.textSecondary)
-                }
-                .accessibilityLabel("Suche löschen")
-            }
-        }
-        .padding(.horizontal, 16)
-        .frame(minHeight: AppMetrics.Touch.minimum)
-        .background(AppColor.surfaceTinted, in: Capsule())
+        SearchBar(
+            placeholder: "Suchst du nach etwas Bestimmten?",
+            text: $query,
+            isFocused: $searchFieldFocused,
+            onSubmit: {
+                activeChip = nil
+                runSearch(query)
+            },
+            onClear: { resetToBrowse() }
+        )
     }
 
     /// Kategorie-Filter (Restaurant, Café, WC …) als kreisförmige Icon-Buttons
@@ -315,7 +285,7 @@ struct SearchSheet: View {
                 Rectangle()
                     .fill(AppColor.borderDecorative)
                     .frame(height: 1)
-                    .padding(.leading, 36 + AppMetrics.Space.m + AppMetrics.Space.m)
+                    .padding(.leading, 40 + AppMetrics.Space.m + AppMetrics.Space.m)
             }
         }
     }
