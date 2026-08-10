@@ -27,7 +27,7 @@ struct MainTabView: View {
     }
 
     /// Höhe, die die schwebende Leiste im Inhalt freihält.
-    private let tabBarInset: CGFloat = 76
+    private let tabBarInset = AppMetrics.tabBarInset
 
     private let tabItems: [OminaTabBar<Tab>.Item] = [
         .init(tab: .home, symbol: "house", label: "Start"),
@@ -41,9 +41,16 @@ struct MainTabView: View {
         _profile = profile
     }
 
-    /// Karte und AR laufen im Vollbild – dort steht die Leiste nicht im Weg.
+    /// Die Leiste steht auf allen Screens – auf der Karte unterhalb der
+    /// Suchleiste. Ausgenommen sind der AR-Modus (Vollbild im Kamerabild) und
+    /// die laufende Navigation: Dort übernimmt das Routen-Panel den unteren
+    /// Rand.
     private var showsTabBar: Bool {
-        selectedTab != .map && selectedTab != .ar
+        switch selectedTab {
+        case .ar:  return false
+        case .map: return viewModel.activeRoute == nil
+        default:   return true
+        }
     }
 
     var body: some View {
@@ -98,9 +105,11 @@ struct MainTabView: View {
             .toolbar(.hidden, for: .tabBar)
             .tag(Tab.saved)
 
+            // Ohne safeAreaInset: Das Formular steckt in einem eigenen
+            // NavigationStack, der den Abstand von aussen nicht übernimmt –
+            // SettingsView hält den Platz für die Leiste deshalb selbst frei.
             SettingsView(profile: $profile)
                 .environmentObject(authService)
-                .safeAreaInset(edge: .bottom) { tabBarSpacer }
                 .toolbar(.hidden, for: .tabBar)
                 .tag(Tab.profile)
         }
@@ -113,9 +122,15 @@ struct MainTabView: View {
     }
 
     private var mapContent: some View {
-        // Die Karte läuft im Vollbild; Bedienelemente sitzen als Overlay darauf.
+        // Die Karte läuft im Vollbild; Bedienelemente sitzen als Overlay darauf
+        // und rücken um die Höhe der Leiste nach oben, solange sie sichtbar ist.
         // Der AR-Modus ist über den "Kamera"-Eintrag erreichbar.
-        MapView(profile: profile, viewModel: viewModel, onStartARRoute: startARRoute)
+        MapView(
+            profile: profile,
+            viewModel: viewModel,
+            onStartARRoute: startARRoute,
+            bottomInset: showsTabBar ? tabBarInset : 0
+        )
     }
 
     // AR erst aufbauen, wenn der Tab aktiv ist – so starten Kamera und

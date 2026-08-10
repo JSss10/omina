@@ -2,9 +2,9 @@
 // Omina
 //
 // Liste der gespeicherten Orte (saved_places), Aufbau nach Entwurf:
-// Akzentleiste, Titel mit Einleitung und darunter je Ort eine getönte Karte
-// mit Foto, Name, Speicherdatum, Zugänglichkeit fürs eigene Profil, Distanz
-// und Pfeil.
+// Akzentleiste, Titel mit Einleitung und darunter je Ort eine getönte Karte:
+// das Foto gross über die ganze Breite, darunter Name, Speicherdatum,
+// Zugänglichkeit fürs eigene Profil, Distanz und Pfeil.
 //
 // Wird an zwei Stellen genutzt:
 // – Profil-Tab ("Gespeicherte Orte"): nur ansehen + löschen.
@@ -110,45 +110,50 @@ struct SavedPlacesListView: View {
         .accessibilityAddTraits(onSelect == nil ? [] : .isButton)
     }
 
+    /// Foto gross über die ganze Kartenbreite, darunter der Text – so bleibt
+    /// er auch bei langen Namen und Zeitangaben vollständig lesbar (vorher
+    /// stand das Bild links daneben und quetschte die Zeilen).
     private func cardContent(_ place: SavedPlace) -> some View {
-        HStack(spacing: 0) {
+        VStack(alignment: .leading, spacing: 0) {
             thumbnail(for: place)
-                .frame(width: 92)
-                .frame(maxHeight: .infinity)
+                .frame(maxWidth: .infinity)
+                .frame(height: 150)
                 .clipped()
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(place.displayName)
-                    .font(AppTypography.body)
-                    .foregroundStyle(AppColor.textBrand)
-                    .lineLimit(1)
+            HStack(alignment: .center, spacing: AppMetrics.Space.m) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(place.displayName)
+                        .font(AppTypography.body)
+                        .foregroundStyle(AppColor.textBrand)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
 
-                if let saved = savedText(for: place) {
-                    Text(saved)
-                        .font(AppTypography.subheadline)
-                        .foregroundStyle(AppColor.textSecondary)
+                    if let saved = savedText(for: place) {
+                        Text(saved)
+                            .font(AppTypography.subheadline)
+                            .foregroundStyle(AppColor.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    accessLine(for: place)
                 }
 
-                accessLine(for: place)
-            }
-            .padding(.horizontal, AppMetrics.Space.m)
-            .padding(.vertical, AppMetrics.Space.m)
+                Spacer(minLength: AppMetrics.Space.s)
 
-            Spacer(minLength: AppMetrics.Space.s)
+                if let distance = distanceText(for: place) {
+                    Text(distance)
+                        .font(AppTypography.body)
+                        .foregroundStyle(AppColor.textBrand)
+                        .monospacedDigit()
+                        .fixedSize()
+                }
 
-            if let distance = distanceText(for: place) {
-                Text(distance)
-                    .font(AppTypography.body)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 20, weight: .regular))
                     .foregroundStyle(AppColor.textBrand)
-                    .monospacedDigit()
             }
-
-            Image(systemName: "chevron.right")
-                .font(.system(size: 20, weight: .regular))
-                .foregroundStyle(AppColor.textBrand)
-                .padding(.horizontal, AppMetrics.Space.m)
+            .padding(AppMetrics.Space.m)
         }
-        .frame(minHeight: 96)
         .background(
             AppColor.surfaceTinted,
             in: RoundedRectangle(cornerRadius: AppMetrics.Radius.card, style: .continuous)
@@ -205,7 +210,7 @@ struct SavedPlacesListView: View {
                 Text(text)
                     .font(AppTypography.subheadline)
                     .foregroundStyle(AppColor.textSecondary)
-                    .lineLimit(1)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }

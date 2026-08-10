@@ -12,8 +12,10 @@
 import SwiftUI
 
 struct WelcomeView: View {
-    /// Kantenlänge der Bildergruppe – wächst mit der Schriftgrösse mit.
-    @ScaledMetric(relativeTo: .largeTitle) private var heroSize: CGFloat = 280
+    /// Kantenlänge der Bildergruppe. Sie wächst mit der Schriftgrösse mit,
+    /// aber nur bis zur Bildschirmbreite – die Gruppe ist dekorativ und soll
+    /// bei grossen Textstufen nicht seitlich aus dem Screen laufen.
+    @ScaledMetric(relativeTo: .largeTitle) private var heroSize: CGFloat = 300
 
     var body: some View {
         NavigationStack {
@@ -27,7 +29,7 @@ struct WelcomeView: View {
                             subtitle: "Melde dich an oder erstelle ein Konto."
                         )
 
-                        CircleImageCluster.welcome(size: heroSize)
+                        CircleImageCluster.welcome(size: min(heroSize, 320))
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, AppMetrics.Space.m)
                     }

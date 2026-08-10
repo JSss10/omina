@@ -31,6 +31,10 @@ struct MapView: View {
     @ObservedObject var viewModel: MapViewModel
     /// Startet die AR-Navigation zum POI (MainTabView wechselt in den AR-Modus).
     var onStartARRoute: ((POI) -> Void)? = nil
+    /// Platz, den die schwebende Navigationsleiste am unteren Rand belegt.
+    /// Die Bedienelemente der Karte (Suchleiste, Bedienstapel) rücken um
+    /// diesen Betrag nach oben, damit die Leiste unter der Suche steht.
+    var bottomInset: CGFloat = 0
 
     @StateObject private var locationService = LocationService.shared
     @StateObject private var connectivity = ConnectivityMonitor.shared
@@ -352,7 +356,7 @@ struct MapView: View {
             if viewModel.activeRoute == nil {
                 mapControlStack
                     .padding(.trailing, 16)
-                    .padding(.bottom, AppMetrics.Touch.primary + 28)
+                    .padding(.bottom, AppMetrics.Touch.primary + 28 + bottomInset)
             }
         }
         // Suchleiste unten – der Einstieg in Suche und Filter.
@@ -360,7 +364,7 @@ struct MapView: View {
             if viewModel.activeRoute == nil {
                 mapSearchBar
                     .padding(.horizontal, 16)
-                    .padding(.bottom, 12)
+                    .padding(.bottom, 12 + bottomInset)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
@@ -415,6 +419,7 @@ struct MapView: View {
                     .padding(8)
                     .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 8))
                     .padding()
+                    .padding(.bottom, bottomInset)
             }
         }
         .sheet(item: $selectedBarrier) { barrier in

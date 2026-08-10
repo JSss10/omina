@@ -36,6 +36,13 @@ struct SettingsView: View {
                 privacyAndAboutSection
                 accountSection
             }
+            // Platz für die schwebende Navigationsleiste: Das Formular steckt
+            // in einem eigenen NavigationStack und übernimmt den Abstand von
+            // aussen nicht – sonst läge «Abmelden» als letzte Zeile hinter der
+            // Leiste.
+            .safeAreaInset(edge: .bottom) {
+                Color.clear.frame(height: AppMetrics.tabBarInset)
+            }
             .tint(AppColor.accentPrimary)
             .navigationTitle("Profil")
             .navigationBarTitleDisplayMode(.inline)

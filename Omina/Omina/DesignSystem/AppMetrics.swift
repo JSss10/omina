@@ -31,6 +31,14 @@ enum AppMetrics {
         static let sheet: CGFloat = 18
     }
 
+    // MARK: - Schwebende Navigationsleiste (OminaTabBar)
+
+    /// Höhe, die die schwebende Leiste am unteren Rand freihalten muss:
+    /// Kapsel (44 pt Trefferfläche + 2 × 8 pt Innenabstand), ihr Abstand zum
+    /// Bildschirmrand und etwas Luft, damit die letzte Zeile eines Screens
+    /// nicht direkt an der Kapsel klebt.
+    static let tabBarInset: CGFloat = 84
+
     // MARK: - Formularfelder
 
     enum Field {
