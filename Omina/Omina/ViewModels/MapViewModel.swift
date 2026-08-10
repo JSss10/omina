@@ -30,6 +30,15 @@ final class MapViewModel: ObservableObject {
     /// damit die Suche und setzt den Wert danach zurück.
     @Published var pendingCategory: String?
 
+    /// Letztes Ziel, das auf dem Homescreen angetippt wurde. Die Karte löst es
+    /// auf einen POI auf, öffnet dessen Detail-Sheet und setzt den Wert danach
+    /// zurück.
+    @Published var pendingDestination: RecentDestination?
+
+    /// Barrieren-Meldung, die auf dem Homescreen angetippt wurde. Die Karte
+    /// öffnet damit direkt das Barrieren-Detail und setzt den Wert zurück.
+    @Published var pendingBarrier: Barrier?
+
     /// Wie viele Filter gerade greifen – ausgeblendete Orte, ausgeblendete
     /// Barrieren und jeder abgewählte Barrieretyp zählen einzeln. Steht als
     /// Plakette an der Filter-Schaltfläche (Entwurf).
@@ -441,6 +450,25 @@ final class MapViewModel: ObservableObject {
         return altstadtPOIs.first { $0.name.caseInsensitiveCompare(trimmed) == .orderedSame }
     }
 
+    /// Löst ein Ziel der "Letzte Ziele"-Liste auf einen POI auf: bevorzugt über
+    /// die gemerkte ID, sonst über den Namen. Findet sich beides nicht (Ziel
+    /// aus einer früheren Version, Ort ausserhalb der geladenen Altstadt),
+    /// entsteht ein leichter POI aus den gespeicherten Angaben – das Detail
+    /// öffnet sich dadurch immer, wenn auch ohne Zugänglichkeitsdaten.
+    func poi(for destination: RecentDestination) -> POI {
+        if let poiId = destination.poiId,
+           let match = altstadtPOIs.first(where: { $0.id == poiId }) {
+            return match
+        }
+        if let match = poi(named: destination.name) {
+            return match
+        }
+        let distance = locationService.currentLocation?.distance(
+            from: CLLocation(latitude: destination.latitude, longitude: destination.longitude)
+        ) ?? 0
+        return POI(recentDestination: destination, distanceM: distance)
+    }
+
     /// POIs, die auf der Karte/AR angezeigt werden:
     /// – aktive Navigation → nur noch das Ziel (auch bei ausgeblendeten POIs,
     ///   damit das Navigationsziel immer sichtbar bleibt)
@@ -783,7 +811,7 @@ final class MapViewModel: ObservableObject {
             // Daten vorliegen – sonst bleibt die App mit den letzten Daten
             // bedienbar (Funkloch in den Gassen).
             if barriers.isEmpty {
-                loadError = error.localizedDescription
+                loadError = ErrorText.message(for: error)
             }
         }
     }
@@ -840,7 +868,7 @@ final class MapViewModel: ObservableObject {
             activate(route: route, to: poi, profile: profile)
             return true
         } catch {
-            return failRoute(error.localizedDescription, to: poi, profile: profile)
+            return failRoute(ErrorText.message(for: error), to: poi, profile: profile)
         }
     }
 
@@ -881,7 +909,8 @@ final class MapViewModel: ObservableObject {
             name: poi.name,
             latitude: poi.latitude,
             longitude: poi.longitude,
-            imageURL: poi.images.first?.url
+            imageURL: poi.images.first?.url,
+            poiId: poi.id
         )
     }
 
@@ -960,7 +989,7 @@ final class MapViewModel: ObservableObject {
                 )
             }
         } catch {
-            routeOptionsError = error.localizedDescription
+            routeOptionsError = ErrorText.message(for: error)
         }
     }
 
@@ -1084,7 +1113,7 @@ final class MapViewModel: ObservableObject {
             activeCategory = nil
             return results
         } catch {
-            loadError = error.localizedDescription
+            loadError = ErrorText.message(for: error)
             return []
         }
     }
@@ -1111,7 +1140,7 @@ final class MapViewModel: ObservableObject {
         } catch {
             // Nur melden, wenn gar keine (auch keine gecachten) POIs da sind.
             if altstadtPOIs.isEmpty {
-                loadError = error.localizedDescription
+                loadError = ErrorText.message(for: error)
             }
         }
     }

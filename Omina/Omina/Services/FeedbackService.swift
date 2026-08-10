@@ -12,8 +12,15 @@
 import Foundation
 import Supabase
 
-enum FeedbackServiceError: Error {
+enum FeedbackServiceError: GermanLocalizedError {
     case notAuthenticated
+
+    var errorDescription: String? {
+        switch self {
+        case .notAuthenticated:
+            return "Du bist nicht angemeldet. Melde dich an, um eine Meldung zu korrigieren."
+        }
+    }
 }
 
 final class FeedbackService: @unchecked Sendable {

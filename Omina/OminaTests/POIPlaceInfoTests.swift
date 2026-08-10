@@ -82,13 +82,13 @@ struct POIPlaceInfoTests {
     /// Montag liegt im Bereich 1–5, also gelten 09:00–18:00.
     @Test func highlightsTodayFromSpecification() throws {
         let monday = date("2026-08-10T12:00:00Z")
-        #expect(try matchedPOI().openingHoursToday(monday, calendar: utc) == "09:00–18:00")
+        #expect(try matchedPOI().openingHoursToday(monday, calendar: utc) == "09:00 – 18:00")
     }
 
     /// Samstag hat einen eigenen Eintrag – der Wochentag muss exakt treffen.
     @Test func picksTheEntryOfTheCurrentWeekday() throws {
         let saturday = date("2026-08-15T12:00:00Z")
-        #expect(try matchedPOI().openingHoursToday(saturday, calendar: utc) == "10:00–16:00")
+        #expect(try matchedPOI().openingHoursToday(saturday, calendar: utc) == "10:00 – 16:00")
     }
 
     /// Sonntag kommt in keinem Eintrag vor: geschlossen, also keine Zeile.
@@ -108,15 +108,43 @@ struct POIPlaceInfoTests {
         }
         """)
         let wednesday = date("2026-08-12T12:00:00Z")
-        #expect(poi.openingHoursToday(wednesday, calendar: utc) == "11:30–14:00, 18:00–23:00")
+        #expect(poi.openingHoursToday(wednesday, calendar: utc) == "11:30 – 14:00, 18:00 – 23:00")
     }
 
-    /// Ohne strukturierte Fassung gibt es keine Heute-Zeile, die Anzeigezeilen
-    /// bleiben aber nutzbar.
-    @Test func withoutSpecificationOnlyTheLinesRemain() throws {
+    /// Ohne strukturierte Fassung werden die Anzeigezeilen gelesen: Auch dann
+    /// stehen Heute-Zeile und deutsche Wochentagszeilen zur Verfügung.
+    @Test func fallsBackToTheDisplayLines() throws {
         let poi = try poi(details: #"{ "opening_hours": ["Mo-So 10:00-22:00"] }"#)
         #expect(poi.openingHours == ["Mo-So 10:00-22:00"])
-        #expect(poi.openingHoursToday(date("2026-08-10T12:00:00Z"), calendar: utc) == nil)
+        #expect(poi.openingHoursToday(date("2026-08-10T12:00:00Z"), calendar: utc) == "10:00 – 22:00")
+        #expect(poi.openingHoursLines.first == "Mo: 10:00 – 22:00 Uhr")
+        #expect(poi.openingHoursLines.count == 7)
+    }
+
+    /// Die englischen Tageskürzel des Imports werden eingedeutscht, je Tag
+    /// eine Zeile.
+    @Test func translatesWeekdaysOfTheImport() throws {
+        let poi = try poi(details: #"{ "opening_hours": ["Mo,Tu,We,Th,Fr 13:00:00-22:00:00", "Sa 12:00:00-23:00:00"] }"#)
+        #expect(poi.openingHoursLines == [
+            "Mo: 13:00 – 22:00 Uhr",
+            "Di: 13:00 – 22:00 Uhr",
+            "Mi: 13:00 – 22:00 Uhr",
+            "Do: 13:00 – 22:00 Uhr",
+            "Fr: 13:00 – 22:00 Uhr",
+            "Sa: 12:00 – 23:00 Uhr"
+        ])
+    }
+
+    /// Aus der strukturierten Fassung entsteht dieselbe deutsche Form.
+    @Test func buildsGermanLinesFromSpecification() throws {
+        #expect(try matchedPOI().openingHoursLines == [
+            "Mo: 09:00 – 18:00 Uhr",
+            "Di: 09:00 – 18:00 Uhr",
+            "Mi: 09:00 – 18:00 Uhr",
+            "Do: 09:00 – 18:00 Uhr",
+            "Fr: 09:00 – 18:00 Uhr",
+            "Sa: 10:00 – 16:00 Uhr"
+        ])
     }
 
     // MARK: - Kontakt und Quelle
@@ -147,6 +175,7 @@ struct POIPlaceInfoTests {
         """)
 
         #expect(poi.openingHours.isEmpty)
+        #expect(poi.openingHoursLines.isEmpty)
         #expect(poi.openingHoursToday(date("2026-08-10T12:00:00Z"), calendar: utc) == nil)
         #expect(poi.phoneNumber == nil)
         #expect(poi.phoneURL == nil)

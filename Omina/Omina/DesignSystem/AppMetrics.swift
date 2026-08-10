@@ -31,6 +31,22 @@ enum AppMetrics {
         static let sheet: CGFloat = 18
     }
 
+    // MARK: - Formularfelder
+
+    enum Field {
+        /// Einheitliche Höhe ALLER Eingabefelder in den Formularen. Auch das
+        /// Passwortfeld mit der Auge-Schaltfläche (44 pt Trefferfläche) bleibt
+        /// damit genau so hoch wie die Felder daneben – vorher wuchs es aus
+        /// der Reihe heraus.
+        static let height: CGFloat = 56
+        /// Senkrechter Innenabstand eines Felds. Zusammen mit der 44-pt-
+        /// Schaltfläche ergibt er exakt `height`, deshalb bleibt die Reihe
+        /// gleich hoch, ob mit oder ohne Auge.
+        static let verticalPadding: CGFloat = (height - Touch.minimum) / 2
+        /// Höhe der flachen Zahlenfelder in den Karten (Masse, Fähigkeiten).
+        static let compactHeight: CGFloat = 36
+    }
+
     // MARK: - Abstände (4-pt-Raster)
 
     enum Space {

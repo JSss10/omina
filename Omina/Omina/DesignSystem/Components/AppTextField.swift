@@ -88,31 +88,43 @@ struct AppTextField: View {
 
 /// Rahmen und Fläche eines Eingabefelds. Steht als Modifier bereit, damit auch
 /// zusammengesetzte Felder (Vorwahl + Nummer, Auswahlfelder) gleich aussehen.
+///
+/// Die Höhe ist für alle Felder dieselbe (AppMetrics.Field.height): Der
+/// senkrechte Innenabstand ist so bemessen, dass auch ein Feld mit der
+/// 44-pt-Schaltfläche darin (Passwort mit Auge) genau auf diese Höhe kommt.
+/// Bei grossen Dynamic-Type-Stufen darf das Feld über die Höhe hinauswachsen,
+/// damit der Text nicht abgeschnitten wird.
+///
+/// Der Rand ist der funktionale (>= 3:1): Die getönte Fläche allein hebt sich
+/// vom weissen Screen-Hintergrund zu schwach ab, um die Feldgrenze zu tragen
+/// (WCAG 1.4.11).
 struct AppFieldChrome: ViewModifier {
     func body(content: Content) -> some View {
         content
             .padding(.horizontal, AppMetrics.Space.m + AppMetrics.Space.xs)
-            .padding(.vertical, AppMetrics.Space.s + AppMetrics.Space.xs)
-            .frame(minHeight: AppMetrics.Touch.minimum + AppMetrics.Space.xs)
+            .padding(.vertical, AppMetrics.Field.verticalPadding)
+            .frame(minHeight: AppMetrics.Field.height)
             .background(
                 RoundedRectangle(cornerRadius: AppMetrics.Radius.button, style: .continuous)
-                    .fill(AppColor.backgroundPrimary)
+                    .fill(AppColor.surfaceTinted)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: AppMetrics.Radius.button, style: .continuous)
-                    .strokeBorder(AppColor.borderDecorative, lineWidth: 1)
+                    .strokeBorder(AppColor.borderFunctional, lineWidth: 1)
             )
     }
 }
 
 /// Kompakte Variante für kleine Zahlenfelder in den Karten (Masse,
-/// Fähigkeiten): gleiche Farben, aber flacher, damit die Kartenzeile ihre
-/// Höhe behält.
+/// Fähigkeiten): flacher als die Formularfelder, damit die Kartenzeile ihre
+/// Höhe behält – untereinander aber wieder alle gleich hoch. Die Fläche bleibt
+/// weiss, weil diese Felder auf einer getönten Karte sitzen.
 struct CompactFieldChrome: ViewModifier {
     func body(content: Content) -> some View {
         content
             .padding(.horizontal, AppMetrics.Space.s)
             .padding(.vertical, AppMetrics.Space.xs + 2)
+            .frame(minHeight: AppMetrics.Field.compactHeight)
             .background(
                 RoundedRectangle(cornerRadius: AppMetrics.Radius.chip, style: .continuous)
                     .fill(AppColor.backgroundPrimary)

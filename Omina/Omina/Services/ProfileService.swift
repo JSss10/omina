@@ -70,9 +70,18 @@ final class ProfileService: ProfileServiceProtocol, @unchecked Sendable {
     }
 }
 
-enum ProfileServiceError: Error {
+enum ProfileServiceError: GermanLocalizedError {
     case encodingFailed
     case notAuthenticated
+
+    var errorDescription: String? {
+        switch self {
+        case .encodingFailed:
+            return "Dein Profil konnte nicht gespeichert werden."
+        case .notAuthenticated:
+            return "Du bist nicht angemeldet. Melde dich an, um dein Profil zu speichern."
+        }
+    }
 }
 
 private enum UserDefaultsKey {

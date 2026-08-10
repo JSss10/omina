@@ -6,17 +6,22 @@
 // Chips. Dann die letzten Ziele als Bildkarten und zuunterst die neuesten
 // Barrieren-Meldungen als Zeilen.
 //
-// Karten-Interaktionen (Suche öffnen, Ziel ansteuern, Barriere ansehen) laufen
-// über den onOpenMap-Callback.
+// Karten-Interaktionen laufen über Callbacks nach oben: Die Suche öffnet nur
+// die Karte, ein letztes Ziel bzw. eine Barriere öffnet sie direkt beim
+// zugehörigen Detail-Sheet.
 
 import SwiftUI
 import CoreLocation
 
 struct HomeDashboardView: View {
-    /// Wechselt zum Karten-Tab (Tap auf Suche, Ziel oder Barriere).
+    /// Wechselt zum Karten-Tab (Tap auf die Suche).
     let onOpenMap: () -> Void
     /// Öffnet die Karte mit vorgewählter Kategorie (Chip-Reihe).
     let onSelectCategory: (String) -> Void
+    /// Öffnet die Karte direkt beim POI-Detail des angetippten Ziels.
+    let onOpenDestination: (RecentDestination) -> Void
+    /// Öffnet die Karte direkt beim Detail der angetippten Barriere.
+    let onOpenBarrier: (Barrier) -> Void
     /// Anzahl gesetzter Kartenfilter – als Plakette an der Filter-Schaltfläche.
     var activeFilterCount: Int = 0
 
@@ -30,6 +35,9 @@ struct HomeDashboardView: View {
     /// Sortierung der beiden Listen – im Entwurf jeweils rechts neben dem Titel.
     @State private var destinationSort: ListSort = .newest
     @State private var barrierSort: ListSort = .newest
+
+    /// Wetterdetails (UV-Index, gefühlte Temperatur, Wind) als Sheet.
+    @State private var showingWeather = false
 
     // Feldtest: Nur während eines aktiven Testlaufs erscheint oben rechts der
     // "Test beenden"-Button. Er lädt offene Tracking-Events hoch und setzt das
@@ -101,6 +109,13 @@ struct HomeDashboardView: View {
             viewModel.start()
             avatarStore.loadIfNeeded()
         }
+        .sheet(isPresented: $showingWeather) {
+            WeatherDetailSheet(
+                weather: viewModel.weather,
+                placeName: viewModel.weatherPlaceName,
+                errorMessage: viewModel.weatherError
+            )
+        }
     }
 
     /// Feine Linie zwischen den Blöcken (Entwurf).
@@ -163,29 +178,47 @@ struct HomeDashboardView: View {
         .accessibilityHidden(true)
     }
 
-    /// Wetter als Kapsel: Temperatur links, das Wettersymbol rechts im
-    /// violetten Kreis. Ohne Daten bleibt die Kapsel mit Hinweis stehen.
+    /// Wetter als Kapsel: die Temperatur gross und ungekürzt links, das
+    /// Wettersymbol rechts im violetten Kreis. Ein Tipp öffnet die Details
+    /// (gefühlte Temperatur, UV-Index, Feuchte, Wind). Ohne Daten bleibt die
+    /// Kapsel mit Strich stehen und führt zur Erklärung im Sheet.
     private var weatherPill: some View {
-        HStack(spacing: AppMetrics.Space.s) {
-            Circle()
-                .fill(AppColor.accentPrimary)
-                .frame(width: 8, height: 8)
+        Button {
+            showingWeather = true
+        } label: {
+            HStack(spacing: AppMetrics.Space.s) {
+                Text(temperatureText)
+                    .font(AppTypography.title3)
+                    .foregroundStyle(AppColor.textBrand)
+                    .monospacedDigit()
+                    .lineLimit(1)
+                    // Die Temperatur ist die Kernaussage der Kapsel: Sie darf
+                    // nie umbrechen oder gekürzt werden, auch wenn die
+                    // Begrüssung daneben lang ist.
+                    .fixedSize()
 
-            Text(viewModel.weather.map { "\(Int($0.temperatureC.rounded())) °C" } ?? "–")
-                .font(AppTypography.body)
-                .foregroundStyle(AppColor.textBrand)
-                .monospacedDigit()
-
-            Image(systemName: viewModel.weather?.symbolName ?? "cloud.slash")
-                .font(.system(size: 20, weight: .regular))
-                .foregroundStyle(AppColor.onAccent)
-                .frame(width: 56, height: 56)
-                .background(AppColor.accentPrimary, in: Circle())
+                Image(systemName: viewModel.weather?.symbolName ?? "cloud.slash")
+                    .font(.system(size: 20, weight: .regular))
+                    .foregroundStyle(AppColor.onAccent)
+                    .frame(width: 56, height: 56)
+                    .background(AppColor.accentPrimary, in: Circle())
+            }
+            .padding(.leading, AppMetrics.Space.m)
+            .background(AppColor.surfaceTinted, in: Capsule())
+            .contentShape(Capsule())
         }
-        .padding(.leading, AppMetrics.Space.m)
-        .background(AppColor.surfaceTinted, in: Capsule())
+        .buttonStyle(.plain)
+        .layoutPriority(1)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(weatherAccessibilityText)
+        .accessibilityHint("Öffnet die Wetterdetails")
+        .accessibilityAddTraits(.isButton)
+    }
+
+    /// Temperatur der Kapsel, ohne Daten ein Strich.
+    private var temperatureText: String {
+        guard let weather = viewModel.weather else { return "–" }
+        return "\(Int(weather.temperatureC.rounded())) °C"
     }
 
     private var weatherAccessibilityText: String {
@@ -269,9 +302,10 @@ struct HomeDashboardView: View {
     }
 
     /// Bildkarte eines Ziels; ohne Foto bleibt die getönte Fläche stehen.
+    /// Ein Tipp führt auf die Karte und öffnet dort gleich das POI-Detail.
     private func destinationCard(_ destination: RecentDestination) -> some View {
         Button {
-            onOpenMap()
+            onOpenDestination(destination)
         } label: {
             ZStack(alignment: .bottom) {
                 Group {
@@ -306,7 +340,7 @@ struct HomeDashboardView: View {
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(destination.name), \(destinationSubtitle(destination)), öffnet die Karte")
+        .accessibilityLabel("\(destination.name), \(destinationSubtitle(destination)), öffnet den Ort auf der Karte")
         .accessibilityAddTraits(.isButton)
     }
 
@@ -389,9 +423,10 @@ struct HomeDashboardView: View {
     }
 
     /// Eine Barrieren-Meldung: Symbol im getönten Kreis, Typ, Detailzeile.
+    /// Ein Tipp führt auf die Karte und öffnet dort gleich das Barrieren-Detail.
     private func barrierRow(_ barrier: Barrier) -> some View {
         Button {
-            onOpenMap()
+            onOpenBarrier(barrier)
         } label: {
             HStack(spacing: AppMetrics.Space.m) {
                 Image(systemName: barrier.type.symbolName)
@@ -463,7 +498,7 @@ struct HomeDashboardView: View {
     private func barrierAccessibilityText(_ barrier: Barrier) -> String {
         var parts = [barrier.type.localizedLabel]
         if let subtitle = barrierSubtitle(barrier) { parts.append(subtitle) }
-        parts.append("öffnet die Karte")
+        parts.append("öffnet die Barriere auf der Karte")
         return parts.joined(separator: ", ")
     }
 

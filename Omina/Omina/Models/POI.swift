@@ -108,26 +108,53 @@ struct POI: Codable, Identifiable {
         }
     }
 
-    /// Zeiten des heutigen Wochentags, z. B. «09:00–18:00» – aus der
-    /// strukturierten Fassung (opening_hours_spec, Tage 1 = Montag … 7 = Sonntag).
+    /// Zeitfenster aus der strukturierten Fassung (opening_hours_spec,
+    /// Tage 1 = Montag … 7 = Sonntag).
+    private var openingHoursSpecWindows: [OpeningHoursFormatter.Window] {
+        guard case .array(let entries)? = accessibilityDetails?["opening_hours_spec"]
+        else { return [] }
+
+        var windows: [OpeningHoursFormatter.Window] = []
+        for entry in entries {
+            guard case .object(let dict) = entry,
+                  case .array(let days)? = dict["days"],
+                  let opens = string(dict["opens"]),
+                  let closes = string(dict["closes"])
+            else { continue }
+            for day in days.compactMap({ integer($0) }) {
+                windows.append(OpeningHoursFormatter.Window(day: day, opens: opens, closes: closes))
+            }
+        }
+        return windows
+    }
+
+    /// Alle bekannten Zeitfenster: bevorzugt die strukturierte Fassung, sonst
+    /// aus den Anzeigezeilen gelesen (die tragen englische Tageskürzel).
+    private var openingHoursWindows: [OpeningHoursFormatter.Window] {
+        let structured = openingHoursSpecWindows
+        guard structured.isEmpty else { return structured }
+        return OpeningHoursFormatter.windows(fromDisplayLines: openingHours)
+    }
+
+    /// Öffnungszeiten als deutsche Zeilen je Wochentag, eine Zeile pro Tag:
+    /// «Mo: 08:00 – 12:00 Uhr». Lässt sich eine Angabe nicht zerlegen, bleibt
+    /// die Rohzeile stehen – besser eine unsaubere Zeile als gar keine
+    /// Öffnungszeit.
+    var openingHoursLines: [String] {
+        let lines = OpeningHoursFormatter.lines(from: openingHoursWindows)
+        return lines.isEmpty ? openingHours : lines
+    }
+
+    /// Zeiten des heutigen Wochentags, z. B. «09:00 – 18:00».
     /// Datum und Kalender sind Parameter, damit die Tests einen Tag festlegen können.
     func openingHoursToday(_ date: Date = Date(), calendar: Calendar = .current) -> String? {
-        guard case .array(let entries)? = accessibilityDetails?["opening_hours_spec"]
-        else { return nil }
-
         // Calendar zählt Sonntag = 1, die Daten zählen ISO (Montag = 1).
         let weekday = calendar.component(.weekday, from: date)
         let today = ((weekday + 5) % 7) + 1
 
         var ranges: [String] = []
-        for entry in entries {
-            guard case .object(let dict) = entry,
-                  case .array(let days)? = dict["days"],
-                  let opens = string(dict["opens"]),
-                  let closes = string(dict["closes"]),
-                  days.contains(where: { integer($0) == today })
-            else { continue }
-            let range = "\(opens)–\(closes)"
+        for window in openingHoursWindows where window.day == today {
+            let range = OpeningHoursFormatter.range(opens: window.opens, closes: window.closes)
             if !ranges.contains(range) { ranges.append(range) }
         }
         return ranges.isEmpty ? nil : ranges.joined(separator: ", ")
@@ -321,6 +348,23 @@ extension POI {
     /// Suche genutzt, wenn sich der gespeicherte Ort nicht mehr auf einen
     /// geladenen Altstadt-POI auflösen lässt – so lässt er sich trotzdem auf
     /// der Karte ansteuern. Ohne Zugänglichkeitsdaten (Status «unbekannt»).
+    /// Leichter POI aus einem Eintrag der "Letzte Ziele"-Liste. Springt ein,
+    /// wenn sich das Ziel nicht mehr auf einen geladenen Altstadt-POI auflösen
+    /// lässt – der Tipp auf dem Homescreen landet so trotzdem im Detail.
+    /// Ohne Zugänglichkeitsdaten (Status «unbekannt»).
+    init(recentDestination destination: RecentDestination, distanceM: Double = 0) {
+        self.id = destination.poiId ?? destination.id
+        self.name = destination.name
+        self.category = nil
+        self.latitude = destination.latitude
+        self.longitude = destination.longitude
+        self.address = nil
+        self.wheelchairAccessible = nil
+        self.accessibilityDetails = nil
+        self.source = "recent"
+        self.distanceM = distanceM
+    }
+
     init(savedPlace: SavedPlace) {
         self.id = savedPlace.referenceId ?? savedPlace.id
         self.name = savedPlace.displayName

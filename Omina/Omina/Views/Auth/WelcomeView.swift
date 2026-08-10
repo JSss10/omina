@@ -2,15 +2,19 @@
 // Omina
 //
 // Einstieg vor der Anmeldung. Aufbau nach Entwurf: Akzentleiste, Titel mit
-// Einleitung, darunter die Illustration und am unteren Rand die beiden Wege
-// ins Konto – «Anmelden» als Hauptaktion, «Registrieren» getönt darunter.
+// Einleitung, darunter die Bildergruppe auf Kreisen und am unteren Rand die
+// beiden Wege ins Konto – «Anmelden» als Hauptaktion, «Registrieren» getönt
+// darunter.
 //
-// Die Illustration (Asset "WelcomeHero") folgt noch; bis dahin steht der
-// Platzhalter an ihrer Stelle (siehe AssetMedia.swift).
+// Die Illustrationen der Kreise folgen noch; bis dahin trägt jeder Kreis sein
+// Platzhalter-Symbol (siehe CircleImageCluster.swift).
 
 import SwiftUI
 
 struct WelcomeView: View {
+    /// Kantenlänge der Bildergruppe – wächst mit der Schriftgrösse mit.
+    @ScaledMetric(relativeTo: .largeTitle) private var heroSize: CGFloat = 280
+
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
@@ -23,9 +27,9 @@ struct WelcomeView: View {
                             subtitle: "Melde dich an oder erstelle ein Konto."
                         )
 
-                        AssetImage(name: "WelcomeHero", placeholderSymbol: "circle.hexagongrid")
-                            .frame(maxWidth: .infinity, minHeight: 260)
-                            .accessibilityHidden(true)
+                        CircleImageCluster.welcome(size: heroSize)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, AppMetrics.Space.m)
                     }
                     .padding(.horizontal, AppMetrics.Space.l)
                     .padding(.bottom, AppMetrics.Space.m)

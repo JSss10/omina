@@ -75,6 +75,8 @@ struct MainTabView: View {
             HomeDashboardView(
                 onOpenMap: { selectedTab = .map },
                 onSelectCategory: openMap(with:),
+                onOpenDestination: openDestination,
+                onOpenBarrier: openBarrier,
                 activeFilterCount: viewModel.activeFilterCount
             )
             .safeAreaInset(edge: .bottom) { tabBarSpacer }
@@ -136,6 +138,20 @@ struct MainTabView: View {
     /// Kategorie vorbelegen.
     private func openMap(with category: String) {
         viewModel.pendingCategory = category
+        selectedTab = .map
+    }
+
+    /// Letztes Ziel vom Homescreen: Karte öffnen und dort gleich das
+    /// POI-Detail des Ortes zeigen.
+    private func openDestination(_ destination: RecentDestination) {
+        viewModel.pendingDestination = destination
+        selectedTab = .map
+    }
+
+    /// Barrieren-Meldung vom Homescreen: Karte öffnen und dort gleich das
+    /// Barrieren-Detail zeigen.
+    private func openBarrier(_ barrier: Barrier) {
+        viewModel.pendingBarrier = barrier
         selectedTab = .map
     }
 

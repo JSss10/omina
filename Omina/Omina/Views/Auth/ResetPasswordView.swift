@@ -100,7 +100,7 @@ struct ResetPasswordView: View {
             message = "E-Mail gesendet. Prüfe dein Postfach – der Link führt dich zurück in die App."
             isError = false
         } catch {
-            message = "Senden fehlgeschlagen: \(error.localizedDescription)"
+            message = ErrorText.message(for: error, context: "Senden fehlgeschlagen")
             isError = true
         }
     }

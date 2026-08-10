@@ -283,7 +283,7 @@ struct SavedPlacesListView: View {
         do {
             places = try await SavedPlacesService.shared.fetchSavedPlaces()
         } catch {
-            loadError = error.localizedDescription
+            loadError = ErrorText.message(for: error)
         }
         isLoading = false
         await loadPlaceDetails()

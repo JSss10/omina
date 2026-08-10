@@ -152,7 +152,7 @@ struct EmailVerificationView: View {
             secondsUntilResend = Self.resendCooldown
             cooldownRun += 1
         } catch {
-            message = "Senden fehlgeschlagen: \(error.localizedDescription)"
+            message = ErrorText.message(for: error, context: "Senden fehlgeschlagen")
             isError = true
         }
     }

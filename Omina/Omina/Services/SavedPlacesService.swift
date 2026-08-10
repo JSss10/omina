@@ -9,8 +9,15 @@
 import Foundation
 import Supabase
 
-enum SavedPlacesError: Error {
+enum SavedPlacesError: GermanLocalizedError {
     case notAuthenticated
+
+    var errorDescription: String? {
+        switch self {
+        case .notAuthenticated:
+            return "Du bist nicht angemeldet. Melde dich an, um Orte zu speichern."
+        }
+    }
 }
 
 /// Ein vom User gespeicherter Ort aus saved_places.

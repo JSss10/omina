@@ -72,10 +72,12 @@ struct CurrentWeather: Equatable {
     }
 }
 
-enum WeatherServiceError: Error {
+enum WeatherServiceError: GermanLocalizedError {
     case invalidURL
     /// HTTP-Fehlerstatus von Open-Meteo (z. B. 429 = Rate-Limit).
     case badResponse(status: Int)
+
+    var errorDescription: String? { userMessage }
 
     /// Nutzerfreundlicher Hinweis für die UI.
     var userMessage: String {

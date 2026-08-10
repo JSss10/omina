@@ -95,7 +95,7 @@ struct TestProfileSelectionView: View {
                 // Kein manuelles Weiter-Navigieren nötig: RootView wechselt
                 // durch den Auth-State automatisch zu Consent/Onboarding.
             } catch {
-                errorMessage = "Testprofil konnte nicht gestartet werden. Ist das Gerät online? (\(error.localizedDescription))"
+                errorMessage = ErrorText.message(for: error, context: "Testprofil konnte nicht gestartet werden")
                 startingProfileKey = nil
             }
         }

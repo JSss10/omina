@@ -190,7 +190,7 @@ struct FeedbackFormView: View {
                 dismiss()
             } catch {
                 isSubmitting = false
-                errorMessage = error.localizedDescription
+                errorMessage = ErrorText.message(for: error)
             }
         }
     }

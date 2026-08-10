@@ -218,6 +218,9 @@ struct MapView: View {
         }
         .onAppear {
             viewModel.start()
+            // Der Wert kann schon gesetzt sein, bevor die Karte das erste Mal
+            // aufgebaut wird (Tipp auf dem Homescreen wechselt den Tab).
+            openPendingSelection()
         }
         // Nur EINMAL auf den Standort zentrieren (State-Flag statt `.first()`:
         // onReceive abonniert bei jedem Body-Update neu, wodurch `.first()`
@@ -481,6 +484,15 @@ struct MapView: View {
             pendingCategory = category
             viewModel.pendingCategory = nil
             showingSearch = true
+        }
+        // Letztes Ziel bzw. Barriere vom Homescreen: direkt das zugehörige
+        // Detail-Sheet öffnen (beobachtet werden die IDs, weil weder POI noch
+        // Barriere Equatable sind).
+        .onChange(of: viewModel.pendingDestination?.id) { _, _ in
+            openPendingSelection()
+        }
+        .onChange(of: viewModel.pendingBarrier?.id) { _, _ in
+            openPendingSelection()
         }
         .sheet(isPresented: $showingMapSettings) {
             MapSettingsSheet(mapPreferences: mapPreferences)
@@ -1043,6 +1055,34 @@ struct MapView: View {
             startRouteCamera(for: route)
         }
         return success
+    }
+
+    /// Auswahl vom Homescreen einlösen: Ein letztes Ziel öffnet das POI-Detail,
+    /// eine Barrieren-Meldung ihr Barrieren-Detail. Die Karte fährt jeweils an
+    /// die Stelle, damit der Ort hinter dem Sheet sichtbar ist. Nur eins von
+    /// beiden auf einmal – zwei Sheets gleichzeitig gehen nicht.
+    private func openPendingSelection() {
+        if let destination = viewModel.pendingDestination {
+            viewModel.pendingDestination = nil
+            viewModel.pendingBarrier = nil
+            focus(on: viewModel.poi(for: destination))
+            return
+        }
+
+        guard let barrier = viewModel.pendingBarrier else { return }
+        viewModel.pendingBarrier = nil
+        withAnimation(.easeInOut) {
+            cameraPosition = .region(
+                MKCoordinateRegion(
+                    center: CLLocationCoordinate2D(
+                        latitude: barrier.latitude,
+                        longitude: barrier.longitude
+                    ),
+                    span: Self.closeUpSpan
+                )
+            )
+        }
+        selectedBarrier = barrier
     }
 
     private func focus(on poi: POI) {

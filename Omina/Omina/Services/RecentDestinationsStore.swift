@@ -20,6 +20,11 @@ struct RecentDestination: Codable, Identifiable, Equatable {
     /// die vor dieser Version gespeichert wurden – dort steht die getönte
     /// Fläche.
     var imageURL: URL?
+    /// Der Ort, zu dem navigiert wurde. Damit landet ein Tipp auf dem
+    /// Homescreen wieder im richtigen POI-Detail, auch wenn zwei Orte gleich
+    /// heissen. Fehlt bei Zielen aus früheren Versionen – dann wird über den
+    /// Namen aufgelöst.
+    var poiId: UUID?
 
     var coordinate: CLLocationCoordinate2D {
         CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
@@ -41,7 +46,13 @@ final class RecentDestinationsStore: ObservableObject {
 
     /// Trägt ein Ziel ein (neuestes zuerst). Ein bereits vorhandener Ort mit
     /// gleichem Namen rückt nach vorne statt doppelt zu erscheinen.
-    func record(name: String, latitude: Double, longitude: Double, imageURL: URL? = nil) {
+    func record(
+        name: String,
+        latitude: Double,
+        longitude: Double,
+        imageURL: URL? = nil,
+        poiId: UUID? = nil
+    ) {
         let trimmed = name.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty else { return }
 
@@ -55,7 +66,8 @@ final class RecentDestinationsStore: ObservableObject {
                 latitude: latitude,
                 longitude: longitude,
                 visitedAt: Date(),
-                imageURL: imageURL
+                imageURL: imageURL,
+                poiId: poiId
             ),
             at: 0
         )

@@ -135,6 +135,11 @@ struct SignUpView: View {
                     textContentType: .telephoneNumber,
                     autocorrection: false
                 )
+                // Nummer beim Tippen in die Gruppen «00 000 00 00» bringen.
+                .onChange(of: phone) { _, newValue in
+                    let formatted = PhoneNumberFormatter.formatted(newValue)
+                    if formatted != newValue { phone = formatted }
+                }
             }
 
             AppTextField(
@@ -259,7 +264,7 @@ struct SignUpView: View {
                 firstName: firstName,
                 lastName: lastName,
                 country: country,
-                phone: phone.isEmpty ? "" : "\(dialCode.replacingOccurrences(of: " ", with: ""))\(phone)"
+                phone: PhoneNumberFormatter.internationalNumber(dialCode: dialCode, national: phone)
             )
             // Wenn Email-Bestätigung deaktiviert ist, ist man direkt eingeloggt
             // Sonst muss man die E-Mail bestätigen
@@ -267,7 +272,7 @@ struct SignUpView: View {
                 showVerification = true
             }
         } catch {
-            errorMessage = "Registrierung fehlgeschlagen: \(error.localizedDescription)"
+            errorMessage = ErrorText.message(for: error, context: "Registrierung fehlgeschlagen")
         }
     }
 }

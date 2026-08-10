@@ -5,8 +5,12 @@
 // ganze Breite mit Teilen- und Schliessen-Schaltfläche, darunter Name mit
 // Distanz, Kategorie und Adresse, die Zugänglichkeit in einer Zeile und die
 // drei Aktionen als Kacheln. Danach folgen die Angaben aus dem Open-Data-API
-// von Zürich Tourismus: Beschreibung, Stichpunkte, Öffnungszeiten, Kontakt,
-// Preisniveau und die Detailwerte zur Zugänglichkeit.
+// von Zürich Tourismus: Beschreibung, Stichpunkte, Öffnungszeiten, Kontakt
+// und Preisniveau.
+//
+// Die Zugänglichkeit steht ausschliesslich oben in der Statuszeile unter der
+// Adresse – der ausführliche Bewertungsblock am Ende des Sheets ist bewusst
+// weggefallen.
 //
 // Styling gemäss Styleguide v1.0: ausschliesslich Design-Tokens (AppColor,
 // AppTypography, AppMetrics) und die gemeinsamen Komponenten.
@@ -51,8 +55,6 @@ struct POIDetailSheet: View {
                     openingHoursCard
                     contactSection
                     eurokeyHint
-                    ratingsCard
-                    detailsCard
                     infoSourceNote
                 }
                 .padding(AppMetrics.Space.l)
@@ -186,8 +188,10 @@ struct POIDetailSheet: View {
 
     // MARK: - Kopf
 
+    /// Name und Distanz oben, mit deutlichem Abstand darunter Kategorie und
+    /// Adresse – der Titel soll nicht an der Adresse kleben (Entwurf).
     private var header: some View {
-        VStack(alignment: .leading, spacing: AppMetrics.Space.s) {
+        VStack(alignment: .leading, spacing: AppMetrics.Space.m) {
             HStack(alignment: .firstTextBaseline, spacing: AppMetrics.Space.m) {
                 Text(poi.name)
                     .font(AppTypography.title2)
@@ -199,14 +203,16 @@ struct POIDetailSheet: View {
                 distanceLabel
             }
 
-            if let subtitle = headerSubtitle {
-                Text(subtitle)
-                    .font(AppTypography.body)
-                    .foregroundStyle(AppColor.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+            VStack(alignment: .leading, spacing: AppMetrics.Space.s) {
+                if let subtitle = headerSubtitle {
+                    Text(subtitle)
+                        .font(AppTypography.body)
+                        .foregroundStyle(AppColor.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
 
-            accessStatusLine
+                accessStatusLine
+            }
         }
     }
 
@@ -389,17 +395,20 @@ struct POIDetailSheet: View {
                     .foregroundStyle(AppColor.textBrand)
                     .accessibilityAddTraits(.isHeader)
 
+                // Aufhänger und ausführlicher Text sind ein Fliesstext: gleiche
+                // Schriftfarbe, gleicher Zeilenabstand (Styleguide §3, 1,5-fach).
                 if let summary {
                     Text(summary)
                         .font(AppTypography.body)
                         .foregroundStyle(AppColor.textPrimary)
+                        .lineSpacing(6)
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
                 if let description, description != summary {
                     Text(description)
                         .font(AppTypography.body)
-                        .foregroundStyle(AppColor.textSecondary)
+                        .foregroundStyle(AppColor.textPrimary)
                         .lineSpacing(6)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -440,10 +449,11 @@ struct POIDetailSheet: View {
 
     // MARK: - Öffnungszeiten
 
-    /// Öffnungszeiten mit Symbolkreis links (Entwurf). Der heutige Tag steht
-    /// zuoberst, sofern die strukturierten Zeiten vorliegen.
+    /// Öffnungszeiten mit Symbolkreis links (Entwurf). Zuoberst der heutige
+    /// Tag, darunter eine Zeile je Wochentag – immer auf Deutsch und immer in
+    /// derselben Form: «Mo: 08:00 – 12:00 Uhr» (siehe OpeningHoursFormatter).
     private var openingHoursCard: some View {
-        let hours = poi.openingHours
+        let hours = poi.openingHoursLines
         let today = poi.openingHoursToday()
 
         return HStack(alignment: .top, spacing: AppMetrics.Space.m) {
@@ -544,16 +554,16 @@ struct POIDetailSheet: View {
     private func contactRow(_ row: ContactRow) -> some View {
         if let url = row.url {
             Link(destination: url) {
-                contactRowContent(row, showsArrow: true)
+                contactRowContent(row, showsChevron: true)
             }
             .accessibilityLabel("\(row.title): \(row.value)")
         } else {
-            contactRowContent(row, showsArrow: false)
+            contactRowContent(row, showsChevron: false)
                 .accessibilityElement(children: .combine)
         }
     }
 
-    private func contactRowContent(_ row: ContactRow, showsArrow: Bool) -> some View {
+    private func contactRowContent(_ row: ContactRow, showsChevron: Bool) -> some View {
         HStack(spacing: AppMetrics.Space.m) {
             Image(systemName: row.icon)
                 .font(.system(size: 17, weight: .regular))
@@ -573,8 +583,8 @@ struct POIDetailSheet: View {
 
             Spacer(minLength: AppMetrics.Space.s)
 
-            if showsArrow {
-                Image(systemName: "arrow.up.right")
+            if showsChevron {
+                Image(systemName: "chevron.right")
                     .font(.footnote.weight(.semibold))
                     .foregroundStyle(AppColor.textSecondary)
             }
@@ -628,130 +638,6 @@ struct POIDetailSheet: View {
         return false
     }
 
-    // MARK: - Bewertung
-
-    /// ginto-Bewertung für den eigenen Rollstuhltyp: Einstufung und der
-    /// erfüllte Anteil als Balken. Bewertungen anderer Profile bleiben aussen vor.
-    @ViewBuilder
-    private var ratingsCard: some View {
-        if let rating = poi.gintoRating(for: profile.wheelchairType) {
-            VStack(alignment: .leading, spacing: AppMetrics.Space.m) {
-                HStack(spacing: AppMetrics.Space.m) {
-                    Image(systemName: rating.status.symbolName)
-                        .font(.title3.weight(.semibold))
-                        .foregroundStyle(rating.status.tint)
-                        .frame(width: 28)
-
-                    Text(profile.wheelchairType.displayName)
-                        .font(AppTypography.headline)
-                        .foregroundStyle(AppColor.textBrand)
-
-                    Spacer(minLength: AppMetrics.Space.s)
-
-                    Text(rating.gradeLabel)
-                        .font(AppTypography.subheadline.weight(.semibold))
-                        .foregroundStyle(rating.status.tint)
-                        .multilineTextAlignment(.trailing)
-                }
-
-                if let percent = rating.conformancePercent {
-                    conformanceBar(percent: percent, tint: rating.status.tint)
-                }
-            }
-            .padding(AppMetrics.Space.m)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                AppColor.surfaceTinted,
-                in: RoundedRectangle(cornerRadius: AppMetrics.Radius.card, style: .continuous)
-            )
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel("\(profile.wheelchairType.displayName): \(rating.gradeLabel)"
-                + (rating.conformancePercent.map { ", \(Int($0)) Prozent erfüllt" } ?? ""))
-        }
-    }
-
-    private func conformanceBar(percent: Double, tint: Color) -> some View {
-        HStack(spacing: AppMetrics.Space.s + AppMetrics.Space.xs) {
-            GeometryReader { geo in
-                let fraction = max(0, min(1, percent / 100))
-                ZStack(alignment: .leading) {
-                    Capsule()
-                        .fill(AppColor.borderDecorative)
-                    Capsule()
-                        .fill(tint)
-                        .frame(width: geo.size.width * fraction)
-                }
-            }
-            .frame(height: 8)
-
-            Text("\(Int(percent)) %")
-                .font(AppTypography.subheadline.weight(.semibold))
-                .foregroundStyle(tint)
-                .monospacedDigit()
-                .fixedSize()
-        }
-        .accessibilityHidden(true)
-    }
-
-    // MARK: - Detailwerte zur Zugänglichkeit
-
-    @ViewBuilder
-    private var detailsCard: some View {
-        if let details = poi.accessibilityDetails, !details.isEmpty {
-            let rows = details.keys.sorted().compactMap { key -> (String, String)? in
-                guard !isShownElsewhere(key) else { return nil }
-                guard let text = displayValue(details[key]) else { return nil }
-                return (key, text)
-            }
-            if !rows.isEmpty {
-                VStack(spacing: 0) {
-                    ForEach(Array(rows.enumerated()), id: \.offset) { index, row in
-                        HStack(alignment: .top, spacing: AppMetrics.Space.m) {
-                            Text(displayKey(row.0))
-                                .font(AppTypography.body)
-                                .foregroundStyle(AppColor.textPrimary)
-                            Spacer(minLength: AppMetrics.Space.m)
-                            Text(row.1)
-                                .font(AppTypography.body)
-                                .foregroundStyle(AppColor.textSecondary)
-                                .multilineTextAlignment(.trailing)
-                        }
-                        .padding(.horizontal, AppMetrics.Space.m)
-                        .padding(.vertical, AppMetrics.Space.s + AppMetrics.Space.xs)
-
-                        if index < rows.count - 1 {
-                            Rectangle()
-                                .fill(AppColor.borderDecorative)
-                                .frame(height: 1)
-                                .padding(.leading, AppMetrics.Space.m)
-                        }
-                    }
-                }
-                .frame(maxWidth: .infinity)
-                .background(
-                    AppColor.surfaceTinted,
-                    in: RoundedRectangle(cornerRadius: AppMetrics.Radius.card, style: .continuous)
-                )
-            }
-        }
-    }
-
-    /// Schlüssel, die anderswo stehen: Kontakt, Fotos, Zeiten, Texte und die
-    /// internen Import-Merkmale.
-    private func isShownElsewhere(_ key: String) -> Bool {
-        let handled: Set<String> = [
-            "website", "homepage",
-            "images", "image_source",
-            "opening_hours", "opening_hours_spec",
-            "phone", "email", "description", "summary", "teaser", "highlights",
-            "price_range", "street_address", "postal_code", "locality",
-            "address_line", "updated_at",
-            "info_source", "zuerich_name",
-        ]
-        let k = key.lowercased()
-        return k.contains("url") || handled.contains(k)
-    }
-
     /// Quellenangabe und Stand der übernommenen Angaben.
     @ViewBuilder
     private var infoSourceNote: some View {
@@ -793,31 +679,5 @@ struct POIDetailSheet: View {
         item.openInMaps(launchOptions: [
             MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeWalking
         ])
-    }
-
-    // MARK: - Detail Formatting
-
-    /// Bekannte ginto/OSM-Schlüssel eingedeutscht; Rest als Fallback roh.
-    private func displayKey(_ key: String) -> String {
-        switch key.lowercased() {
-        case "door_width", "doorwidth":   return "Türbreite"
-        case "entrance", "entry":         return "Eingang"
-        case "wc", "toilet", "restroom":  return "WC"
-        case "ramp":                      return "Rampe"
-        case "elevator", "lift":          return "Aufzug"
-        case "parking":                   return "Parkplatz"
-        default:
-            return key.replacingOccurrences(of: "_", with: " ").capitalized
-        }
-    }
-
-    private func displayValue(_ value: AnyJSON?) -> String? {
-        switch value {
-        case .string(let s): return s
-        case .double(let d): return d == d.rounded() ? "\(Int(d))" : String(format: "%.1f", d)
-        case .integer(let i): return "\(i)"
-        case .bool(let b):   return b ? "ja" : "nein"
-        default:             return nil
-        }
     }
 }

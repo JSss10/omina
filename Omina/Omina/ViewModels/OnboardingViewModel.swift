@@ -127,7 +127,7 @@ final class OnboardingViewModel: ObservableObject {
             TestAnalyticsService.shared.track("onboarding_completed", screen: "onboarding")
             didComplete = true
         } catch {
-            errorMessage = "Speichern fehlgeschlagen: \(error.localizedDescription)"
+            errorMessage = ErrorText.message(for: error, context: "Speichern fehlgeschlagen")
         }
     }
 

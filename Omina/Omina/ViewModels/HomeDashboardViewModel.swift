@@ -136,7 +136,7 @@ final class HomeDashboardViewModel: ObservableObject {
             weatherError = error.userMessage
         } catch {
             // Netzwerk-/Transportfehler (kein HTTP-Status).
-            weatherError = "Wetter konnte nicht geladen werden: \(error.localizedDescription)"
+            weatherError = ErrorText.message(for: error, context: "Wetter konnte nicht geladen werden")
         }
     }
 

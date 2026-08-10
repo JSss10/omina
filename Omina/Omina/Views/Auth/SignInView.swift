@@ -140,7 +140,7 @@ struct SignInView: View {
         do {
             try await authService.signIn(email: email, password: password)
         } catch {
-            errorMessage = "Anmeldung fehlgeschlagen: \(error.localizedDescription)"
+            errorMessage = ErrorText.message(for: error, context: "Anmeldung fehlgeschlagen")
         }
     }
 }

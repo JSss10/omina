@@ -38,7 +38,7 @@ struct FieldTestSession: Codable {
     }
 }
 
-enum FieldTestError: LocalizedError {
+enum FieldTestError: GermanLocalizedError {
     case notAuthenticated
 
     var errorDescription: String? {

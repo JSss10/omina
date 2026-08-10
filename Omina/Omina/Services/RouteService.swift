@@ -38,7 +38,7 @@ import CoreLocation
 import simd
 
 enum RouteService {
-    enum RouteError: LocalizedError {
+    enum RouteError: GermanLocalizedError {
         case noRoute
         case orsNotConfigured
         case orsRequestFailed

@@ -163,7 +163,7 @@ struct NewPasswordView: View {
             authService.finishPasswordRecovery()
             dismiss()
         } catch {
-            message = "Speichern fehlgeschlagen: \(error.localizedDescription)"
+            message = ErrorText.message(for: error, context: "Speichern fehlgeschlagen")
             isError = true
         }
     }

@@ -11,16 +11,19 @@ enum AppColor {
 
     // MARK: - Basis / Neutral
 
-    /// App-Hintergrund. Light #FFFFFF · Dark #141019 (nie reines Schwarz).
+    /// App-Hintergrund aller Screens: reines Weiss. Light #FFFFFF ·
+    /// Dark #1E1830 (nie reines Schwarz). Die einzige Ausnahme sind die
+    /// Zustands-Screens, die auf `backgroundMuted` stehen.
     static let backgroundPrimary = Color("BackgroundPrimary")
-    /// Karten, Sheets, angehobene Flächen. Light #FAF9FC · Dark #1E1830.
+    /// Karten, Sheets, angehobene Flächen. Light #EDE9FE (Violett 100) ·
+    /// Dark #1E1830.
     static let surfaceRaised = Color("SurfaceRaised")
     /// Ganzflächiger, violett getönter Hintergrund für Zustands-Screens
     /// (Leer-, Lade- und Fehlerzustände). Light #EDE9FE (Violett 100) ·
     /// Dark #1E1830.
     static let backgroundMuted = Color("BackgroundMuted")
-    /// Violett getönte Karten in den Sheets (Filter, Karteneinstellungen,
-    /// Routen, Suche). Light #F5F3FF (Violett 50) · Dark #241D3A.
+    /// Violett getönte Formen auf dem weissen Grund: Karten, Eingabefelder,
+    /// Kapseln und Chips. Light #EDE9FE (Violett 100) · Dark #241D3A.
     static let surfaceTinted = Color("SurfaceTinted")
     /// Fliesstext, Titel. Light #1A1523 (17,9:1) · Dark #F4F1FA.
     static let textPrimary = Color("TextPrimary")

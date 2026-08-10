@@ -73,16 +73,19 @@ struct ARRoutePanel: View {
         }
         .padding(.horizontal, AppMetrics.Space.l)
         .padding(.top, AppMetrics.Space.m)
-        .padding(.bottom, AppMetrics.Space.l)
-        .background(
-            AppColor.backgroundPrimary,
-            in: UnevenRoundedRectangle(
+        .padding(.bottom, AppMetrics.Space.m)
+        // Wie in der Kartenansicht: Die Fläche läuft bis an den unteren
+        // Bildschirmrand, der Inhalt bleibt über dem Home-Indikator.
+        .background {
+            UnevenRoundedRectangle(
                 topLeadingRadius: AppMetrics.Radius.sheet + AppMetrics.Space.s,
                 topTrailingRadius: AppMetrics.Radius.sheet + AppMetrics.Space.s,
                 style: .continuous
             )
-        )
-        .shadow(color: AppColor.textBrand.opacity(0.2), radius: 12, y: -2)
+            .fill(AppColor.backgroundPrimary)
+            .shadow(color: AppColor.textBrand.opacity(0.2), radius: 12, y: -2)
+            .ignoresSafeArea(edges: .bottom)
+        }
     }
 
     // MARK: - Karte
