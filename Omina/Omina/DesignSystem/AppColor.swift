@@ -57,7 +57,9 @@ enum AppColor {
 
     // MARK: - Ränder / Linien
 
-    /// Eingabefelder, funktionale Ränder (>= 3:1). Light #8E8699 · Dark #8A80A3.
+    /// Funktionale Ränder (>= 3:1), die eine Bedienfläche begrenzen.
+    /// Eingabefelder tragen ihn nicht mehr – sie stehen randlos auf ihrer
+    /// getönten Fläche. Light #8E8699 · Dark #8A80A3.
     static let borderFunctional = Color("BorderFunctional")
     /// Dekorative Trennlinien ohne Funktionsinformation. Light #DDD8E4 · Dark #3D3552.
     static let borderDecorative = Color("BorderDecorative")

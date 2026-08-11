@@ -1,7 +1,7 @@
 // AppTextField.swift
 // Omina
 //
-// Eingabefeld gemäss Entwurf: weisse Fläche, feiner Rahmen, Radius 14 und
+// Eingabefeld gemäss Entwurf: getönte Fläche ohne Rahmen, Radius 14 und
 // die Beschriftung als Platzhalter im Feld selbst – es gibt keine Label-Zeile
 // darüber. Damit VoiceOver das Feld trotzdem benennt, wandert der Platzhalter
 // zusätzlich in das Accessibility-Label; er verschwindet nur optisch, sobald
@@ -95,9 +95,10 @@ struct AppTextField: View {
 /// Bei grossen Dynamic-Type-Stufen darf das Feld über die Höhe hinauswachsen,
 /// damit der Text nicht abgeschnitten wird.
 ///
-/// Der Rand ist der funktionale (>= 3:1): Die getönte Fläche allein hebt sich
-/// vom weissen Screen-Hintergrund zu schwach ab, um die Feldgrenze zu tragen
-/// (WCAG 1.4.11).
+/// Die Felder stehen ohne Rand: Ihre Grenze trägt allein die getönte Fläche
+/// auf dem hellen Screen-Hintergrund (Entwurf). Der frühere funktionale Rand
+/// ist damit weg – dafür muss die Fläche der einzige Träger der Feldgrenze
+/// sein, sie darf also nie auf gleich getöntem Grund stehen.
 struct AppFieldChrome: ViewModifier {
     func body(content: Content) -> some View {
         content
@@ -108,17 +109,14 @@ struct AppFieldChrome: ViewModifier {
                 RoundedRectangle(cornerRadius: AppMetrics.Radius.button, style: .continuous)
                     .fill(AppColor.surfaceTinted)
             )
-            .overlay(
-                RoundedRectangle(cornerRadius: AppMetrics.Radius.button, style: .continuous)
-                    .strokeBorder(AppColor.borderFunctional, lineWidth: 1)
-            )
     }
 }
 
 /// Kompakte Variante für kleine Zahlenfelder in den Karten (Masse,
 /// Fähigkeiten): flacher als die Formularfelder, damit die Kartenzeile ihre
 /// Höhe behält – untereinander aber wieder alle gleich hoch. Die Fläche bleibt
-/// weiss, weil diese Felder auf einer getönten Karte sitzen.
+/// weiss, weil diese Felder auf einer getönten Karte sitzen; auch sie kommt
+/// ohne Rand aus, der Hell-Dunkel-Unterschied zur Karte trägt die Feldgrenze.
 struct CompactFieldChrome: ViewModifier {
     func body(content: Content) -> some View {
         content
@@ -128,10 +126,6 @@ struct CompactFieldChrome: ViewModifier {
             .background(
                 RoundedRectangle(cornerRadius: AppMetrics.Radius.chip, style: .continuous)
                     .fill(AppColor.backgroundPrimary)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: AppMetrics.Radius.chip, style: .continuous)
-                    .strokeBorder(AppColor.borderDecorative, lineWidth: 1)
             )
     }
 }
