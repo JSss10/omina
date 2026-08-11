@@ -18,6 +18,12 @@ enum AppColor {
     /// Karten, Sheets, angehobene Flächen. Light #EDE9FE (Violett 100) ·
     /// Dark #1E1830.
     static let surfaceRaised = Color("SurfaceRaised")
+    /// Grundfläche aller Overlays: Bottom-Sheets (Ort, Barriere, Filter,
+    /// Suche, Routen, Wegbeschreibung, Wetter) und die Panels, die über der
+    /// Karte bzw. dem Kamerabild liegen. Bewusst nicht reines Weiss, damit
+    /// sich ein Overlay vom Screen darunter abhebt.
+    /// Light #F5F3FF (Violett 50) · Dark #1E1830.
+    static let surfaceOverlay = Color("SurfaceOverlay")
     /// Ganzflächiger, violett getönter Hintergrund für Zustands-Screens
     /// (Leer-, Lade- und Fehlerzustände). Light #EDE9FE (Violett 100) ·
     /// Dark #1E1830.

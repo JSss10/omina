@@ -13,6 +13,7 @@ Jedes Token liegt als Colorset mit Light-/Dark-Variante in `Assets.xcassets`
 | `BackgroundPrimary`     | #FFFFFF / #141019 | App-Hintergrund                      |
 | `BackgroundMuted`       | #EDE9FE / #1E1830 | Zustands-Screens, Medien-Platzhalter |
 | `SurfaceRaised`         | #FAF9FC / #1E1830 | Karten, Sheets                       |
+| `SurfaceOverlay`        | #F5F3FF / #1E1830 | Grundfläche der Overlays (Sheets, Panels) |
 | `SurfaceTinted`         | #F5F3FF / #241D3A | Getönte Karten in den Sheets         |
 | `TextPrimary`           | #1A1523 / #F4F1FA | Fliesstext, Titel                    |
 | `TextSecondary`         | #524A5E / #B3ACC4 | Metadaten, Hinweise                  |
@@ -36,6 +37,14 @@ Jedes Token liegt als Colorset mit Light-/Dark-Variante in `Assets.xcassets`
 
 SF Pro über die SwiftUI-Text-Styles → Dynamic Type bis AX5 (§03).
 `AppTypography.largeTitle … footnote`, plus `Text.bodyStyle()` (Zeilenhöhe 1,5).
+
+## Symbole (`AppSymbol`)
+
+`AppSymbol.name(_:isSelected:)` liefert im ausgewählten Zustand die gefüllte
+Variante eines SF-Symbols ("house" → "house.fill"), sonst die Kontur. Kennt das
+System keine gefüllte Fassung (z. B. "camera.viewfinder"), bleibt das
+Ausgangssymbol stehen. Verwendet von `OminaTabBar`, `CategoryPill`,
+`SelectionRow`, `SegmentedBar` und den Kategorie-Chips der Suche.
 
 ## Masse (`AppMetrics`)
 

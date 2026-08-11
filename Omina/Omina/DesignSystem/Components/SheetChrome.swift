@@ -220,7 +220,8 @@ struct SegmentedBar<Value: Hashable>: View {
         } label: {
             Group {
                 if let symbol = segment.symbol {
-                    Image(systemName: symbol)
+                    // Aktives Segment: gefülltes Symbol.
+                    Image(systemName: AppSymbol.name(symbol, isSelected: isSelected))
                         .font(.system(size: 18, weight: .semibold))
                 } else {
                     Text(segment.label)

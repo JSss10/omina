@@ -38,15 +38,24 @@ struct AppStateScreen: View {
     @State private var rotation: Double = 0
 
     var body: some View {
-        // Der Inhalt steht mittig; wächst er über die Fläche hinaus (grosse
-        // Dynamic-Type-Stufen bis AX5), wird er scrollbar statt abgeschnitten.
-        GeometryReader { proxy in
-            ScrollView {
-                content
-                    .frame(maxWidth: .infinity, minHeight: proxy.size.height)
+        // Die getönte Fläche liegt als eigene Ebene zuunterst und deckt den
+        // ganzen Bildschirm ab – auch hinter der Statusleiste, sonst bliebe
+        // dort ein weisser Streifen stehen.
+        ZStack {
+            AppColor.backgroundMuted
+                .ignoresSafeArea()
+
+            // Der Inhalt steht mittig; wächst er über die Fläche hinaus (grosse
+            // Dynamic-Type-Stufen bis AX5), wird er scrollbar statt abgeschnitten.
+            GeometryReader { proxy in
+                ScrollView {
+                    content
+                        .frame(maxWidth: .infinity, minHeight: proxy.size.height)
+                }
+                .scrollBounceBehavior(.basedOnSize)
             }
-            .scrollBounceBehavior(.basedOnSize)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(AppColor.backgroundMuted.ignoresSafeArea())
     }
 

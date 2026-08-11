@@ -89,4 +89,25 @@ final class SavedPlacesService: @unchecked Sendable {
             .eq("id", value: id.uuidString)
             .execute()
     }
+
+    /// Ist dieser Ort bereits gespeichert? Grundlage für die Umschaltung
+    /// «Speichern ⇄ Entspeichern» im Orts-Detail.
+    func isSaved(poi: POI) async throws -> Bool {
+        try await fetchSavedPlaces().contains { $0.referenceId == poi.id }
+    }
+
+    /// Entfernt diesen Ort aus den gespeicherten Orten. Über die Referenz auf
+    /// den POI, weil das Detail-Sheet die Zeilen-ID nicht kennt (RLS erlaubt
+    /// nur eigene Zeilen).
+    func remove(poi: POI) async throws {
+        guard AuthService.shared.currentUser != nil else {
+            throw SavedPlacesError.notAuthenticated
+        }
+
+        try await client
+            .from("saved_places")
+            .delete()
+            .eq("reference_id", value: poi.id.uuidString)
+            .execute()
+    }
 }

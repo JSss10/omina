@@ -2,8 +2,8 @@
 // Omina
 //
 // Schwebende Navigationsleiste aus dem Entwurf: eine violette Kapsel, die
-// über dem Inhalt liegt. Der aktive Eintrag sitzt in einem weissen Kreis,
-// zwischen den übrigen stehen feine Trennlinien.
+// über dem Inhalt liegt. Der aktive Eintrag sitzt in einem weissen Kreis und
+// trägt sein Symbol gefüllt, zwischen den übrigen stehen feine Trennlinien.
 //
 // Sie ersetzt die System-Tab-Leiste nur optisch – die Auswahl läuft weiter
 // über dieselbe Bindung wie zuvor (MainTabView).
@@ -51,7 +51,9 @@ struct OminaTabBar<Tab: Hashable>: View {
         return Button {
             selection = item.tab
         } label: {
-            Image(systemName: item.symbol)
+            // Der angetippte Eintrag trägt das gefüllte Symbol – zusätzlich
+            // zum weissen Kreis dahinter.
+            Image(systemName: AppSymbol.name(item.symbol, isSelected: isSelected))
                 .font(.system(size: 20, weight: .regular))
                 .foregroundStyle(isSelected ? AppColor.accentPrimary : AppColor.onAccent)
                 .frame(width: selectionSize, height: selectionSize)

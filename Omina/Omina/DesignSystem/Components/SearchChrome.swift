@@ -126,7 +126,9 @@ struct CategoryPill: View {
     var body: some View {
         Button(action: action) {
             HStack(spacing: AppMetrics.Space.s) {
-                Image(systemName: symbol)
+                // Gewählter Chip: gefülltes Symbol – die Auswahl steckt so
+                // nicht allein in der Farbe.
+                Image(systemName: AppSymbol.name(symbol, isSelected: isSelected))
                     .font(.system(size: 17, weight: .regular))
                 Text(label)
                     .font(AppTypography.body)

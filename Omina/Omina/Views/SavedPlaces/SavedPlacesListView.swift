@@ -32,18 +32,21 @@ struct SavedPlacesListView: View {
     @State private var loadError: String?
 
     var body: some View {
-        VStack(spacing: 0) {
-            BrandAccentBar()
-
-            Group {
-                if isLoading {
-                    AppStateScreen.syncing(
-                        title: "Orte werden geladen",
-                        message: "Deine gespeicherten Orte werden mit deinem Konto abgeglichen."
-                    )
-                } else if let loadError {
-                    errorState(loadError)
-                } else {
+        Group {
+            // Lade- und Fehlerzustand stehen ganzflächig – ihre getönte Fläche
+            // läuft bis unter die Statusleiste. Die Akzentleiste gehört zur
+            // Liste selbst, sonst bliebe über dem Zustands-Screen ein weisser
+            // Streifen stehen.
+            if isLoading {
+                AppStateScreen.syncing(
+                    title: "Orte werden geladen",
+                    message: "Deine gespeicherten Orte werden mit deinem Konto abgeglichen."
+                )
+            } else if let loadError {
+                errorState(loadError)
+            } else {
+                VStack(spacing: 0) {
+                    BrandAccentBar()
                     content
                 }
             }
@@ -112,7 +115,8 @@ struct SavedPlacesListView: View {
 
     /// Foto gross über die ganze Kartenbreite, darunter der Text – so bleibt
     /// er auch bei langen Namen und Zeitangaben vollständig lesbar (vorher
-    /// stand das Bild links daneben und quetschte die Zeilen).
+    /// stand das Bild links daneben und quetschte die Zeilen). Die Distanz
+    /// steht auf der Höhe des Titels, die Angaben darunter mit Luft dazwischen.
     private func cardContent(_ place: SavedPlace) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             thumbnail(for: place)
@@ -120,14 +124,33 @@ struct SavedPlacesListView: View {
                 .frame(height: 150)
                 .clipped()
 
-            HStack(alignment: .center, spacing: AppMetrics.Space.m) {
-                VStack(alignment: .leading, spacing: 2) {
+            // Titelzeile: Name links, Distanz und Pfeil auf derselben Höhe
+            // rechts. Speicherdatum und Zugänglichkeit stehen mit deutlichem
+            // Abstand darunter, statt am Titel zu kleben.
+            VStack(alignment: .leading, spacing: AppMetrics.Space.m) {
+                HStack(alignment: .firstTextBaseline, spacing: AppMetrics.Space.m) {
                     Text(place.displayName)
                         .font(AppTypography.body)
                         .foregroundStyle(AppColor.textBrand)
                         .lineLimit(2)
                         .fixedSize(horizontal: false, vertical: true)
 
+                    Spacer(minLength: AppMetrics.Space.s)
+
+                    if let distance = distanceText(for: place) {
+                        Text(distance)
+                            .font(AppTypography.body)
+                            .foregroundStyle(AppColor.textBrand)
+                            .monospacedDigit()
+                            .fixedSize()
+                    }
+
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 20, weight: .regular))
+                        .foregroundStyle(AppColor.textBrand)
+                }
+
+                VStack(alignment: .leading, spacing: AppMetrics.Space.s) {
                     if let saved = savedText(for: place) {
                         Text(saved)
                             .font(AppTypography.subheadline)
@@ -137,20 +160,6 @@ struct SavedPlacesListView: View {
 
                     accessLine(for: place)
                 }
-
-                Spacer(minLength: AppMetrics.Space.s)
-
-                if let distance = distanceText(for: place) {
-                    Text(distance)
-                        .font(AppTypography.body)
-                        .foregroundStyle(AppColor.textBrand)
-                        .monospacedDigit()
-                        .fixedSize()
-                }
-
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 20, weight: .regular))
-                    .foregroundStyle(AppColor.textBrand)
             }
             .padding(AppMetrics.Space.m)
         }

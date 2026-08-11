@@ -61,8 +61,8 @@ struct SearchSheet: View {
 
             content
         }
-        .background(AppColor.backgroundPrimary)
-        .presentationBackground(AppColor.backgroundPrimary)
+        .background(AppColor.surfaceOverlay)
+        .presentationBackground(AppColor.surfaceOverlay)
         .presentationDetents([.medium, .large], selection: $detent)
         .presentationDragIndicator(.visible)
         // Beim Fokussieren auf volle Höhe wachsen, damit die Tastatur die
@@ -149,7 +149,10 @@ struct SearchSheet: View {
                               ? AnyShapeStyle(AppColor.accentPrimary)
                               : AnyShapeStyle(AppColor.surfaceTinted))
                         .frame(width: 54, height: 54)
-                    Image(systemName: POICategory.symbol(forChip: chip))
+                    Image(systemName: AppSymbol.name(
+                        POICategory.symbol(forChip: chip),
+                        isSelected: isActive
+                    ))
                         .font(.system(size: 22, weight: .medium))
                         .foregroundStyle(isActive ? AppColor.onAccent : AppColor.accentPrimary)
                 }

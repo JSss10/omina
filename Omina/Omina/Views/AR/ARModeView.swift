@@ -278,9 +278,9 @@ struct ARModeView: View {
 
     /// Such-Icon (öffnet dasselbe SearchSheet wie die Kartenansicht) plus –
     /// falls eine Kategorie gewählt ist – ein Chip mit dieser Kategorie, der
-    /// sie per Tap wieder aufhebt. Über der Kamera bewusst mit Material-
-    /// Hintergrund statt der weissen Kreise der Karte, damit die Bedienelemente
-    /// auf jedem Kamerabild lesbar bleiben.
+    /// sie per Tap wieder aufhebt. Der Kreis ist – wie der Kompass daneben und
+    /// wie auf der Karte – deckend weiss: Der frühere durchscheinende Grund
+    /// verschwamm je nach Kamerabild mit dem Motiv dahinter.
     private var searchRow: some View {
         HStack(spacing: 8) {
             Button {
@@ -288,9 +288,9 @@ struct ARModeView: View {
             } label: {
                 Image(systemName: "magnifyingglass")
                     .font(.title2.weight(.semibold))
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(AppColor.accentPrimary)
                     .frame(width: 44, height: 44)
-                    .background(.regularMaterial, in: Circle())
+                    .background(AppColor.backgroundPrimary, in: Circle())
                     .shadow(color: .black.opacity(0.25), radius: 3, y: 1)
             }
             .accessibilityLabel("Orte suchen")

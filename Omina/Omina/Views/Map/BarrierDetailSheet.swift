@@ -60,8 +60,8 @@ struct BarrierDetailSheet: View {
 
             footer
         }
-        .background(AppColor.backgroundPrimary)
-        .presentationBackground(AppColor.backgroundPrimary)
+        .background(AppColor.surfaceOverlay)
+        .presentationBackground(AppColor.surfaceOverlay)
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
         .sheet(isPresented: $showingFeedback) {
@@ -251,7 +251,7 @@ struct BarrierDetailSheet: View {
         .padding(.horizontal, AppMetrics.Space.l)
         .padding(.top, AppMetrics.Space.m)
         .padding(.bottom, AppMetrics.Space.s)
-        .background(AppColor.backgroundPrimary)
+        .background(AppColor.surfaceOverlay)
     }
 
     private func findAlternative(_ action: AlternativeRouteAction) {

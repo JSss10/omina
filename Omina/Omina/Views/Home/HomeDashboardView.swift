@@ -16,6 +16,8 @@ import CoreLocation
 struct HomeDashboardView: View {
     /// Wechselt zum Karten-Tab (Tap auf die Suche).
     let onOpenMap: () -> Void
+    /// Öffnet die Karte und dort gleich das Filter-Overlay (Tap auf Filter).
+    let onOpenFilter: () -> Void
     /// Öffnet die Karte mit vorgewählter Kategorie (Chip-Reihe).
     let onSelectCategory: (String) -> Void
     /// Öffnet die Karte direkt beim POI-Detail des angetippten Ziels.
@@ -24,6 +26,8 @@ struct HomeDashboardView: View {
     let onOpenBarrier: (Barrier) -> Void
     /// Anzahl gesetzter Kartenfilter – als Plakette an der Filter-Schaltfläche.
     var activeFilterCount: Int = 0
+
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     @StateObject private var viewModel = HomeDashboardViewModel()
     @StateObject private var recentDestinations = RecentDestinationsStore.shared
@@ -129,27 +133,50 @@ struct HomeDashboardView: View {
 
     // MARK: - Begrüssung und Wetter
 
+    /// Begrüssung, Name und Wetter stehen nebeneinander. Ab den
+    /// Accessibility-Textgrössen rutscht das Wetter unter die Begrüssung –
+    /// beides nebeneinander würde dort nicht mehr vollständig hineinpassen.
+    @ViewBuilder
     private var header: some View {
-        HStack(spacing: AppMetrics.Space.m) {
-            avatar
-
-            VStack(alignment: .leading, spacing: 0) {
-                Text(viewModel.salutation + ",")
-                    .foregroundStyle(AppColor.textBrand)
-                Text(viewModel.firstName ?? "willkommen")
-                    .foregroundStyle(AppColor.accentPrimary)
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: AppMetrics.Space.m) {
+                    HStack(spacing: AppMetrics.Space.m) {
+                        avatar
+                        greetingLines
+                        Spacer(minLength: 0)
+                    }
+                    weatherPill
+                }
+            } else {
+                HStack(spacing: AppMetrics.Space.m) {
+                    avatar
+                    greetingLines
+                    Spacer(minLength: AppMetrics.Space.s)
+                    weatherPill
+                }
             }
-            .font(AppTypography.title3)
-            .lineLimit(1)
-            .minimumScaleFactor(0.8)
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel(viewModel.greeting)
-
-            Spacer(minLength: AppMetrics.Space.s)
-
-            weatherPill
         }
         .padding(.horizontal, AppMetrics.Space.l)
+    }
+
+    /// Begrüssung und Name stehen je auf einer eigenen Zeile und werden nie
+    /// umgebrochen oder abgeschnitten: Wird es eng (langer Name, grosse
+    /// Textstufe), verkleinert sich die Schrift, bis beides ganz hineinpasst.
+    private var greetingLines: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text(viewModel.salutation + ",")
+                .foregroundStyle(AppColor.textBrand)
+            Text(viewModel.firstName ?? "willkommen")
+                .foregroundStyle(AppColor.accentPrimary)
+        }
+        .font(AppTypography.title3)
+        .lineLimit(1)
+        .allowsTightening(true)
+        .minimumScaleFactor(0.5)
+        .layoutPriority(1)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(viewModel.greeting)
     }
 
     /// Profilbild (in den Einstellungen erfasst), sonst Initialen-Monogramm.
@@ -208,6 +235,10 @@ struct HomeDashboardView: View {
             .contentShape(Capsule())
         }
         .buttonStyle(.plain)
+        // Die Kapsel behält immer ihre volle Breite: Temperatur und Symbol
+        // werden nie gequetscht oder abgeschnitten, auch neben einer langen
+        // Begrüssung nicht.
+        .fixedSize()
         .layoutPriority(1)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(weatherAccessibilityText)
@@ -248,9 +279,13 @@ struct HomeDashboardView: View {
             .accessibilityLabel("Orte suchen")
             .accessibilityHint("Öffnet die Suche auf der Karte")
 
+            // Filter führt auf die Karte und öffnet dort direkt das
+            // Filter-Overlay – der Filter wirkt auf die Karte, also wird er
+            // auch dort gesetzt.
             FilterIconButton(activeCount: activeFilterCount) {
-                onOpenMap()
+                onOpenFilter()
             }
+            .accessibilityHint("Öffnet die Karte mit den Filtern")
         }
         .padding(.horizontal, AppMetrics.Space.l)
     }

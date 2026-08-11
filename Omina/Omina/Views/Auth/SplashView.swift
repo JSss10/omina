@@ -6,6 +6,10 @@
 // knapp oberhalb der Bildschirmmitte, darunter schliesst die Stadt-Illustration
 // bündig am unteren Rand ab.
 //
+// Der getönte Grund (BackgroundMuted, wie bei den Zustands-Screens) läuft über
+// den ganzen Bildschirm – auch hinter der Statusleiste, damit dort kein weisser
+// Streifen stehen bleibt.
+//
 // Logo (Asset "LogoMark") und Illustration (Asset "SplashCity") folgen noch –
 // bis dahin stehen ein getönter Kreis und eine leere Fläche an ihrer Stelle
 // (siehe AssetMedia.swift).
@@ -29,7 +33,10 @@ struct SplashView: View {
 
     var body: some View {
         ZStack(alignment: .bottom) {
-            AppColor.backgroundPrimary
+            // Die getönte Fläche liegt ganz zuunterst und deckt den ganzen
+            // Bildschirm ab – auch hinter der Statusleiste und dem
+            // Home-Indikator. Sonst bliebe oben ein weisser Streifen stehen.
+            AppColor.backgroundMuted
                 .ignoresSafeArea()
 
             // Stadt-Illustration bündig am unteren Rand, über die ganze Breite.
@@ -43,6 +50,8 @@ struct SplashView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .padding(.bottom, opticalLift * 2)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(AppColor.backgroundMuted.ignoresSafeArea())
         // Im Entwurf steht kein Ladeindikator; dass die App noch lädt, sagt
         // VoiceOver zusammen mit der Marke an.
         .accessibilityElement(children: .combine)
@@ -77,8 +86,10 @@ struct SplashView: View {
                     .resizable()
                     .aspectRatio(contentMode: .fit)
             } else {
+                // Der Grund ist selbst getönt – der Platzhalter steht deshalb
+                // eine Stufe kräftiger, sonst verschwände er darin.
                 Circle()
-                    .fill(AppColor.backgroundMuted)
+                    .fill(AppColor.accentMuted)
             }
         }
         .frame(width: signetSize, height: signetSize)

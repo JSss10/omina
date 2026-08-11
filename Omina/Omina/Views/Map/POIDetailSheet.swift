@@ -4,7 +4,8 @@
 // POI-Detail als Bottom-Sheet, Aufbau nach Entwurf: zuoberst das Foto über die
 // ganze Breite mit Teilen- und Schliessen-Schaltfläche, darunter Name mit
 // Distanz, Kategorie und Adresse, die Zugänglichkeit in einer Zeile und die
-// drei Aktionen als Kacheln. Danach folgen die Angaben aus dem Open-Data-API
+// drei Aktionen als Kacheln. Die dritte Kachel schaltet um: Sie speichert den
+// Ort und entfernt ihn beim nächsten Tipp wieder aus den gespeicherten Orten. Danach folgen die Angaben aus dem Open-Data-API
 // von Zürich Tourismus: Beschreibung, Stichpunkte, Öffnungszeiten, Kontakt,
 // Preisniveau und die Detailwerte zur Zugänglichkeit.
 //
@@ -32,11 +33,20 @@ struct POIDetailSheet: View {
     var onShowRoute: ((POI) -> Void)? = nil
 
     @Environment(\.dismiss) private var dismiss
-    @State private var saveState: SaveState = .idle
+    @State private var saveState: SaveState = .unknown
     @State private var photoIndex = 0
 
+    /// Zustand der Speichern-Kachel. Beim Öffnen wird geprüft, ob der Ort
+    /// schon in den gespeicherten Orten steht – die Kachel schaltet danach
+    /// zwischen Speichern und Entspeichern um.
     enum SaveState {
-        case idle, saving, saved, failed
+        /// Noch nicht geprüft bzw. Prüfung läuft.
+        case unknown
+        case notSaved
+        case saving
+        case saved
+        case removing
+        case failed
     }
 
     var body: some View {
@@ -61,11 +71,14 @@ struct POIDetailSheet: View {
                 .padding(AppMetrics.Space.l)
             }
         }
-        .background(AppColor.backgroundPrimary)
-        .presentationBackground(AppColor.backgroundPrimary)
+        .background(AppColor.surfaceOverlay)
+        .presentationBackground(AppColor.surfaceOverlay)
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
         .presentationCornerRadius(AppMetrics.Radius.sheet + AppMetrics.Space.s)
+        // Beim Öffnen prüfen, ob der Ort schon gespeichert ist – nur so kann
+        // die Kachel gleich «Gespeichert» zeigen und ihn wieder entfernen.
+        .task { await loadSaveState() }
     }
 
     // MARK: - Foto mit Aktionen
@@ -190,9 +203,11 @@ struct POIDetailSheet: View {
     // MARK: - Kopf
 
     /// Name und Distanz oben, mit deutlichem Abstand darunter Kategorie und
-    /// Adresse – der Titel soll nicht an der Adresse kleben (Entwurf).
+    /// Adresse – der Titel soll nicht an der Adresse kleben (Entwurf). Auch
+    /// zwischen Adresse und Zugänglichkeit steht Luft, damit die drei Angaben
+    /// als eigene Zeilen lesbar bleiben.
     private var header: some View {
-        VStack(alignment: .leading, spacing: AppMetrics.Space.m) {
+        VStack(alignment: .leading, spacing: AppMetrics.Space.l) {
             HStack(alignment: .firstTextBaseline, spacing: AppMetrics.Space.m) {
                 Text(poi.name)
                     .font(AppTypography.title2)
@@ -204,7 +219,7 @@ struct POIDetailSheet: View {
                 distanceLabel
             }
 
-            VStack(alignment: .leading, spacing: AppMetrics.Space.s) {
+            VStack(alignment: .leading, spacing: AppMetrics.Space.m) {
                 if let subtitle = headerSubtitle {
                     Text(subtitle)
                         .font(AppTypography.body)
@@ -308,12 +323,18 @@ struct POIDetailSheet: View {
                 }
             }
 
+            // Gespeichert steht die Kachel gefüllt – wie ein gedrückter
+            // Schalter. Ein weiterer Tipp entfernt den Ort wieder.
             actionTile(
                 icon: saveIcon,
                 title: saveTitle,
-                loading: saveState == .saving,
-                disabled: saveState == .saving || saveState == .saved,
-                action: savePlace
+                isPrimary: saveState == .saved || saveState == .removing,
+                loading: saveState == .saving || saveState == .removing,
+                disabled: saveState == .saving || saveState == .removing,
+                accessibilityHint: saveState == .saved
+                    ? "Entfernt den Ort aus deinen gespeicherten Orten"
+                    : "Legt den Ort zu deinen gespeicherten Orten",
+                action: toggleSaved
             )
         }
     }
@@ -362,21 +383,23 @@ struct POIDetailSheet: View {
         .accessibilityHint(accessibilityHint ?? "")
     }
 
-    /// Icon der Speichern-Kachel je nach Zustand.
+    /// Icon der Speichern-Kachel je nach Zustand. Ein gespeicherter Ort trägt
+    /// das gefüllte Lesezeichen – ein Tipp darauf entfernt ihn wieder.
     private var saveIcon: String {
         switch saveState {
-        case .idle, .saving: return "bookmark"
-        case .saved:         return "bookmark.fill"
-        case .failed:        return "exclamationmark.triangle"
+        case .unknown, .notSaved, .saving: return "bookmark"
+        case .saved, .removing:            return "bookmark.fill"
+        case .failed:                      return "exclamationmark.triangle"
         }
     }
 
     private var saveTitle: String {
         switch saveState {
-        case .idle:   return "Speichern"
-        case .saving: return "Speichern…"
-        case .saved:  return "Gespeichert"
-        case .failed: return "Fehlgeschlagen"
+        case .unknown, .notSaved: return "Speichern"
+        case .saving:             return "Speichern…"
+        case .saved:              return "Gespeichert"
+        case .removing:           return "Entfernen…"
+        case .failed:             return "Fehlgeschlagen"
         }
     }
 
@@ -745,12 +768,47 @@ struct POIDetailSheet: View {
 
     // MARK: - Aktionen
 
+    /// Prüft beim Öffnen, ob der Ort schon gespeichert ist. Schlägt die
+    /// Abfrage fehl (offline, nicht angemeldet), bleibt es beim Angebot zu
+    /// speichern – der Versuch selbst meldet den Fehler dann deutlich.
+    private func loadSaveState() async {
+        guard saveState == .unknown else { return }
+        let isSaved = (try? await SavedPlacesService.shared.isSaved(poi: poi)) ?? false
+        // Zwischenzeitliche Aktion des Users nicht überschreiben.
+        guard saveState == .unknown else { return }
+        saveState = isSaved ? .saved : .notSaved
+    }
+
+    /// Speichern und Entspeichern über dieselbe Kachel.
+    private func toggleSaved() {
+        switch saveState {
+        case .saved:
+            removePlace()
+        case .unknown, .notSaved, .failed:
+            savePlace()
+        case .saving, .removing:
+            break
+        }
+    }
+
     private func savePlace() {
         saveState = .saving
         Task {
             do {
                 try await SavedPlacesService.shared.save(poi: poi)
                 saveState = .saved
+            } catch {
+                saveState = .failed
+            }
+        }
+    }
+
+    private func removePlace() {
+        saveState = .removing
+        Task {
+            do {
+                try await SavedPlacesService.shared.remove(poi: poi)
+                saveState = .notSaved
             } catch {
                 saveState = .failed
             }

@@ -38,8 +38,8 @@ struct RouteStepsListSheet: View {
                 .padding(.bottom, AppMetrics.Space.xl)
             }
         }
-        .background(AppColor.backgroundPrimary)
-        .presentationBackground(AppColor.backgroundPrimary)
+        .background(AppColor.surfaceOverlay)
+        .presentationBackground(AppColor.surfaceOverlay)
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
     }
@@ -159,7 +159,7 @@ private struct RouteStepRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(step.instruction)
                     .font(AppTypography.body)
-                    .foregroundStyle(state == .done ? AppColor.textSecondary : AppColor.textBrand)
+                    .foregroundStyle(instructionColor)
                     .lineLimit(2)
                 if let way = step.wayText {
                     Text(way)
@@ -185,20 +185,28 @@ private struct RouteStepRow: View {
                 ? AnyShapeStyle(AppColor.accentMuted.opacity(0.5))
                 : AnyShapeStyle(Color.clear)
         )
-        .opacity(state == .done ? 0.6 : 1)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityText)
     }
 
+    /// Schriftfarbe der Anweisung. Auch erledigte Schritte (z. B. «Start»)
+    /// stehen in voller Deckkraft: Sie waren vorher zusätzlich auf 60 %
+    /// abgeblendet und dadurch kaum noch lesbar. Den Unterschied trägt die
+    /// Farbe – kräftiges Markenviolett voraus, gedämpfter Text für Erledigtes.
+    private var instructionColor: Color {
+        state == .done ? AppColor.textSecondary : AppColor.textBrand
+    }
+
     /// Manöver-Symbol im Kreis; erledigte Schritte zeigen ein Häkchen, der
-    /// aktuelle Schritt ist im Akzentviolett gefüllt.
+    /// aktuelle Schritt ist im Akzentviolett gefüllt. Alle drei Zustände sind
+    /// voll deckend – auch der Start-Schritt, sobald er hinter einem liegt.
     private var icon: some View {
         ZStack {
             Circle()
                 .fill(iconFill)
                 .frame(width: 44, height: 44)
             Image(systemName: state == .done ? "checkmark" : step.maneuver.symbolName)
-                .font(.system(size: 17, weight: .regular))
+                .font(.system(size: 17, weight: .semibold))
                 .foregroundStyle(iconForeground)
         }
         .accessibilityHidden(true)
@@ -215,7 +223,9 @@ private struct RouteStepRow: View {
     private var iconForeground: AnyShapeStyle {
         switch state {
         case .current:  return AnyShapeStyle(AppColor.onAccent)
-        case .done:     return AnyShapeStyle(AppColor.Status.openIcon)
+        // Das dunkle Grün des Status-Texts statt des helleren Icon-Grüns:
+        // Auf der hellen Fläche ist das Häkchen damit klar zu erkennen.
+        case .done:     return AnyShapeStyle(AppColor.Status.openText)
         case .upcoming: return AnyShapeStyle(AppColor.accentPrimary)
         }
     }
