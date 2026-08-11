@@ -38,6 +38,14 @@ Jedes Token liegt als Colorset mit Light-/Dark-Variante in `Assets.xcassets`
 SF Pro über die SwiftUI-Text-Styles → Dynamic Type bis AX5 (§03).
 `AppTypography.largeTitle … footnote`, plus `Text.bodyStyle()` (Zeilenhöhe 1,5).
 
+## Symbole (`AppSymbol`)
+
+`AppSymbol.name(_:isSelected:)` liefert im ausgewählten Zustand die gefüllte
+Variante eines SF-Symbols ("house" → "house.fill"), sonst die Kontur. Kennt das
+System keine gefüllte Fassung (z. B. "camera.viewfinder"), bleibt das
+Ausgangssymbol stehen. Verwendet von `OminaTabBar`, `CategoryPill`,
+`SelectionRow`, `SegmentedBar` und den Kategorie-Chips der Suche.
+
 ## Masse (`AppMetrics`)
 
 - `Touch.minimum` 44 · `Touch.primary` 56 · `Touch.arCritical` 72 (§6.1, WCAG 2.5.5)

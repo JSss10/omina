@@ -23,7 +23,8 @@ struct SelectionRow: View {
         Button(action: action) {
             HStack(spacing: AppMetrics.Space.m) {
                 if let icon {
-                    Image(systemName: icon)
+                    // Gewählte Zeile: gefülltes Leit-Icon.
+                    Image(systemName: AppSymbol.name(icon, isSelected: selected))
                         .font(.title3)
                         .foregroundStyle(selected ? AppColor.accentPrimary : AppColor.textBrand)
                         .frame(width: 28)

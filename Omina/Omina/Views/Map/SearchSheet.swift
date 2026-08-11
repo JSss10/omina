@@ -149,7 +149,10 @@ struct SearchSheet: View {
                               ? AnyShapeStyle(AppColor.accentPrimary)
                               : AnyShapeStyle(AppColor.surfaceTinted))
                         .frame(width: 54, height: 54)
-                    Image(systemName: POICategory.symbol(forChip: chip))
+                    Image(systemName: AppSymbol.name(
+                        POICategory.symbol(forChip: chip),
+                        isSelected: isActive
+                    ))
                         .font(.system(size: 22, weight: .medium))
                         .foregroundStyle(isActive ? AppColor.onAccent : AppColor.accentPrimary)
                 }
