@@ -10,11 +10,14 @@
 // und Barrieren-State mit dem AR-Modus geteilt werden.
 //
 // Kameraführung während der Navigation (Feldtest-Rückmeldung):
+// – Route und Standort liegen IMMER im freien Streifen zwischen Statusleiste
+//   und Routen-Panel, nie darunter. Die Höhe des Panels und die sicheren
+//   Bereiche werden dafür gemessen (visibleStrip); daraus ergeben sich
+//   Zoomstufe und Kartenzentrum – in der Übersicht wie im Folgen-Modus.
 // – Beim Start einer Route zeigt die Karte die GANZE Strecke – vom eigenen
-//   Standort bis zum Ziel – im freien Bereich zwischen den Bedienelementen
-//   oben und dem Routen-Panel unten. Rechts oben stehen dafür zwei feste
-//   Schaltflächen: oben "ganze Route anzeigen", darunter der Standort-Knopf,
-//   der immer auf den aktuellen Standort zoomt (Folgen-Modus).
+//   Standort bis zum Ziel – in diesem Streifen. Rechts oben stehen dafür zwei
+//   feste Schaltflächen: oben "ganze Route anzeigen", darunter der
+//   Standort-Knopf, der immer auf den aktuellen Standort zoomt (Folgen-Modus).
 // – Die Karte dreht sich in beiden Modi mit der EIGENEN Ausrichtung mit
 //   (Blickrichtung nach oben), statt starr der Routenrichtung zu folgen.
 // – Danach wird die Zoomstufe NIE automatisch verändert: Was der User mit
@@ -85,6 +88,14 @@ struct MapView: View {
     @State private var routeCameraMode: RouteCameraMode = .overview
     /// Laufende Zwischenwerte der Kameraführung (siehe Klasse unten).
     @State private var navCamera = NavigationCameraState()
+    /// Gemessene Bildhöhe der Karte inklusive der sicheren Bereiche.
+    @State private var mapHeight: CGFloat = 0
+    /// Höhe der Statusleiste bzw. des oberen sicheren Bereichs.
+    @State private var safeAreaTop: CGFloat = 0
+    /// Höhe des unteren sicheren Bereichs (Home-Indikator).
+    @State private var safeAreaBottom: CGFloat = 0
+    /// Gemessene Höhe des Routen-Panels; 0, solange keine Route läuft.
+    @State private var routePanelHeight: CGFloat = 0
 
     /// Kameramodus während der Navigation.
     enum RouteCameraMode {
@@ -107,6 +118,17 @@ struct MapView: View {
     )
 
     var body: some View {
+        // Die Masse des Bildschirms und der sicheren Bereiche bestimmen den
+        // freien Streifen zwischen Statusleiste und Routen-Panel – in ihm muss
+        // die Route liegen (siehe visibleStrip).
+        GeometryReader { proxy in
+            map
+                .onAppear { readLayout(proxy) }
+                .onChange(of: proxy.size) { _, _ in readLayout(proxy) }
+        }
+    }
+
+    private var map: some View {
         mapContainer {
             // Standortpunkt mit Blickrichtungs-Kegel. Die Geräteausrichtung
             // wird um die aktuelle Kartendrehung bereinigt, damit der Kegel
@@ -269,11 +291,17 @@ struct MapView: View {
             guard newID != nil, let route = viewModel.activeRoute else {
                 routeCameraMode = .overview
                 navCamera.reset()
+                routePanelHeight = 0
                 return
             }
             if routeCameraMode == .overview {
                 fitCamera(to: route)
             }
+        }
+        // Der freie Streifen hat sich geändert (Panel gemessen oder höher
+        // geworden, Gerät gedreht): Route und Standort wieder hineinrücken.
+        .onChange(of: routePanelHeight) { _, _ in
+            refreshNavigationCameraForLayout()
         }
         .onReceive(barrierNotifications.$tappedBarrierId) { barrierId in
             guard let barrierId,
@@ -394,6 +422,19 @@ struct MapView: View {
                 // Das Panel sitzt wie ein Sheet bündig am unteren Rand über die
                 // ganze Breite (Entwurf); die Karten-Bedienelemente sind
                 // während der Navigation ohnehin ausgeblendet.
+                //
+                // Seine Höhe wird gemessen: Sie bestimmt, wie viel Karte unten
+                // verdeckt ist – und damit, wohin die Kamera Route und
+                // Standort setzen muss, damit beide sichtbar bleiben.
+                .background {
+                    GeometryReader { proxy in
+                        Color.clear
+                            .onAppear { routePanelHeight = proxy.size.height }
+                            .onChange(of: proxy.size.height) { _, newValue in
+                                routePanelHeight = newValue
+                            }
+                    }
+                }
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
@@ -507,6 +548,10 @@ struct MapView: View {
             openPendingSelection()
         }
         .onChange(of: viewModel.pendingBarrier?.id) { _, _ in
+            openPendingSelection()
+        }
+        // Gespeicherter Ort aus der Liste «Orte».
+        .onChange(of: viewModel.pendingSavedPlace?.id) { _, _ in
             openPendingSelection()
         }
         // Filter vom Homescreen: hier auf der Karte das Filter-Overlay öffnen.
@@ -663,6 +708,93 @@ struct MapView: View {
                 .shadow(color: .black.opacity(0.2), radius: 3, y: 1)
         }
         .accessibilityLabel("Karteneinstellungen")
+    }
+
+    // MARK: - Freier Streifen zwischen Statusleiste und Routen-Panel
+
+    /// Abstand, den Route und Standort zur Statusleiste bzw. zum Routen-Panel
+    /// halten – sie sollen nicht an der Kante kleben.
+    private static let stripMargin: CGFloat = 12
+
+    /// Anteil der Bildhöhe, den MapKit bei Neigung 0 je Meter Kameraabstand
+    /// zeigt (empirisch: die Bildhöhe entspricht gut der halben Kamerahöhe).
+    /// Damit lassen sich Bildschirmanteile in Meter umrechnen.
+    private static let visibleHeightPerDistance: Double = 0.53
+
+    /// Der freie Streifen der Karte als Anteile der Bildhöhe (0 = oben,
+    /// 1 = unten): oben begrenzt ihn die Statusleiste, unten das Routen-Panel.
+    /// Solange nichts gemessen ist, gelten die Werte eines Bildschirms ohne
+    /// Panel.
+    private var visibleStrip: (top: Double, bottom: Double) {
+        guard mapHeight > 0 else { return (0, 1) }
+        let covered = routePanelHeight > 0
+            ? routePanelHeight + safeAreaBottom + Self.stripMargin
+            : safeAreaBottom
+        let top = Double((safeAreaTop + Self.stripMargin) / mapHeight)
+        let bottom = Double((mapHeight - covered) / mapHeight)
+        guard bottom - top > 0.2 else { return (0, 1) }
+        return (top, bottom)
+    }
+
+    /// Höhe des freien Streifens als Anteil der Bildhöhe.
+    private var stripHeightFraction: Double {
+        let strip = visibleStrip
+        return strip.bottom - strip.top
+    }
+
+    /// Mitte des freien Streifens als Anteil der Bildhöhe.
+    private var stripCenterFraction: Double {
+        let strip = visibleStrip
+        return (strip.top + strip.bottom) / 2
+    }
+
+    /// Übernimmt Bildhöhe und sichere Bereiche aus dem Layout. Läuft eine
+    /// Route, wird die Kamera danach neu gesetzt – der Streifen hat sich
+    /// geändert.
+    private func readLayout(_ proxy: GeometryProxy) {
+        safeAreaTop = proxy.safeAreaInsets.top
+        safeAreaBottom = proxy.safeAreaInsets.bottom
+        mapHeight = proxy.size.height + safeAreaTop + safeAreaBottom
+        refreshNavigationCameraForLayout()
+    }
+
+    /// Setzt die Kamera nach einer Layoutänderung neu, damit Route und Standort
+    /// im freien Streifen bleiben.
+    ///
+    /// Die Zoomstufe bleibt dabei stehen – sie gehört dem User. Nur wenn sich
+    /// der Streifen deutlich verändert hat (das Panel wurde erstmals gemessen,
+    /// das Gerät gedreht), wird die Übersicht neu eingepasst: Sonst stünde die
+    /// Route weiterhin zu gross im Bild und liefe unter das Panel.
+    private func refreshNavigationCameraForLayout() {
+        guard let route = viewModel.activeRoute else { return }
+
+        let fraction = stripHeightFraction
+        let needsRefit = navCamera.fittedStripFraction
+            .map { abs($0 - fraction) > 0.05 } ?? true
+
+        if routeCameraMode == .overview, needsRefit {
+            fitCamera(to: route, force: true)
+            return
+        }
+
+        applyNavigationCamera(force: true)
+    }
+
+    /// Kartenzentrum, damit `anchor` im Bild auf der Höhe `fraction` sitzt
+    /// (0 = oberer Rand, 1 = unterer Rand). Die Karte ist in Blickrichtung
+    /// gedreht, deshalb liegt die Verschiebung auf genau dieser Achse.
+    private func center(
+        placing anchor: CLLocationCoordinate2D,
+        atScreenFraction fraction: Double,
+        heading: CLLocationDirection,
+        distance: CLLocationDistance
+    ) -> CLLocationCoordinate2D {
+        let visibleHeightM = distance * Self.visibleHeightPerDistance
+        return Self.coordinate(
+            from: anchor,
+            distanceM: (fraction - 0.5) * visibleHeightM,
+            bearingDeg: heading
+        )
     }
 
     /// Karte auf den eigenen Standort holen und dorthin zoomen – unabhängig
@@ -841,22 +973,9 @@ struct MapView: View {
         fitCamera(to: route, force: true)
     }
 
-    /// Kameraabstand je Meter Ausdehnung der Route. Sichtbar ist nur der freie
-    /// Streifen zwischen den Bedienelementen oben und dem Routen-Panel plus
-    /// Tab-Leiste unten – gut die Hälfte der Bildhöhe. Der Faktor sorgt dafür,
-    /// dass die Route in DIESEN Streifen passt, nicht bloss auf den Schirm,
-    /// und zwar in jeder Drehlage (die Karte dreht sich ja mit).
-    private static let routeOverviewDistanceFactor = 3.8
     /// Untergrenze des Kameraabstands, damit sehr kurze Routen nicht
     /// übermässig herangezoomt werden.
     private static let routeOverviewMinDistanceM: CLLocationDistance = 320
-    /// Anteil des Kameraabstands, um den der Ausschnitt entgegen der
-    /// Blickrichtung verschoben wird. Das Panel unten ist deutlich höher als
-    /// die Bedienzeile oben, der freie Bereich liegt also über der Bildmitte;
-    /// die Verschiebung rückt die Route dort hinein. Bewusst am Kameraabstand
-    /// bemessen und nicht an der Routenlänge – verdeckt wird immer derselbe
-    /// ANTEIL des Bildes, unabhängig davon, wie lang die Strecke ist.
-    private static let routeOverviewBottomBias = 0.10
 
     /// Passt den Kartenausschnitt auf die KOMPLETTE Route ein – vom eigenen
     /// Standort bis zum Ziel, im freien Bereich zwischen den Bedienelementen
@@ -903,13 +1022,19 @@ struct MapView: View {
         let heightM = (maxLat - minLat) * metersPerDegreeLatitude
         let diagonalM = (widthM * widthM + heightM * heightM).squareRoot()
 
+        // Die Route muss in den FREIEN Streifen passen (zwischen Statusleiste
+        // und Routen-Panel), nicht bloss auf den Schirm: Der Abstand wird
+        // deshalb um genau den Anteil vergrössert, den das Panel verdeckt.
+        // Die Diagonale (statt Breite oder Höhe) deckt jede Drehlage ab –
+        // die Karte dreht sich ja mit der Blickrichtung.
+        let visibleHeightM = diagonalM / max(stripHeightFraction, 0.2)
         let distance = max(
-            diagonalM * Self.routeOverviewDistanceFactor,
+            visibleHeightM / Self.visibleHeightPerDistance,
             Self.routeOverviewMinDistanceM
         )
 
         navCamera.overviewCenter = boundingBoxCenter
-        navCamera.overviewOffsetM = distance * Self.routeOverviewBottomBias
+        navCamera.fittedStripFraction = stripHeightFraction
         // Zoomstufe der Übersicht auch als Folgen-Zoom übernehmen: Der Wechsel
         // in den Folgen-Modus zoomt dadurch nicht automatisch näher heran.
         navCamera.distanceM = distance
@@ -1003,25 +1128,35 @@ struct MapView: View {
         switch routeCameraMode {
         case .overview:
             guard let base = navCamera.overviewCenter else { return nil }
-            // Entgegen der Blickrichtung versetzt, damit die Route über dem
-            // Routen-Panel im freien Bereich liegt.
-            return Self.coordinate(
-                from: base,
-                distanceM: navCamera.overviewOffsetM ?? 0,
-                bearingDeg: (heading + 180).truncatingRemainder(dividingBy: 360)
+            // Die Route sitzt mittig im freien Streifen – also über dem
+            // Routen-Panel und unter der Statusleiste.
+            return center(
+                placing: base,
+                atScreenFraction: stripCenterFraction,
+                heading: heading,
+                distance: distance
             )
         case .following:
             guard let location else { return nil }
-            // Zentrum etwas in Blickrichtung versetzen, damit der eigene
-            // Standort im unteren Drittel sitzt und mehr Strecke voraus
-            // sichtbar ist – proportional zum Zoom, damit es in jeder Stufe passt.
-            return Self.coordinate(
-                from: snappedUserCoordinate(for: location),
-                distanceM: min(distance * 0.15, 90),
-                bearingDeg: heading
+            // Der eigene Standort sitzt im unteren Drittel des FREIEN
+            // Streifens – nicht des Bildschirms. Vorher lag er im unteren
+            // Bildschirmdrittel und damit hinter dem Routen-Panel: Weder
+            // Standort noch Route waren dann zu sehen.
+            let strip = visibleStrip
+            let userFraction = strip.top + stripHeightFraction * Self.followingUserStripPosition
+            return center(
+                placing: snappedUserCoordinate(for: location),
+                atScreenFraction: userFraction,
+                heading: heading,
+                distance: distance
             )
         }
     }
+
+    /// Wo im freien Streifen der eigene Standort sitzt (0 = oben, 1 = unten).
+    /// Etwas unterhalb der Mitte: So bleibt oberhalb mehr Strecke sichtbar,
+    /// ohne dass der Punkt an den unteren Rand des Streifens rutscht.
+    private static let followingUserStripPosition: Double = 0.7
 
     /// Geglättete Richtung, in die die Karte gedreht wird: bevorzugt die eigene
     /// Blickrichtung, ersatzweise die Fahrtrichtung der Route. Die Glättung
@@ -1115,7 +1250,17 @@ struct MapView: View {
         if let destination = viewModel.pendingDestination {
             viewModel.pendingDestination = nil
             viewModel.pendingBarrier = nil
+            viewModel.pendingSavedPlace = nil
             focus(on: viewModel.poi(for: destination))
+            return
+        }
+
+        // Gespeicherter Ort aus der Liste «Orte»: gleicher Weg wie ein letztes
+        // Ziel – Karte fährt hin, das POI-Detail öffnet sich darüber.
+        if let place = viewModel.pendingSavedPlace {
+            viewModel.pendingSavedPlace = nil
+            viewModel.pendingBarrier = nil
+            focus(on: viewModel.poi(for: place))
             return
         }
 
@@ -1255,12 +1400,13 @@ final class NavigationCameraState {
     var distanceM: CLLocationDistance?
     /// Mittelpunkt der eingepassten Route (Übersichtsmodus).
     var overviewCenter: CLLocationCoordinate2D?
-    /// Versatz des Übersichts-Zentrums entgegen der Blickrichtung, damit die
-    /// Route über dem Routen-Panel frei liegt.
-    var overviewOffsetM: CLLocationDistance?
     /// Route, deren Verlauf zuletzt eingepasst wurde (verhindert doppeltes
     /// Einpassen bei mehreren Auslösern).
     var fittedRouteID: UUID?
+    /// Höhe des freien Streifens (Anteil der Bildhöhe), für die zuletzt
+    /// eingepasst wurde. Ändert sie sich deutlich – etwa weil das Routen-Panel
+    /// erst nach dem Einpassen gemessen wurde –, wird neu eingepasst.
+    var fittedStripFraction: Double?
 
     func reset() {
         smoothedHeadingDeg = nil
@@ -1269,8 +1415,8 @@ final class NavigationCameraState {
         pausedUntil = nil
         distanceM = nil
         overviewCenter = nil
-        overviewOffsetM = nil
         fittedRouteID = nil
+        fittedStripFraction = nil
     }
 }
 

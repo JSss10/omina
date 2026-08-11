@@ -43,6 +43,11 @@ final class MapViewModel: ObservableObject {
     /// direkt das Filter-Overlay und setzt den Wert zurück.
     @Published var pendingFilter = false
 
+    /// Gespeicherter Ort, der in der Liste «Gespeicherte Orte» angetippt wurde.
+    /// Die Karte löst ihn auf einen POI auf, fährt dorthin, öffnet dessen
+    /// Detail-Sheet und setzt den Wert danach zurück.
+    @Published var pendingSavedPlace: SavedPlace?
+
     /// Wie viele Filter gerade greifen – ausgeblendete Orte, ausgeblendete
     /// Barrieren und jeder abgewählte Barrieretyp zählen einzeln. Steht als
     /// Plakette an der Filter-Schaltfläche (Entwurf).
@@ -471,6 +476,24 @@ final class MapViewModel: ObservableObject {
             from: CLLocation(latitude: destination.latitude, longitude: destination.longitude)
         ) ?? 0
         return POI(recentDestination: destination, distanceM: distance)
+    }
+
+    /// Löst einen gespeicherten Ort auf einen POI auf: bevorzugt über die
+    /// Referenz auf den Altstadt-POI, sonst über den Namen. Findet sich beides
+    /// nicht (Ort ausserhalb der geladenen Altstadt), entsteht ein leichter POI
+    /// aus den gespeicherten Angaben – das Detail öffnet sich dadurch immer.
+    func poi(for place: SavedPlace) -> POI {
+        if let referenceId = place.referenceId,
+           let match = altstadtPOIs.first(where: { $0.id == referenceId }) {
+            return match
+        }
+        if let match = poi(named: place.displayName) {
+            return match
+        }
+        let distance = locationService.currentLocation?.distance(
+            from: CLLocation(latitude: place.latitude, longitude: place.longitude)
+        ) ?? 0
+        return POI(savedPlace: place, distanceM: distance)
     }
 
     /// POIs, die auf der Karte/AR angezeigt werden:

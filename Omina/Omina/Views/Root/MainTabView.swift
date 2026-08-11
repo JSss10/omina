@@ -100,7 +100,7 @@ struct MainTabView: View {
                 .tag(Tab.ar)
 
             NavigationStack {
-                SavedPlacesListView(profile: profile)
+                SavedPlacesListView(onSelect: openSavedPlace, profile: profile)
             }
             .safeAreaInset(edge: .bottom) { tabBarSpacer }
             .toolbar(.hidden, for: .tabBar)
@@ -168,6 +168,13 @@ struct MainTabView: View {
     /// POI-Detail des Ortes zeigen.
     private func openDestination(_ destination: RecentDestination) {
         viewModel.pendingDestination = destination
+        selectedTab = .map
+    }
+
+    /// Gespeicherter Ort aus der Liste «Orte»: Karte öffnen, dorthin fahren und
+    /// gleich das POI-Detail des Ortes zeigen.
+    private func openSavedPlace(_ place: SavedPlace) {
+        viewModel.pendingSavedPlace = place
         selectedTab = .map
     }
 

@@ -365,7 +365,7 @@ extension POI {
         self.distanceM = distanceM
     }
 
-    init(savedPlace: SavedPlace) {
+    init(savedPlace: SavedPlace, distanceM: Double = 0) {
         self.id = savedPlace.referenceId ?? savedPlace.id
         self.name = savedPlace.displayName
         self.category = nil
@@ -375,7 +375,7 @@ extension POI {
         self.wheelchairAccessible = nil
         self.accessibilityDetails = nil
         self.source = "saved"
-        self.distanceM = 0
+        self.distanceM = distanceM
     }
 }
 
