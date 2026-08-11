@@ -12,8 +12,9 @@
 // Kameraführung während der Navigation (Feldtest-Rückmeldung):
 // – Beim Start einer Route zeigt die Karte die GANZE Strecke – vom eigenen
 //   Standort bis zum Ziel – im freien Bereich zwischen den Bedienelementen
-//   oben und dem Routen-Panel unten. Der Button rechts oben wechselt auf
-//   "dem Standort folgen" und zurück.
+//   oben und dem Routen-Panel unten. Rechts oben stehen dafür zwei feste
+//   Schaltflächen: oben "ganze Route anzeigen", darunter der Standort-Knopf,
+//   der immer auf den aktuellen Standort zoomt (Folgen-Modus).
 // – Die Karte dreht sich in beiden Modi mit der EIGENEN Ausrichtung mit
 //   (Blickrichtung nach oben), statt starr der Routenrichtung zu folgen.
 // – Danach wird die Zoomstufe NIE automatisch verändert: Was der User mit
@@ -194,8 +195,11 @@ struct MapView: View {
                 }
             }
         }
+        // Apples eigener Standort-Knopf ist bewusst nicht dabei: Er sass in
+        // derselben Ecke wie Kompass und Bedienstapel und schaltete nur die
+        // Verfolgung um, statt auf den Standort zu zoomen. Diese Aufgabe hat
+        // jetzt allein der Standort-Knopf im Bedienstapel.
         .mapControls {
-            MapUserLocationButton()
             MapScaleView()
         }
         // Direkt auf der Map, damit Hell-/Dunkel-Modus und Satellitenansicht
@@ -225,6 +229,7 @@ struct MapView: View {
             // Der Wert kann schon gesetzt sein, bevor die Karte das erste Mal
             // aufgebaut wird (Tipp auf dem Homescreen wechselt den Tab).
             openPendingSelection()
+            openPendingFilter()
         }
         // Nur EINMAL auf den Standort zentrieren (State-Flag statt `.first()`:
         // onReceive abonniert bei jedem Body-Update neu, wodurch `.first()`
@@ -283,7 +288,7 @@ struct MapView: View {
         .overlay(alignment: .topLeading) {
             if viewModel.activeRoute == nil {
                 mapLayersButton
-                    .padding(.leading, 16)
+                    .padding(.leading, Self.controlGutter)
                     .padding(.top, 16)
             }
         }
@@ -340,12 +345,15 @@ struct MapView: View {
         .overlay(alignment: .topTrailing) {
             VStack(spacing: 12) {
                 CompassView(heading: locationService.heading, background: Self.controlBackground)
-                // Umschalter Übersicht ⇄ Folgen, nur während der Navigation.
+                // Während der Navigation: oben die ganze Route, darunter
+                // zurück auf den eigenen Standort. Zwei feste Schaltflächen
+                // statt eines Umschalters – so ist jederzeit klar, was ein
+                // Tipp bewirkt (Feldtest-Rückmeldung).
                 if viewModel.activeRoute != nil {
-                    routeCameraButton
+                    routeCameraStack
                 }
             }
-            .padding(.trailing, 16)
+            .padding(.trailing, Self.controlGutter)
             .padding(.top, 16)
         }
         // Bedienstapel rechts über der Suchleiste: Routen planen und zurück
@@ -355,15 +363,17 @@ struct MapView: View {
         .overlay(alignment: .bottomTrailing) {
             if viewModel.activeRoute == nil {
                 mapControlStack
-                    .padding(.trailing, 16)
+                    .padding(.trailing, Self.controlGutter)
                     .padding(.bottom, AppMetrics.Touch.primary + 28 + bottomInset)
             }
         }
-        // Suchleiste unten – der Einstieg in Suche und Filter.
+        // Suchleiste unten – der Einstieg in Suche und Filter. Sie steht im
+        // gleichen Seitenabstand wie die schwebende Navigationsleiste darunter,
+        // damit beide Zeilen exakt gleich breit sind (Entwurf).
         .overlay(alignment: .bottom) {
             if viewModel.activeRoute == nil {
                 mapSearchBar
-                    .padding(.horizontal, 16)
+                    .padding(.horizontal, Self.controlGutter)
                     .padding(.bottom, 12 + bottomInset)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
@@ -499,6 +509,10 @@ struct MapView: View {
         .onChange(of: viewModel.pendingBarrier?.id) { _, _ in
             openPendingSelection()
         }
+        // Filter vom Homescreen: hier auf der Karte das Filter-Overlay öffnen.
+        .onChange(of: viewModel.pendingFilter) { _, _ in
+            openPendingFilter()
+        }
         .sheet(isPresented: $showingMapSettings) {
             MapSettingsSheet(mapPreferences: mapPreferences)
                 .trackScreen("map_settings")
@@ -523,6 +537,11 @@ struct MapView: View {
     /// Karteneinstellungen, Kompass) – konsistent statt durchscheinendem
     /// Material, mit dezentem Schatten zur Abhebung von der Karte.
     private static let controlBackground = AnyShapeStyle(Color(.systemBackground))
+
+    /// Seitenabstand aller Karten-Bedienelemente. Er entspricht dem der
+    /// schwebenden Navigationsleiste (OminaTabBar), damit Suchleiste, Filter
+    /// und Leiste exakt gleich breit sind und bündig übereinanderstehen.
+    private static let controlGutter = AppMetrics.Space.l
 
     /// Suchleiste unten auf der Karte: Der Balken öffnet die Ortssuche, das
     /// Icon rechts den Barrierefilter. Beide Ziele sind eigene Trefferflächen,
@@ -553,42 +572,82 @@ struct MapView: View {
 
     /// Bedienstapel rechts: Routen planen und auf den eigenen Standort
     /// zentrieren – die zwei Aktionen, die man ohne laufende Route braucht.
+    /// Die Kapselform (durchgehend gerundet) ist dieselbe wie bei Suchleiste,
+    /// Filter und Navigationsleiste.
     private var mapControlStack: some View {
-        VStack(spacing: 0) {
-            Button {
+        controlStack {
+            controlButton(
+                symbol: "point.topleft.down.to.point.bottomright.curvepath",
+                label: "Route planen"
+            ) {
                 showingRoutes = true
-            } label: {
-                Image(systemName: "point.topleft.down.to.point.bottomright.curvepath")
-                    .font(.system(size: 19, weight: .semibold))
-                    .foregroundStyle(AppColor.accentPrimary)
-                    .frame(width: 48, height: 48)
-                    .contentShape(Rectangle())
             }
-            .accessibilityLabel("Route planen")
 
-            Divider().frame(width: 30)
+            controlDivider
 
-            Button {
-                centerOnUser()
-            } label: {
-                Image(systemName: "location.fill")
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(
-                        locationService.currentLocation == nil
-                            ? AppColor.textSecondary
-                            : AppColor.accentPrimary
-                    )
-                    .frame(width: 48, height: 48)
-                    .contentShape(Rectangle())
-            }
-            .disabled(locationService.currentLocation == nil)
-            .accessibilityLabel("Auf meinen Standort zentrieren")
+            locationControlButton
         }
-        .background(
-            Self.controlBackground,
-            in: RoundedRectangle(cornerRadius: AppMetrics.Radius.card, style: .continuous)
+    }
+
+    /// Bedienstapel während der Navigation (rechts oben unter dem Kompass):
+    /// oben die ganze Route im Bild, darunter zurück auf den eigenen Standort.
+    private var routeCameraStack: some View {
+        controlStack {
+            controlButton(
+                symbol: "arrow.up.left.and.arrow.down.right",
+                label: "Ganze Route anzeigen",
+                action: showWholeRoute
+            )
+
+            controlDivider
+
+            locationControlButton
+        }
+    }
+
+    /// Standort-Schaltfläche: zoomt immer auf den aktuellen Standort – mit und
+    /// ohne laufende Route.
+    private var locationControlButton: some View {
+        controlButton(
+            symbol: "location.fill",
+            label: "Auf meinen Standort zentrieren",
+            isEnabled: locationService.currentLocation != nil,
+            action: centerOnUser
         )
+    }
+
+    /// Gemeinsame Hülle der Bedienstapel: weisse Kapsel mit dezentem Schatten.
+    private func controlStack<Content: View>(
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(spacing: 0) {
+            content()
+        }
+        .background(Self.controlBackground, in: Capsule())
+        .clipShape(Capsule())
         .shadow(color: .black.opacity(0.18), radius: 6, y: 2)
+    }
+
+    private var controlDivider: some View {
+        Divider().frame(width: 30)
+    }
+
+    /// Eine Schaltfläche eines Bedienstapels (48 pt, Symbol in der Leitfarbe).
+    private func controlButton(
+        symbol: String,
+        label: String,
+        isEnabled: Bool = true,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: 19, weight: .semibold))
+                .foregroundStyle(isEnabled ? AppColor.accentPrimary : AppColor.textSecondary)
+                .frame(width: 48, height: 48)
+                .contentShape(Rectangle())
+        }
+        .disabled(!isEnabled)
+        .accessibilityLabel(label)
     }
 
     /// Ebenen-Button links oben: öffnet Kartenmodus und Darstellung.
@@ -606,9 +665,21 @@ struct MapView: View {
         .accessibilityLabel("Karteneinstellungen")
     }
 
-    /// Karte zurück auf den eigenen Standort holen (Bedienstapel rechts).
+    /// Karte auf den eigenen Standort holen und dorthin zoomen – unabhängig
+    /// davon, ob gerade eine Route läuft. Mit Route wechselt die Kamera dabei
+    /// in den Folgen-Modus (Standard-Zoomstufe), ohne Route auf den engen
+    /// Ausschnitt um den Standort.
     private func centerOnUser() {
         guard let location = locationService.currentLocation else { return }
+
+        if viewModel.activeRoute != nil {
+            routeCameraMode = .following
+            navCamera.pausedUntil = nil
+            navCamera.distanceM = Self.defaultRouteCameraDistanceM
+            updateNavigationCamera(force: true)
+            return
+        }
+
         withAnimation(.easeInOut) {
             cameraPosition = .region(
                 MKCoordinateRegion(center: location.coordinate, span: Self.closeUpSpan)
@@ -616,38 +687,12 @@ struct MapView: View {
         }
     }
 
-    /// Wechselt zwischen Übersicht (ganze Route im Bild) und Folgen (Karte
-    /// folgt dem Standort und dreht sich mit der eigenen Ausrichtung mit).
-    private var routeCameraButton: some View {
-        Button {
-            switch routeCameraMode {
-            case .overview:
-                // Zurück aus der Übersicht: wieder auf den Standort zoomen,
-                // sonst bliebe der weite Übersichts-Zoom stehen.
-                routeCameraMode = .following
-                navCamera.pausedUntil = nil
-                navCamera.distanceM = Self.defaultRouteCameraDistanceM
-                updateNavigationCamera(force: true)
-            case .following:
-                routeCameraMode = .overview
-                navCamera.pausedUntil = nil
-                if let route = viewModel.activeRoute {
-                    fitCamera(to: route, force: true)
-                }
-            }
-        } label: {
-            Image(systemName: routeCameraMode == .overview
-                  ? "location.fill"
-                  : "arrow.up.left.and.arrow.down.right")
-                .font(.title3.weight(.semibold))
-                .foregroundStyle(AppColor.accentPrimary)
-                .frame(width: 44, height: 44)
-                .background(Self.controlBackground, in: Circle())
-                .shadow(color: .black.opacity(0.2), radius: 3, y: 1)
-        }
-        .accessibilityLabel(routeCameraMode == .overview
-                            ? "Standort folgen"
-                            : "Ganze Route anzeigen")
+    /// Ganze Route ins Bild holen – vom eigenen Standort bis zum Ziel.
+    private func showWholeRoute() {
+        guard let route = viewModel.activeRoute else { return }
+        routeCameraMode = .overview
+        navCamera.pausedUntil = nil
+        fitCamera(to: route, force: true)
     }
 
 
@@ -1088,6 +1133,13 @@ struct MapView: View {
             )
         }
         selectedBarrier = barrier
+    }
+
+    /// Filter vom Homescreen einlösen: das Filter-Overlay öffnen.
+    private func openPendingFilter() {
+        guard viewModel.pendingFilter else { return }
+        viewModel.pendingFilter = false
+        showingFilter = true
     }
 
     private func focus(on poi: POI) {

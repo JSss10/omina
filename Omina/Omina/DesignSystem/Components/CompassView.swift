@@ -12,16 +12,17 @@ import CoreLocation
 struct CompassView: View {
     /// Geräteausrichtung in Grad (0 = Norden). `nil` → Kompass ist inaktiv.
     let heading: CLLocationDirection?
-    /// Hintergrund des Trägerkreises. Auf der Karte ein deckendes Weiss
-    /// (konsistent mit Such- und Einstellungs-Button); im AR-Modus bleibt der
-    /// durchscheinende Standard erhalten.
+    /// Hintergrund des Trägerkreises. Standard ist ein deckendes Weiss –
+    /// dasselbe wie bei Such-, Einstellungs- und Standort-Schaltfläche, und
+    /// zwar auf jedem Screen: Über dem Kamerabild war der durchscheinende
+    /// Grund je nach Motiv kaum zu erkennen.
     private let background: AnyShapeStyle
 
     private var diameter: CGFloat = 44
 
     init(
         heading: CLLocationDirection?,
-        background: AnyShapeStyle = AnyShapeStyle(.thinMaterial)
+        background: AnyShapeStyle = AnyShapeStyle(AppColor.backgroundPrimary)
     ) {
         self.heading = heading
         self.background = background
@@ -31,7 +32,9 @@ struct CompassView: View {
         ZStack {
             Circle()
                 .fill(background)
-                .overlay(Circle().stroke(.white.opacity(0.35), lineWidth: 1))
+                // Feiner Rand statt der früheren weissen Kontur: Auf dem
+                // weissen Grund wäre diese unsichtbar.
+                .overlay(Circle().stroke(AppColor.borderDecorative, lineWidth: 1))
 
             // Kompassrose dreht entgegen der Blickrichtung, damit Norden
             // ortsfest bleibt.
@@ -62,7 +65,7 @@ struct CompassView: View {
             // Himmelsrichtung „N“ am oberen Rand.
             Text("N")
                 .font(.system(size: 9, weight: .bold))
-                .foregroundStyle(.primary)
+                .foregroundStyle(AppColor.textPrimary)
                 .offset(y: -(diameter / 2) + 8)
         }
     }

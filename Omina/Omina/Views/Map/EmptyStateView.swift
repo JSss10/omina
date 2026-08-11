@@ -34,7 +34,7 @@ struct EmptyStateView: View {
         .padding(AppMetrics.Space.l)
         .frame(maxWidth: 320)
         .background(
-            AppColor.backgroundPrimary,
+            AppColor.surfaceOverlay,
             in: RoundedRectangle(cornerRadius: AppMetrics.Radius.card, style: .continuous)
         )
         .shadow(radius: 6)

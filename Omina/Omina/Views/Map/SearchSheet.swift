@@ -61,8 +61,8 @@ struct SearchSheet: View {
 
             content
         }
-        .background(AppColor.backgroundPrimary)
-        .presentationBackground(AppColor.backgroundPrimary)
+        .background(AppColor.surfaceOverlay)
+        .presentationBackground(AppColor.surfaceOverlay)
         .presentationDetents([.medium, .large], selection: $detent)
         .presentationDragIndicator(.visible)
         // Beim Fokussieren auf volle Höhe wachsen, damit die Tastatur die

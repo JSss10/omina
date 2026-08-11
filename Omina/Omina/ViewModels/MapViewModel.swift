@@ -39,6 +39,10 @@ final class MapViewModel: ObservableObject {
     /// öffnet damit direkt das Barrieren-Detail und setzt den Wert zurück.
     @Published var pendingBarrier: Barrier?
 
+    /// Filter, der auf dem Homescreen angetippt wurde. Die Karte öffnet damit
+    /// direkt das Filter-Overlay und setzt den Wert zurück.
+    @Published var pendingFilter = false
+
     /// Wie viele Filter gerade greifen – ausgeblendete Orte, ausgeblendete
     /// Barrieren und jeder abgewählte Barrieretyp zählen einzeln. Steht als
     /// Plakette an der Filter-Schaltfläche (Entwurf).

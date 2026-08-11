@@ -28,8 +28,8 @@ struct FilterSheet: View {
                 .padding(.bottom, AppMetrics.Space.xl)
             }
         }
-        .background(AppColor.backgroundPrimary)
-        .presentationBackground(AppColor.backgroundPrimary)
+        .background(AppColor.surfaceOverlay)
+        .presentationBackground(AppColor.surfaceOverlay)
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
     }

@@ -13,6 +13,7 @@ Jedes Token liegt als Colorset mit Light-/Dark-Variante in `Assets.xcassets`
 | `BackgroundPrimary`     | #FFFFFF / #141019 | App-Hintergrund                      |
 | `BackgroundMuted`       | #EDE9FE / #1E1830 | Zustands-Screens, Medien-Platzhalter |
 | `SurfaceRaised`         | #FAF9FC / #1E1830 | Karten, Sheets                       |
+| `SurfaceOverlay`        | #F5F3FF / #1E1830 | Grundfläche der Overlays (Sheets, Panels) |
 | `SurfaceTinted`         | #F5F3FF / #241D3A | Getönte Karten in den Sheets         |
 | `TextPrimary`           | #1A1523 / #F4F1FA | Fliesstext, Titel                    |
 | `TextSecondary`         | #524A5E / #B3ACC4 | Metadaten, Hinweise                  |

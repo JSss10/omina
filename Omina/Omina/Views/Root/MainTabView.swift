@@ -81,6 +81,7 @@ struct MainTabView: View {
         TabView(selection: $selectedTab) {
             HomeDashboardView(
                 onOpenMap: { selectedTab = .map },
+                onOpenFilter: openMapWithFilter,
                 onSelectCategory: openMap(with:),
                 onOpenDestination: openDestination,
                 onOpenBarrier: openBarrier,
@@ -153,6 +154,13 @@ struct MainTabView: View {
     /// Kategorie vorbelegen.
     private func openMap(with category: String) {
         viewModel.pendingCategory = category
+        selectedTab = .map
+    }
+
+    /// Filter vom Homescreen: Karte öffnen und dort gleich das Filter-Overlay
+    /// zeigen – gefiltert wird die Karte, also wird auch dort eingestellt.
+    private func openMapWithFilter() {
+        viewModel.pendingFilter = true
         selectedTab = .map
     }
 

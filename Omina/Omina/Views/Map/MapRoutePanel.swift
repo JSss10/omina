@@ -65,7 +65,7 @@ struct MapRoutePanel: View {
                 topTrailingRadius: AppMetrics.Radius.sheet + AppMetrics.Space.s,
                 style: .continuous
             )
-            .fill(AppColor.backgroundPrimary)
+            .fill(AppColor.surfaceOverlay)
             .shadow(color: AppColor.textBrand.opacity(0.2), radius: 12, y: -2)
             .ignoresSafeArea(edges: .bottom)
         }
