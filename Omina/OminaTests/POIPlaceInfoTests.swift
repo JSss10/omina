@@ -1,7 +1,7 @@
 // POIPlaceInfoTests.swift
 // OminaTests
 //
-// Tests für die Angaben, die scripts/import_zuerich.py aus dem Open-Data-API
+// Tests für die Angaben, die scripts/import_zurich_tourism.py aus dem Open-Data-API
 // von Zürich Tourismus in accessibility_details schreibt: Öffnungszeiten
 // (Anzeigezeilen und strukturiert), Telefon, Beschreibung, Quellenangabe.
 // Kennt das API einen POI nicht, müssen alle Felder leer bleiben – nur dann
@@ -160,7 +160,7 @@ struct POIPlaceInfoTests {
         let poi = try matchedPOI()
         #expect(poi.placeDescription == "Café im Rathaus mit Blick auf die Limmat.")
         #expect(poi.infoCredit == "Zürich Tourismus (zuerich.com)")
-        #expect(poi.zuerichURL?.host == "www.zuerich.com")
+        #expect(poi.zurichTourismURL?.host == "www.zuerich.com")
         // websiteRow zeigt die Seite des Ortes, nicht die zuerich.com-Seite.
         #expect(poi.websiteURL?.absoluteString == "https://www.rathaus-cafe.ch")
     }
@@ -180,7 +180,7 @@ struct POIPlaceInfoTests {
         #expect(poi.phoneNumber == nil)
         #expect(poi.phoneURL == nil)
         #expect(poi.placeDescription == nil)
-        #expect(poi.zuerichURL == nil)
+        #expect(poi.zurichTourismURL == nil)
         #expect(poi.infoCredit == nil)
         #expect(poi.images.isEmpty)
     }

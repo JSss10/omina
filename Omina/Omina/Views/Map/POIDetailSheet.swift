@@ -130,7 +130,7 @@ struct POIDetailSheet: View {
     private var shareText: String {
         var parts = [poi.name]
         if let address = poi.address { parts.append(address) }
-        if let url = poi.zuerichURL ?? poi.websiteURL { parts.append(url.absoluteString) }
+        if let url = poi.zurichTourismURL ?? poi.websiteURL { parts.append(url.absoluteString) }
         return parts.joined(separator: "\n")
     }
 

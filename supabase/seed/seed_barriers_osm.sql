@@ -1,5 +1,6 @@
 -- Omina – Seed: Barrieren (OSM-Import, Altstadt Zürich)
--- Quelle: barriers_osm_20260407_142701.json (Overpass-Export vom 07.04.2026, 997 Einträge)
+-- Quelle: Overpass-Export vom 07.04.2026 (scripts/import_osm.py, 997 Einträge);
+-- derselbe Datenstand liegt als Omina/Omina/Seed/seed_barriers.json bei.
 -- Für den Supabase SQL Editor: gesamtes Script einfügen und ausführen.
 -- Erwartet das Schema aus supabase/schema.sql (Tabelle `barriers`, PostGIS aktiviert).
 --
