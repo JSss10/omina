@@ -90,69 +90,74 @@ extension CircleImageCluster {
     /// abgesetzt. Die Bildnamen sind die Assets, die aus der Gestaltung
     /// kommen; bis dahin tragen die Kreise ihre Platzhalter-Symbole.
     ///
+    /// Die Kreise haben eigene `Welcome…`-Assets und teilen sich bewusst
+    /// keine Dateien mit Splash, Intro oder Onboarding: Dort stehen dieselben
+    /// Motive 130 bis 400 pt breit, hier messen sie 32 bis 96 pt. Ein Bild,
+    /// das beides bedienen müsste, wäre an einem der beiden Enden falsch.
+    ///
     /// Der grosse Kreis steht bewusst zuletzt in der Liste: Im Stapel liegt er
     /// damit vorn, die kleineren schieben sich dahinter.
     static func welcome(size: CGFloat) -> CircleImageCluster {
         CircleImageCluster(
             items: [
                 Item(
-                    imageName: "IntroPlaces",
+                    imageName: "WelcomeImage1",
                     symbol: "mappin.and.ellipse",
                     diameter: 0.22,
                     offset: CGSize(width: -0.25, height: -0.28)
                 ),
                 Item(
-                    imageName: "MobilityRollator",
+                    imageName: "WelcomeImage2",
                     symbol: "figure.walk",
                     diameter: 0.13,
                     offset: CGSize(width: -0.12, height: -0.30),
                     isAccented: true
                 ),
                 Item(
-                    imageName: "SplashCity",
+                    imageName: "WelcomeImage3",
                     symbol: "building.2.fill",
                     diameter: 0.155,
                     offset: CGSize(width: 0.33, height: -0.37)
                 ),
                 Item(
-                    imageName: "IntroBarriers",
+                    imageName: "WelcomeImage4",
                     symbol: "exclamationmark.triangle.fill",
                     diameter: 0.10,
                     offset: CGSize(width: 0.13, height: -0.19)
                 ),
                 Item(
-                    imageName: "MobilityVisualImpairment",
+                    imageName: "WelcomeImage5",
                     symbol: "eye.trianglebadge.exclamationmark",
                     diameter: 0.10,
                     offset: CGSize(width: -0.42, height: -0.03)
                 ),
                 Item(
-                    imageName: "MobilityElderly",
+                    imageName: "WelcomeImage6",
                     symbol: "figure.walk.arrival",
                     diameter: 0.115,
                     offset: CGSize(width: 0.30, height: 0.10)
                 ),
                 Item(
-                    imageName: "IntroProfile",
+                    imageName: "WelcomeImage7",
                     symbol: "person.fill",
                     diameter: 0.20,
                     offset: CGSize(width: -0.21, height: 0.28)
                 ),
                 Item(
-                    imageName: "MobilityStroller",
+                    imageName: "WelcomeImage8",
                     symbol: "figure.and.child.holdinghands",
                     diameter: 0.12,
                     offset: CGSize(width: -0.33, height: 0.34),
                     isAccented: true
                 ),
                 Item(
-                    imageName: "MobilityWalkingDisability",
+                    imageName: "WelcomeImage9",
                     symbol: "figure.walk.motion",
                     diameter: 0.155,
                     offset: CGSize(width: 0.17, height: 0.30)
                 ),
                 Item(
-                    imageName: "WelcomeHero",
+                    imageName: "WelcomeImage10",
                     symbol: "figure.roll",
                     diameter: 0.30,
                     offset: .zero,

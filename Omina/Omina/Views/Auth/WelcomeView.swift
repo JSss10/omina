@@ -6,8 +6,8 @@
 // beiden Wege ins Konto – «Anmelden» als Hauptaktion, «Registrieren» getönt
 // darunter.
 //
-// Die Illustrationen der Kreise folgen noch; bis dahin trägt jeder Kreis sein
-// Platzhalter-Symbol (siehe CircleImageCluster.swift).
+// Die Bilder der Kreise (Assets "Welcome…") folgen noch; bis dahin trägt jeder
+// Kreis sein Platzhalter-Symbol (siehe CircleImageCluster.swift).
 
 import SwiftUI
 
