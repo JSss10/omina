@@ -24,7 +24,7 @@ struct Screen11_MobilityCategory: View {
         CategoryOption(.walkingDisability, "Gehbehinderung",         "MobilityWalkingDisability", "figure.walk.motion"),
         CategoryOption(.blind,             "Blindheit",              "MobilityBlind",             "eye.slash"),
         CategoryOption(.hearingImpairment, "Hörbehinderung",         "MobilityHearingImpairment", "ear.badge.waveform"),
-        CategoryOption(.rollator,          "Rollator",               "MobilityRollator",          "figure.walk"),
+        CategoryOption(.rollator,          "Rollator",               "MobilityWalker",          "figure.walk"),
         CategoryOption(.visualImpairment,  "Sehbehinderung",         "MobilityVisualImpairment",  "eye.trianglebadge.exclamationmark"),
         CategoryOption(.deaf,              "Gehörlosigkeit",         "MobilityDeaf",              "ear.trianglebadge.exclamationmark"),
         CategoryOption(.stroller,          "Kinderwagen / temporär", nil,                         "stroller"),
