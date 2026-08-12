@@ -10,6 +10,8 @@
 //
 // Die Illustrationen (Assets "Mobility…") folgen noch; bis dahin steht der
 // Platzhalter mit dem jeweiligen Symbol an ihrer Stelle (AssetMedia.swift).
+// Kacheln ohne Asset zeigen dauerhaft ein SF-Symbol – dort ist das die
+// gestaltete Lösung und kein Platzhalter (siehe CategoryOption.asset).
 
 import SwiftUI
 
@@ -25,7 +27,7 @@ struct Screen11_MobilityCategory: View {
         CategoryOption(.rollator,          "Rollator",               "MobilityRollator",          "figure.walk"),
         CategoryOption(.visualImpairment,  "Sehbehinderung",         "MobilityVisualImpairment",  "eye.trianglebadge.exclamationmark"),
         CategoryOption(.deaf,              "Gehörlosigkeit",         "MobilityDeaf",              "ear.trianglebadge.exclamationmark"),
-        CategoryOption(.stroller,          "Kinderwagen / temporär", "MobilityStroller",          "figure.and.child.holdinghands"),
+        CategoryOption(.stroller,          "Kinderwagen / temporär", nil,                         "stroller"),
         CategoryOption(.elderly,           "Altersbedingt",          "MobilityElderly",           "figure.walk.arrival"),
         CategoryOption(.none,              "Ohne Einschränkung",     "MobilityNone",              "figure.walk")
     ]
@@ -74,12 +76,14 @@ struct Screen11_MobilityCategory: View {
 private struct CategoryOption: Identifiable {
     let category: MobilityCategory
     let label: String
-    /// Name der Illustration im Asset-Katalog.
-    let asset: String
-    /// Platzhalter-Symbol, solange die Illustration fehlt.
+    /// Name der Illustration im Asset-Katalog. `nil`, wenn die Kachel
+    /// bewusst ein SF-Symbol statt einer Illustration zeigt.
+    let asset: String?
+    /// Bei Kacheln mit Illustration der Platzhalter, solange sie fehlt –
+    /// bei Kacheln ohne Asset das dauerhaft gezeigte Symbol.
     let symbol: String
 
-    init(_ category: MobilityCategory, _ label: String, _ asset: String, _ symbol: String) {
+    init(_ category: MobilityCategory, _ label: String, _ asset: String?, _ symbol: String) {
         self.category = category
         self.label = label
         self.asset = asset
@@ -98,7 +102,7 @@ private struct CategoryTile: View {
         Button(action: action) {
             VStack(spacing: AppMetrics.Space.m) {
                 ZStack(alignment: .topTrailing) {
-                    AssetImage(name: option.asset, placeholderSymbol: option.symbol)
+                    tileMedia
                         .frame(maxWidth: .infinity)
                         .frame(height: 132)
 
@@ -120,5 +124,20 @@ private struct CategoryTile: View {
         .buttonStyle(.plain)
         .accessibilityLabel(option.label)
         .accessibilityAddTraits(selected ? [.isButton, .isSelected] : .isButton)
+    }
+
+    /// Illustration aus dem Katalog – oder, wo keine vorgesehen ist, das
+    /// SF-Symbol. Es steht in der Leitfarbe, sobald die Kachel gewählt ist,
+    /// und folgt damit derselben doppelten Codierung wie die Beschriftung.
+    @ViewBuilder
+    private var tileMedia: some View {
+        if let asset = option.asset {
+            AssetImage(name: asset, placeholderSymbol: option.symbol)
+        } else {
+            Image(systemName: option.symbol)
+                .font(.system(size: 72, weight: .light))
+                .symbolRenderingMode(.hierarchical)
+                .foregroundStyle(selected ? AppColor.accentPrimary : AppColor.textPrimary)
+        }
     }
 }

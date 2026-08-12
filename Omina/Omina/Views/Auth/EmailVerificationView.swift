@@ -4,13 +4,11 @@
 // Nach der Registrierung: Das Konto wird mit dem Einmalcode aus der
 // Bestätigungs-E-Mail verifiziert (alternativ funktioniert weiterhin der Link
 // in der E-Mail). Aufbau nach Entwurf: Akzentleiste, Titel, darunter der
-// Hinweis mit der verbleibenden Wartezeit, die Illustration und unten die
-// einzige Aktion – die E-Mail erneut senden.
+// Hinweis mit der verbleibenden Wartezeit, das Briefkasten-Symbol und unten
+// die einzige Aktion – die E-Mail erneut senden.
 //
 // Das Code-Feld schickt sich selbst ab, sobald alle Stellen getippt sind; es
 // braucht deshalb keinen zweiten Button neben dem erneuten Senden.
-//
-// Die Illustration (Asset "MailboxCheck") folgt noch.
 
 import SwiftUI
 
@@ -75,8 +73,12 @@ struct EmailVerificationView: View {
                         .accessibilityElement(children: .combine)
                     }
 
-                    AssetImage(name: "MailboxCheck", placeholderSymbol: "photo")
-                        .frame(maxWidth: .infinity, minHeight: 260)
+                    Image(systemName: "envelope.badge")
+                        .font(.system(size: 96, weight: .light))
+                        .symbolRenderingMode(.hierarchical)
+                        .foregroundStyle(AppColor.accentPrimary)
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, AppMetrics.Space.l)
                         .accessibilityHidden(true)
                 }
                 .padding(.horizontal, AppMetrics.Space.l)
