@@ -43,7 +43,7 @@ struct POI: Codable, Identifiable {
 
     /// Fotos des Ortes aus accessibility_details.images – als reine URL-Strings
     /// (ginto-Import) oder als Objekte mit url/caption/credit (Import aus dem
-    /// Open-Data-API von Zürich Tourismus, scripts/import_zuerich.py).
+    /// Open-Data-API von Zürich Tourismus, scripts/import_zurich_tourism.py).
     /// Leer, wenn keine Bilder vorliegen.
     var images: [POIImage] {
         guard case .array(let items)? = accessibilityDetails?["images"] else { return [] }
@@ -91,7 +91,7 @@ struct POI: Codable, Identifiable {
     }
 
     // MARK: - Angaben aus dem Zürich-Tourismus-Import
-    // Gefüllt von scripts/import_zuerich.py, sofern der POI im Open-Data-API
+    // Gefüllt von scripts/import_zurich_tourism.py, sofern der POI im Open-Data-API
     // von Zürich Tourismus gefunden wurde. Fehlt der Eintrag dort, bleiben
     // die Felder leer und das Detail-Sheet zeigt Platzhalter.
 
@@ -204,21 +204,33 @@ struct POI: Codable, Identifiable {
     /// als die ginto-Adresse, deshalb im Detail bevorzugt.
     var placeAddressLine: String? { string(accessibilityDetails?["address_line"]) }
 
+    /// Die beiden Parser für `infoUpdatedAt`. Einmalig angelegt statt je
+    /// Abfrage: Formatter sind teuer im Aufbau, und `infoUpdatedAt` wird aus
+    /// dem `body` des POI-Detail-Sheets gelesen – also bei jedem Bildaufbau.
+    private static let internetDateParser: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter
+    }()
+
+    /// Das API liefert teils ohne Sekunden/Zeitzone («2025-04-15T14:17»).
+    private static let minuteDateParser: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd'T'HH:mm"
+        return formatter
+    }()
+
     /// Stand der übernommenen Angaben (`dateModified`), als Datum geparst.
     var infoUpdatedAt: Date? {
         guard let raw = string(accessibilityDetails?["updated_at"]) else { return nil }
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime]
-        if let date = formatter.date(from: raw) { return date }
-        // Das API liefert teils ohne Sekunden/Zeitzone («2025-04-15T14:17»).
-        let fallback = DateFormatter()
-        fallback.locale = Locale(identifier: "en_US_POSIX")
-        fallback.dateFormat = "yyyy-MM-dd'T'HH:mm"
-        return fallback.date(from: raw)
+        if let date = POI.internetDateParser.date(from: raw) { return date }
+        return POI.minuteDateParser.date(from: raw)
     }
 
-    /// Detailseite des Ortes auf zuerich.com.
-    var zuerichURL: URL? {
+    /// Detailseite des Ortes auf zuerich.com. Der Schlüssel `zuerich_url`
+    /// stammt aus dem Import und bleibt so, wie er in der Datenbank steht.
+    var zurichTourismURL: URL? {
         guard let raw = string(accessibilityDetails?["zuerich_url"]) else { return nil }
         return URL(string: raw)
     }

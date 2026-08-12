@@ -149,13 +149,13 @@ einer falschen Aussage über Zugänglichkeit führen würde:
 ## Standort simulieren (Rathaus Zürich)
 
 Zum Testen ohne vor Ort zu sein lässt sich der GPS-Standort faken – die GPX-Datei
-`Omina/Omina/Testing/RathausZuerich.gpx` enthält das Rathaus Zürich
+`Omina/Omina/Testing/ZurichTownHall.gpx` enthält das Rathaus Zürich
 (47.37172, 8.54222) als Wegpunkt.
 
 **Simulator oder echtes iPhone (via Xcode):**
 
-1. `RathausZuerich.gpx` per Drag & Drop ins Xcode-Projekt ziehen (einmalig).
-2. App mit ▶︎ starten, dann in der Debug-Leiste unten auf **„Simulate Location"** → **RathausZuerich**.
+1. `ZurichTownHall.gpx` per Drag & Drop ins Xcode-Projekt ziehen (einmalig).
+2. App mit ▶︎ starten, dann in der Debug-Leiste unten auf **„Simulate Location"** → **ZurichTownHall**.
 3. Alternativ als Standard setzen: **Product → Scheme → Edit Scheme… → Run → Options → Core Location → Default Location**.
 
 **Nur Simulator (ohne GPX):** **Features → Location → Custom Location…** mit
@@ -222,7 +222,9 @@ omina/
 │   │                               # Leserecht fürs Dashboard
 │   └── seed/                       # Grunddaten als SQL-Dump
 ├── scripts/                        # Python-Importe (OSM, ginto, Zürich Tourismus)
-├── data/exports/                   # Erzeugte Import-Backups (Beleg für die Arbeit)
+├── data/exports/                   # Je Import-Script der massgebliche Lauf
+│                                   # (Beleg für die Arbeit); das Ergebnis von
+│                                   # import_osm.py ist der Seed selbst
 ├── COMMITS.md                      # Commit- und Branch-Konvention
 ├── THIRD-PARTY-NOTICES.md          # Fremdkomponenten und Datenlizenzen
 └── LICENSE                         # proprietär, alle Rechte vorbehalten
@@ -247,7 +249,7 @@ Rollstuhl-Routing dort brauchbare Wege liefern würde (es schlug im Feldtest
 weiträumige Umwege um Ziele vor, die nebenan lagen).
 
 Fotos, Öffnungszeiten und Kontaktangaben im POI-Detail kommen aus dem Open-Data-API
-von Zürich Tourismus (Version 2.0). `scripts/import_zuerich.py` prüft jeden
+von Zürich Tourismus (Version 2.0). `scripts/import_zurich_tourism.py` prüft jeden
 ginto-POI gegen dieses API – zugeordnet wird über Distanz und Namensähnlichkeit –
 und schreibt die Treffer nach `accessibility_details`. Kennt das API einen Ort
 nicht, zeigt das Detail-Sheet Platzhalter statt leerer Flächen. Die Quellenangabe

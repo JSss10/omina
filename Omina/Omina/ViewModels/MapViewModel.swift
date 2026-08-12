@@ -3,7 +3,7 @@
 //
 // Verbindet LocationService und BarrierRepository für die Kartenansicht.
 // POIs und Barrieren werden für die ganze Zürcher Altstadt geladen
-// (AppConfig.altstadtCenter/-RadiusM), unabhängig vom Standort – ein
+// (AppConfig.oldTownCenter/-RadiusM), unabhängig vom Standort – ein
 // einmaliger Ladevorgang deckt die ganze Altstadt ab. Bei aktiver
 // Route werden nur noch die Barrieren direkt auf der Route angezeigt.
 
@@ -74,7 +74,7 @@ final class MapViewModel: ObservableObject {
     // (einmalig geladen). Kategorie-Chips filtern diese Liste client-seitig
     // über die exakten ginto-Kategorie-Keys; nur die Freitext-Suche läuft
     // über die RPC.
-    @Published private(set) var altstadtPOIs: [POI] = [] { didSet { poiDataRevision &+= 1 } }
+    @Published private(set) var oldTownPOIs: [POI] = [] { didSet { poiDataRevision &+= 1 } }
     /// Ergebnis der letzten Freitext-Suche (nil = keine aktive Suche).
     @Published private(set) var searchResults: [POI]? { didSet { poiDataRevision &+= 1 } }
     /// Aktiver Kategorie-Chip (deutsches Label, siehe POICategory.chips).
@@ -223,6 +223,26 @@ final class MapViewModel: ObservableObject {
         cachedRouteBarrierEntries = nil
     }
 
+    /// Die aktive Route, einmal in das lokale Meter-System umgerechnet.
+    ///
+    /// `RouteService.path(of:)` läuft einmal über alle Stützpunkte der Route –
+    /// in der Altstadt sind das schnell einige hundert. Gebraucht wird das
+    /// Ergebnis an vier Stellen, die je Standort-Update bzw. je Bildaufbau
+    /// anfallen: den Barrieren auf der Karte, der Barrieren-Liste zur Route,
+    /// dem Abstand zur Route in `considerReroute` und dem aktuellen Schritt in
+    /// der Turn-by-turn-Liste. Die Geometrie ändert sich dabei nur, wenn eine
+    /// neue Route aktiv wird – deshalb wird sie je Route genau einmal aufgebaut.
+    private var cachedRoutePathID: UUID?
+    private var cachedRoutePath: RouteService.RoutePath?
+
+    private func routePath(of route: ActiveRoute) -> RouteService.RoutePath {
+        if route.id == cachedRoutePathID, let cachedRoutePath { return cachedRoutePath }
+        let path = RouteService.path(of: route)
+        cachedRoutePathID = route.id
+        cachedRoutePath = path
+        return path
+    }
+
     /// Barrieren, die der aktive Filter durchlässt. Grundlage der
     /// Annäherungswarnungen – bewusst unabhängig davon, was auf der Karte
     /// sichtbar ist (siehe `displayedBarriers`).
@@ -283,7 +303,7 @@ final class MapViewModel: ObservableObject {
             let corridorM = corridorM(for: route.kind)
             // Die Route einmal in das lokale Meter-System umrechnen, statt je
             // Barriere erneut (siehe RouteService.path).
-            let path = RouteService.path(of: route)
+            let path = routePath(of: route)
             let onRoute = filteredBarriers.filter { barrier in
                 RouteService.offsetAndAlong(of: barrier.coordinate, on: path).offsetM <= corridorM
             }
@@ -385,7 +405,7 @@ final class MapViewModel: ObservableObject {
         guard let route = activeRoute else { return [] }
         // Wie in computeDisplayedBarriers: Route einmal umrechnen, dann alle
         // Barrieren dagegen verorten.
-        let path = RouteService.path(of: route)
+        let path = routePath(of: route)
         let alongUser = locationService.currentLocation.map {
             RouteService.offsetAndAlong(of: $0.coordinate, on: path).alongM
         }
@@ -408,7 +428,10 @@ final class MapViewModel: ObservableObject {
     var currentStepIndex: Int? {
         guard let route = activeRoute, !route.steps.isEmpty else { return nil }
         guard let location = locationService.currentLocation else { return 0 }
-        let userAlongM = RouteService.distanceAlongRoute(to: location.coordinate, on: route)
+        let userAlongM = RouteService.offsetAndAlong(
+            of: location.coordinate,
+            on: routePath(of: route)
+        ).alongM
         var cumulativeM = 0.0
         for (index, step) in route.steps.enumerated() {
             cumulativeM += step.distanceM
@@ -421,7 +444,7 @@ final class MapViewModel: ObservableObject {
     /// Datenbasis der "In der Nähe"-Liste in der Suche. Ohne Standort-Fix nach
     /// der importierten Distanz sortiert.
     func nearbyPOIs(limit: Int = 12) -> [POI] {
-        Array(sortedByUserDistance(altstadtPOIs).prefix(limit))
+        Array(sortedByUserDistance(oldTownPOIs).prefix(limit))
     }
 
     /// Sortiert POIs nach Luftlinie zum aktuellen Standort; ohne Standort-Fix
@@ -456,7 +479,7 @@ final class MapViewModel: ObservableObject {
     /// auf, damit die Auswahl im gewohnten POI-Detail landet.
     func poi(named name: String) -> POI? {
         let trimmed = name.trimmingCharacters(in: .whitespaces)
-        return altstadtPOIs.first { $0.name.caseInsensitiveCompare(trimmed) == .orderedSame }
+        return oldTownPOIs.first { $0.name.caseInsensitiveCompare(trimmed) == .orderedSame }
     }
 
     /// Löst ein Ziel der "Letzte Ziele"-Liste auf einen POI auf: bevorzugt über
@@ -466,7 +489,7 @@ final class MapViewModel: ObservableObject {
     /// öffnet sich dadurch immer, wenn auch ohne Zugänglichkeitsdaten.
     func poi(for destination: RecentDestination) -> POI {
         if let poiId = destination.poiId,
-           let match = altstadtPOIs.first(where: { $0.id == poiId }) {
+           let match = oldTownPOIs.first(where: { $0.id == poiId }) {
             return match
         }
         if let match = poi(named: destination.name) {
@@ -484,7 +507,7 @@ final class MapViewModel: ObservableObject {
     /// aus den gespeicherten Angaben – das Detail öffnet sich dadurch immer.
     func poi(for place: SavedPlace) -> POI {
         if let referenceId = place.referenceId,
-           let match = altstadtPOIs.first(where: { $0.id == referenceId }) {
+           let match = oldTownPOIs.first(where: { $0.id == referenceId }) {
             return match
         }
         if let match = poi(named: place.displayName) {
@@ -527,7 +550,7 @@ final class MapViewModel: ObservableObject {
         // POIs im Anzeige-Umkreis (nearbyDisplayRadiusM) – dieselbe enge
         // Begrenzung wie bei den Barrieren, damit Karte und AR-Modus nur die
         // unmittelbare Umgebung zeigen.
-        return nearCurrentLocation(altstadtPOIs, at: \.coordinate)
+        return nearCurrentLocation(oldTownPOIs, at: \.coordinate)
     }
 
     /// Altstadt-POIs eines Kategorie-Chips (exaktes Key-Matching), nach
@@ -538,7 +561,7 @@ final class MapViewModel: ObservableObject {
     func poisForCategory(_ label: String, limit: Int? = nil) -> [POI] {
         guard let chip = POICategory.chip(forLabel: label) else { return [] }
         let sorted = sortedByUserDistance(
-            altstadtPOIs.filter { chip.matches(category: $0.category) }
+            oldTownPOIs.filter { chip.matches(category: $0.category) }
         )
         guard let limit else { return sorted }
         return Array(sorted.prefix(limit))
@@ -716,7 +739,10 @@ final class MapViewModel: ObservableObject {
         // Schwelle mit der gemeldeten Genauigkeit skalieren: Ein Fix mit 20 m
         // Streuung darf nicht schon als "abgekommen" zählen.
         let threshold = max(offRouteThresholdM, location.horizontalAccuracy * 2)
-        let offBy = RouteService.distance(from: location.coordinate, to: route)
+        let offBy = RouteService.offsetAndAlong(
+            of: location.coordinate,
+            on: routePath(of: route)
+        ).offsetM
         guard offBy > threshold else {
             offRouteUpdates = 0
             isOffRoute = false
@@ -828,8 +854,8 @@ final class MapViewModel: ObservableObject {
 
         do {
             let fresh = try await repository.fetchBarriers(
-                near: AppConfig.altstadtCenter,
-                radius: AppConfig.altstadtRadiusM
+                near: AppConfig.oldTownCenter,
+                radius: AppConfig.oldTownRadiusM
             )
             barriers = fresh
             LocalDataStore.save(fresh, named: "barriers")
@@ -1039,6 +1065,9 @@ final class MapViewModel: ObservableObject {
     /// Route. Gleiche Korridorbreite wie bei der aktiven Navigation.
     func barriers(on route: ActiveRoute) -> [Barrier] {
         let corridor = corridorM(for: route.kind)
+        // Bewusst OHNE den Zwischenspeicher: Hier kommen die noch nicht aktiven
+        // Varianten aus dem Routen-Sheet an, jede mit eigener Geometrie – der
+        // Speicher hält die EINE aktive Route und würde hier nur verdrängt.
         let path = RouteService.path(of: route)
         return filteredBarriers.filter { barrier in
             RouteService.offsetAndAlong(of: barrier.coordinate, on: path).offsetM <= corridor
@@ -1048,6 +1077,8 @@ final class MapViewModel: ObservableObject {
     func stopNavigation() {
         locationService.setNavigationActive(false)
         activeRoute = nil
+        cachedRoutePathID = nil
+        cachedRoutePath = nil
         navigationTarget = nil
         navigationProfile = nil
         routeProgress = nil
@@ -1132,8 +1163,8 @@ final class MapViewModel: ObservableObject {
         recordRecentSearch(query)
         do {
             let results = try await poiRepository.fetchPOIs(
-                near: AppConfig.altstadtCenter,
-                radius: AppConfig.altstadtRadiusM,
+                near: AppConfig.oldTownCenter,
+                radius: AppConfig.oldTownRadiusM,
                 search: POICategory.searchTerm(forChip: query)
             )
             searchResults = results
@@ -1149,24 +1180,24 @@ final class MapViewModel: ObservableObject {
     /// für Karte, AR und die client-seitigen Kategorie-Filter.
     private func loadPOIs() async {
         // Cache zuerst → sofortige Anzeige beim Start, dann Netz-Refresh.
-        if altstadtPOIs.isEmpty,
+        if oldTownPOIs.isEmpty,
            let cached = LocalDataStore.load([POI].self, named: "pois") {
-            altstadtPOIs = cached
+            oldTownPOIs = cached
         }
         // Allererster Start ohne Netz und ohne Cache: gebündelter Seed.
-        if altstadtPOIs.isEmpty {
-            altstadtPOIs = SeedData.pois
+        if oldTownPOIs.isEmpty {
+            oldTownPOIs = SeedData.pois
         }
         do {
             let fresh = try await poiRepository.fetchPOIs(
-                near: AppConfig.altstadtCenter,
-                radius: AppConfig.altstadtRadiusM
+                near: AppConfig.oldTownCenter,
+                radius: AppConfig.oldTownRadiusM
             )
-            altstadtPOIs = fresh
+            oldTownPOIs = fresh
             LocalDataStore.save(fresh, named: "pois")
         } catch {
             // Nur melden, wenn gar keine (auch keine gecachten) POIs da sind.
-            if altstadtPOIs.isEmpty {
+            if oldTownPOIs.isEmpty {
                 loadError = ErrorText.message(for: error)
             }
         }

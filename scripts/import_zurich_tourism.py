@@ -45,11 +45,11 @@ Schluessel, die POI.swift liest:
     info_source         Quellenangabe fuer die Textangaben
 
 Verwendung:
-    python3 import_zuerich.py                  # Supabase lesen + schreiben
-    python3 import_zuerich.py --dry-run        # nur Vorschau
-    python3 import_zuerich.py --pois-file ../data/exports/pois_ginto_20260407_142744.json
+    python3 import_zurich_tourism.py                  # Supabase lesen + schreiben
+    python3 import_zurich_tourism.py --dry-run        # nur Vorschau
+    python3 import_zurich_tourism.py --pois-file ../data/exports/pois_ginto_20260407_142744.json
                                                # Vorschau ohne Supabase
-    python3 import_zuerich.py --seed-file ../Omina/Omina/Seed/seed_pois.json
+    python3 import_zurich_tourism.py --seed-file ../Omina/Omina/Seed/seed_pois.json
                                                # Offline-Seed der App mitpflegen
 
 Voraussetzungen:
@@ -1103,13 +1103,13 @@ def main():
 
     # 5. Backup + SQL
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    backup_file = export_path("poi_zuerich_" + stamp + ".json")
+    backup_file = export_path("poi_zurich_tourism_" + stamp + ".json")
     with open(backup_file, "w", encoding="utf-8") as handle:
         json.dump([{k: v for k, v in m.items() if k != "accessibility_details"}
                    for m in matches], handle, indent=2, ensure_ascii=False)
     print("\nOK Backup gespeichert: " + backup_file)
 
-    sql_file = export_path("poi_zuerich_" + stamp + ".sql")
+    sql_file = export_path("poi_zurich_tourism_" + stamp + ".sql")
     print("OK SQL geschrieben: " + sql_file + " ("
           + str(write_sql(matches, sql_file)) + " UPDATEs)")
 

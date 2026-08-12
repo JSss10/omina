@@ -92,8 +92,8 @@ enum SeedData {
     private static func decodePOIs() -> [POI] {
         guard let seeds: [SeedPOI] = load("seed_pois") else { return [] }
         let center = CLLocation(
-            latitude: AppConfig.altstadtCenter.latitude,
-            longitude: AppConfig.altstadtCenter.longitude
+            latitude: AppConfig.oldTownCenter.latitude,
+            longitude: AppConfig.oldTownCenter.longitude
         )
         return seeds.compactMap { seed in
             guard let point = parsePoint(seed.location) else { return nil }

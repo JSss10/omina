@@ -33,19 +33,19 @@ auflistet – dieselben Tags, auf denen auch das Rollstuhl-Routing der App
 
 **Was wird importiert:**
 
-| OSM-Tag                                    | Barriere in der App              |
-| ------------------------------------------ | -------------------------------- | ------------------- | ---------------------------------- |
-| `kerb` (+ `kerb:height`)                   | Bordstein, sonst Default-Mapping |
-| `sloped_curb`, `sloped_curb:start`/`:end`  | Bordstein am Weganfang/-ende     |
-| `highway=steps` (+ `step_count`)           | Treppe                           |
-| `incline` (% oder °, sonst Default 8 %)    | Steigung                         |
-| `surface` (Kopfsteinpflaster, Kies, Sand…) | Oberfläche                       |
-| `smoothness` (ab `intermediate`)           | Oberfläche (Ebenheit)            |
-| `tracktype` (ab `grade2`)                  | Oberfläche (Wegequalität)        |
-| `width` (< 200 cm)                         | Engstelle                        |
-| `sidewalk:left                             | right                            | both:<eigenschaft>` | dieselben Typen, seitlich versetzt |
-| `highway=crossing` + `wheelchair=no`       | fehlende Bordstein-Absenkung     |
-| `barrier=*` (Drehkreuz, Poller, Tor…)      | Engstelle bzw. Bordstein         |
+| OSM-Tag                                                  | Barriere in der App                |
+| -------------------------------------------------------- | ---------------------------------- |
+| `kerb` (+ `kerb:height`)                                 | Bordstein, sonst Default-Mapping   |
+| `sloped_curb`, `sloped_curb:start`/`:end`                | Bordstein am Weganfang/-ende       |
+| `highway=steps` (+ `step_count`)                         | Treppe                             |
+| `incline` (% oder °, sonst Default 8 %)                  | Steigung                           |
+| `surface` (Kopfsteinpflaster, Kies, Sand…)               | Oberfläche                         |
+| `smoothness` (ab `intermediate`)                         | Oberfläche (Ebenheit)              |
+| `tracktype` (ab `grade2`)                                | Oberfläche (Wegequalität)          |
+| `width` (< 200 cm)                                       | Engstelle                          |
+| `sidewalk:left\|right\|both:<eigenschaft>`               | dieselben Typen, seitlich versetzt |
+| `highway=crossing` + `wheelchair=no`                     | fehlende Bordstein-Absenkung       |
+| `barrier=*` (Drehkreuz, Poller, Tor…)                    | Engstelle bzw. Bordstein           |
 
 Gehweg-Tags hängen in OSM an der Strassenachse, gefahren wird aber auf dem
 Trottoir – sie werden deshalb 4 m quer zur Digitalisierrichtung versetzt
@@ -78,7 +78,7 @@ python3 import_ginto.py
   - Scewo BRO (scewo)
 - grade (COMPLETELY/PARTIALLY/BADLY) + conformance (0-100%)
 
-### import_zuerich.py
+### import_zurich_tourism.py
 
 Prüft für **jeden** bestehenden POI, ob es ihn im
 [Open-Data-API von Zürich Tourismus](https://www.zuerich.com/en/open-data-version-20)
@@ -88,8 +88,8 @@ dieses Script schliesst die Lücke für Stadt und Region Zürich. POIs ohne
 Treffer bleiben unverändert; die App zeigt dort Platzhalter.
 
 ```bash
-python3 import_zuerich.py --dry-run   # erst die Zuordnung ansehen
-python3 import_zuerich.py             # dann schreiben (fragt nach)
+python3 import_zurich_tourism.py --dry-run   # erst die Zuordnung ansehen
+python3 import_zurich_tourism.py             # dann schreiben (fragt nach)
 ```
 
 **Wie das API aufgebaut ist** (nur unter `/en/` verfügbar, kein API-Key nötig):
@@ -162,7 +162,7 @@ OK 128 von 439 POIs im API gefunden (29 %)
 | `--yes`               | ohne Rückfrage schreiben                                                               |
 
 Neben dem Backup-JSON schreibt das Script ein idempotentes
-`data/exports/poi_zuerich_<zeitstempel>.sql`. Damit lassen sich die Angaben auch ohne
+`data/exports/poi_zurich_tourism_<zeitstempel>.sql`. Damit lassen sich die Angaben auch ohne
 Service-Key über den Supabase-SQL-Editor einspielen (die UPDATEs mergen per
 `||` in das bestehende JSONB, alles andere bleibt stehen).
 
@@ -180,7 +180,7 @@ python3 import_ginto.py
 # → erstellt Backup-JSON
 
 # 3. POIs gegen Zürich Tourismus prüfen und ergänzen (nach dem ginto-Import)
-python3 import_zuerich.py --seed-file ../Omina/Omina/Seed/seed_pois.json
+python3 import_zurich_tourism.py --seed-file ../Omina/Omina/Seed/seed_pois.json
 # → fragt nach Bestätigung vor dem Schreiben in Supabase
 # → erstellt Backup-JSON und ein SQL-Script
 # → hält die Offline-Daten der App auf demselben Stand
@@ -196,7 +196,9 @@ python3 import_zuerich.py --seed-file ../Omina/Omina/Seed/seed_pois.json
 
 Alle drei Scripts schreiben vor dem Import ein JSON-Backup mit Zeitstempel nach
 `data/exports/` – unabhängig davon, aus welchem Verzeichnis sie gestartet wurden.
-`import_zuerich.py` legt dort zusätzlich ein idempotentes SQL-Script ab.
+`import_zurich_tourism.py` legt dort zusätzlich ein idempotentes SQL-Script ab.
 
-Die Läufe, die in der Arbeit belegt werden, sind eingecheckt; jeder weitere Lauf
-bleibt lokal (`.gitignore`), damit das Repository nicht mit jedem Import wächst.
+Eingecheckt ist je Script der letzte, massgebliche Lauf; jeder weitere bleibt
+lokal (`.gitignore`), damit das Repository nicht mit jedem Import wächst.
+`import_osm.py` hat dort keinen eigenen Eintrag: Sein Ergebnis ist Zeichen für
+Zeichen die gebündelte Datei `Omina/Omina/Seed/seed_barriers.json`.

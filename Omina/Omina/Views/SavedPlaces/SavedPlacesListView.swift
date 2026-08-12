@@ -308,8 +308,8 @@ struct SavedPlacesListView: View {
     private func loadPlaceDetails() async {
         guard !places.isEmpty, poisById.isEmpty else { return }
         guard let pois = try? await POIRepository.shared.fetchPOIs(
-            near: AppConfig.altstadtCenter,
-            radius: AppConfig.altstadtRadiusM
+            near: AppConfig.oldTownCenter,
+            radius: AppConfig.oldTownRadiusM
         ) else { return }
         poisById = Dictionary(pois.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
     }

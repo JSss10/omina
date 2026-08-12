@@ -164,12 +164,19 @@ export function statsPerParticipant(
 
   const stats = participants.map((participant): ParticipantStats => {
     const own = byUser.get(participant.user_id) ?? [];
-    const times = own
-      .map((event) => new Date(event.occurred_at).getTime())
-      .filter((time) => !Number.isNaN(time));
 
-    const min = times.length > 0 ? Math.min(...times) : null;
-    const max = times.length > 0 ? Math.max(...times) : null;
+    // In einem Durchgang statt über `Math.min(...times)`: Der Spread legt
+    // jedes Ereignis als eigenes Argument auf den Aufrufstapel, und ein
+    // Testtag bringt es auf mehrere tausend – ab einer gewissen Menge wirft
+    // das im Browser einen RangeError statt einer Auswertung.
+    let min: number | null = null;
+    let max: number | null = null;
+    for (const event of own) {
+      const time = new Date(event.occurred_at).getTime();
+      if (Number.isNaN(time)) continue;
+      if (min === null || time < min) min = time;
+      if (max === null || time > max) max = time;
+    }
 
     return {
       participant,
