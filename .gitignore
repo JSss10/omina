@@ -56,14 +56,15 @@ __pycache__/
 venv/
 
 # Erzeugte Import-Exporte (scripts/ schreibt nach data/exports/).
-# Die bereits eingecheckten Läufe bleiben als Beleg für die Arbeit erhalten;
-# jeder NEUE Lauf bleibt lokal, damit das Repo nicht mit jedem Import wächst.
+# Eingecheckt ist je Import-Script der letzte, massgebliche Lauf als Beleg für
+# die Arbeit; jeder NEUE Lauf bleibt lokal, damit das Repo nicht mit jedem
+# Import wächst. Vorläufe desselben Tages sind durch den jeweils späteren Lauf
+# überholt und stehen in der Git-Historie.
+#
+# import_osm.py hat hier bewusst keinen Eintrag: Sein Ergebnis ist Zeichen für
+# Zeichen die gebündelte Datei Omina/Omina/Seed/seed_barriers.json – eine
+# zweite Kopie wäre reine Verdopplung.
 data/exports/*
-!data/exports/barriers_osm_20260407_142701.json
 !data/exports/pois_ginto_20260407_142744.json
-!data/exports/poi_zuerich_20260809_120144.json
-!data/exports/poi_zuerich_20260809_120144.sql
-!data/exports/poi_zuerich_20260809_120314.json
-!data/exports/poi_zuerich_20260809_120314.sql
-!data/exports/poi_zuerich_20260809_121038.json
-!data/exports/poi_zuerich_20260809_121038.sql
+!data/exports/poi_zurich_tourism_20260809_121038.json
+!data/exports/poi_zurich_tourism_20260809_121038.sql

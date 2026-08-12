@@ -809,7 +809,13 @@ enum RouteService {
     /// Rechnet die Route einmal in das lokale Meter-System um.
     static func path(of route: ActiveRoute) -> RoutePath {
         let origin = route.coordinates.first ?? route.destinationCoordinate
-        let points = route.coordinates.map { metersEastNorth(of: $0, relativeTo: origin) }
+        // Route ohne Wegpunkte (kein regulärer Zustand, aber nicht ausgeschlossen):
+        // Das Ziel als einziger Punkt hält `offsetAndAlong` auf demselben
+        // Rückfall wie `distance(from:to:)` – Luftlinie zum Ziel statt
+        // "unendlich weit weg".
+        let points = route.coordinates.isEmpty
+            ? [SIMD2<Double>(0, 0)]
+            : route.coordinates.map { metersEastNorth(of: $0, relativeTo: origin) }
         var cumulative = [Double](repeating: 0, count: points.count)
         if points.count >= 2 {
             for i in 1..<points.count {

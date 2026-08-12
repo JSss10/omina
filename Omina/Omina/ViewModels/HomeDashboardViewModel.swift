@@ -124,7 +124,7 @@ final class HomeDashboardViewModel: ObservableObject {
             coordinate = current
             hasLoadedWeatherForLocation = true
         } else {
-            coordinate = AppConfig.kreis1Center
+            coordinate = AppConfig.district1Center
         }
 
         do {
@@ -149,8 +149,8 @@ final class HomeDashboardViewModel: ObservableObject {
 
         do {
             let barriers = try await BarrierRepository.shared.fetchBarriers(
-                near: AppConfig.altstadtCenter,
-                radius: AppConfig.altstadtRadiusM
+                near: AppConfig.oldTownCenter,
+                radius: AppConfig.oldTownRadiusM
             )
             newBarriers = topBarriers(from: barriers)
         } catch {

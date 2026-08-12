@@ -1,21 +1,21 @@
 // BarrierFilter.swift
 // Omina
 //
-// Filterzustand der Kartenansicht: aktive Barrierentypen + Suchradius.
-// Wird vom MapViewModel gehalten und vom FilterSheet (M3) geändert.
+// Filterzustand der Kartenansicht: welche Barrierentypen auf der Karte
+// erscheinen. Wird vom MapViewModel gehalten und vom FilterSheet (M3)
+// geändert.
+//
+// Bewusst OHNE Suchradius: Karte und Homescreen laden immer die ganze
+// Altstadt (AppConfig.oldTownCenter/-RadiusM), die Anzeige begrenzt danach
+// AppConfig.nearbyDisplayRadiusM. Ein zusätzlicher Filter-Radius hätte
+// dazwischen nichts zu steuern.
 
 import Foundation
 
 struct BarrierFilterState: Equatable {
     var enabledTypes: Set<BarrierType>
-    var radius: Double
 
     static let `default` = BarrierFilterState(
-        enabledTypes: Set(BarrierType.allCases),
-        radius: AppConfig.defaultBarrierRadius
+        enabledTypes: Set(BarrierType.allCases)
     )
-
-    static let minRadius: Double = 100
-    static let maxRadius: Double = 1000
-    static let radiusStep: Double = 50
 }
