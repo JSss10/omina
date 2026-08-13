@@ -31,12 +31,21 @@ final class AuthService: ObservableObject {
         }
     }
     
-    // MARK: - Session
-    
+        // MARK: - Session
+
+    /// Mindestdauer des Startbilds. Mit gültiger Sitzung im Keychain ist der
+    /// Session-Check nach wenigen hundert Millisekunden durch – der Splash
+    /// blitzte dann nur auf, während er beim ersten Start oder auf langsamem
+    /// Netz eine Sekunde stand. Die Untergrenze macht den Start in beiden
+    /// Fällen gleich lang.
+    private static let minimumSplashDuration: Duration = .seconds(1.2)
+
     func checkSession() async {
         isLoading = true
         defer { isLoading = false }
-        
+
+        let start = ContinuousClock.now
+
         do {
             let session = try await client.auth.session
             self.currentUser = session.user
@@ -44,6 +53,13 @@ final class AuthService: ObservableObject {
         } catch {
             self.currentUser = nil
             self.isAuthenticated = false
+        }
+
+        // Steht bewusst am Ende des Methodenkörpers: Das `defer` oben läuft
+        // erst danach, isLoading fällt also nicht schon während des Wartens.
+        let elapsed = ContinuousClock.now - start
+        if elapsed < Self.minimumSplashDuration {
+            try? await Task.sleep(for: Self.minimumSplashDuration - elapsed)
         }
     }
     
