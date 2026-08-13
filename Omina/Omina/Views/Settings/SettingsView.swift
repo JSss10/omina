@@ -26,15 +26,20 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
-                profileHeaderSection
-                profileSection
-                companionSection
-                editSection
-                notificationsSection
-                mapSection
-                generalSection
-                privacyAndAboutSection
-                accountSection
+                // Die Group gibt die Zeilenfläche an jede Section weiter,
+                // damit sie nicht an jeder einzeln steht.
+                Group {
+                    profileHeaderSection
+                    profileSection
+                    companionSection
+                    editSection
+                    notificationsSection
+                    mapSection
+                    generalSection
+                    privacyAndAboutSection
+                    accountSection
+                }
+                .appFormRowBackground()
             }
             // Platz für die schwebende Navigationsleiste: Das Formular steckt
             // in einem eigenen NavigationStack und übernimmt den Abstand von
@@ -43,6 +48,7 @@ struct SettingsView: View {
             .safeAreaInset(edge: .bottom) {
                 Color.clear.frame(height: AppMetrics.tabBarInset)
             }
+            .appFormBackground()
             .tint(AppColor.accentPrimary)
             .navigationTitle("Profil")
             .navigationBarTitleDisplayMode(.inline)

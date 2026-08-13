@@ -16,11 +16,15 @@ struct NotificationSettingsView: View {
 
     var body: some View {
         Form {
-            permissionSection
-            warningsSection
-            radiusSection
-            soundSection
+            Group {
+                permissionSection
+                warningsSection
+                radiusSection
+                soundSection
+            }
+            .appFormRowBackground()
         }
+        .appFormBackground()
         .navigationTitle("Benachrichtigungen")
         .navigationBarTitleDisplayMode(.inline)
         .onChange(of: scenePhase) { _, newPhase in

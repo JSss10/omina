@@ -37,7 +37,9 @@ struct LanguageSettingsView: View {
             } footer: {
                 Text("EN / FR / IT folgen in einer späteren Version")
             }
+            .appFormRowBackground()
         }
+        .appFormBackground()
         .navigationTitle("Sprache")
         .navigationBarTitleDisplayMode(.inline)
     }

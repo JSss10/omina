@@ -9,12 +9,16 @@ import SwiftUI
 struct AboutView: View {
     var body: some View {
         Form {
-            appSection
-            sourcesSection
-            librariesSection
-            legalSection
-            projectSection
+            Group {
+                appSection
+                sourcesSection
+                librariesSection
+                legalSection
+                projectSection
+            }
+            .appFormRowBackground()
         }
+        .appFormBackground()
         .navigationTitle("Über die App")
         .navigationBarTitleDisplayMode(.inline)
     }

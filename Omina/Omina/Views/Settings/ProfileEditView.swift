@@ -29,14 +29,18 @@ struct ProfileEditView: View {
 
     var body: some View {
         Form {
-            photoSection
-            mobilitySection
-            wheelchairSection
-            measurementsSection
-            abilitiesSection
-            surfaceSection
-            companionSection
+            Group {
+                photoSection
+                mobilitySection
+                wheelchairSection
+                measurementsSection
+                abilitiesSection
+                surfaceSection
+                companionSection
+            }
+            .appFormRowBackground()
         }
+        .appFormBackground()
         .navigationTitle("Profil bearbeiten")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {

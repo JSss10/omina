@@ -14,11 +14,15 @@ struct PrivacyView: View {
 
     var body: some View {
         Form {
-            collectedSection
-            storageSection
-            deleteSection
-            supportSection
+            Group {
+                collectedSection
+                storageSection
+                deleteSection
+                supportSection
+            }
+            .appFormRowBackground()
         }
+        .appFormBackground()
         .navigationTitle("Datenschutz")
         .navigationBarTitleDisplayMode(.inline)
         .alert("Konto und Daten löschen?", isPresented: $showingDeleteConfirm) {

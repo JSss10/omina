@@ -47,6 +47,10 @@ struct PrimaryButtonStyle: ButtonStyle {
 
 /// Sekundäraktion: Umriss im Markenviolett auf transparentem Grund (Entwurf:
 /// "Zurück" neben der Primäraktion).
+///
+/// Die gedrückte Fläche kommt aus `surfaceTinted` und nicht aus der
+/// Referenzstufe Violett 100: Die Palettenstufen haben keine Dunkel-Variante,
+/// die Fläche bliebe im Dunkelmodus also hell – unter hellem Text.
 struct SecondaryButtonStyle: ButtonStyle {
     var fullWidth: Bool = true
 
@@ -58,7 +62,7 @@ struct SecondaryButtonStyle: ButtonStyle {
             .frame(minHeight: AppMetrics.Touch.primary)
             .padding(.horizontal, AppMetrics.Space.l)
             .background(
-                configuration.isPressed ? AppColor.Violet.v100.opacity(0.5) : Color.clear
+                configuration.isPressed ? AppColor.surfaceTinted.opacity(0.6) : Color.clear
             )
             .overlay(
                 RoundedRectangle(cornerRadius: AppMetrics.Radius.button, style: .continuous)
@@ -69,7 +73,13 @@ struct SecondaryButtonStyle: ButtonStyle {
     }
 }
 
-/// Zurückhaltende Aktion: getönte Fläche (Violett 100), Text in Akzentfarbe.
+/// Zurückhaltende Aktion: getönte Fläche, Text in Akzentfarbe.
+///
+/// Die Fläche ist `surfaceTinted` (hell #EDE9FE · dunkel #241D3A) und nicht
+/// die Referenzstufe Violett 100. Diese hat keine Dunkel-Variante: Im
+/// Dunkelmodus stand die helle Akzentschrift (#C4B5FD) sonst auf hellem
+/// Violett und war praktisch nicht zu lesen – so trägt der Button in beiden
+/// Modi 7,5:1 bzw. 8,7:1.
 struct QuietButtonStyle: ButtonStyle {
     var fullWidth: Bool = false
 
@@ -81,7 +91,7 @@ struct QuietButtonStyle: ButtonStyle {
             .frame(minHeight: AppMetrics.Touch.primary)
             .padding(.horizontal, AppMetrics.Space.l)
             .background(
-                AppColor.Violet.v100.opacity(configuration.isPressed ? 0.7 : 1)
+                AppColor.surfaceTinted.opacity(configuration.isPressed ? 0.7 : 1)
             )
             .clipShape(RoundedRectangle(cornerRadius: AppMetrics.Radius.button, style: .continuous))
             .contentShape(RoundedRectangle(cornerRadius: AppMetrics.Radius.button, style: .continuous))
