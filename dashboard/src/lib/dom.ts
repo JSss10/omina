@@ -43,6 +43,27 @@ export function el<K extends keyof HTMLElementTagNameMap>(
   return node;
 }
 
+const SVG_NAMESPACE = "http://www.w3.org/2000/svg";
+
+/**
+ * Erzeugt ein SVG-Element. `createElement` reicht dafür nicht: ohne
+ * Namensraum entstünde ein HTML-Element gleichen Namens, das der Browser
+ * nicht zeichnet.
+ */
+export function svg<K extends keyof SVGElementTagNameMap>(
+  tag: K,
+  attrs: Attrs = {},
+  children: Child | Child[] = [],
+): SVGElementTagNameMap[K] {
+  const node = document.createElementNS(SVG_NAMESPACE, tag);
+  for (const [name, value] of Object.entries(attrs)) {
+    if (value === null || value === undefined || value === false) continue;
+    node.setAttribute(name, value === true ? "" : String(value));
+  }
+  append(node, children);
+  return node;
+}
+
 /** Leert einen Knoten. */
 export function clear(node: Node): void {
   while (node.firstChild !== null) {

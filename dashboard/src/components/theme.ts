@@ -54,7 +54,7 @@ export function themeToggle(): HTMLElement {
     apply(select.value as Theme);
   });
 
-  // Kompakt genug für die Kopfzeile, aber nicht schmaler als das Touch-Ziel.
-  select.style.minWidth = "8rem";
+  // Form und Mindestbreite in der Kopfzeile setzt app.css
+  // (`.app-header__actions .select`) – hier bleibt nur das Verhalten.
   return select;
 }

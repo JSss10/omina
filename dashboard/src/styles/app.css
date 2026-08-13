@@ -1,6 +1,11 @@
 /* app.css
  * Komponenten und Layout des Feldtest-Dashboards.
  *
+ * Die Bausteine sind die Web-Fassung derselben Komponenten wie in der App
+ * (Omina/Omina/DesignSystem/Components): getönte Flächen statt Rahmen,
+ * Kapseln für alles Kompakte, Titel im Markenviolett, die violette
+ * Akzentleiste über dem Screen und die schwebende Navigationskapsel unten.
+ *
  * Alle Werte kommen aus tokens.css – kein Hex, keine Magic Numbers.
  * Konformitätsziel wie in der App: WCAG 2.2 AAA.
  */
@@ -17,10 +22,19 @@
   box-sizing: border-box;
 }
 
+/* `hidden` muss stärker sein als das `display` der Komponente – sonst
+   bliebe etwa die leere Fehlermeldung als farbige Fläche stehen. */
+[hidden] {
+  display: none !important;
+}
+
 html {
   /* Kein festes font-size – die Browser-Schriftgrösse der Nutzenden bleibt
      massgeblich (WCAG 1.4.4). Alle Grössen sind rem-basiert. */
   -webkit-text-size-adjust: 100%;
+  /* Sprung zu einem Abschnitt der Navigationskapsel läuft weich; bei
+     "Bewegung reduzieren" schaltet der Block weiter unten das ab. */
+  scroll-behavior: smooth;
 }
 
 body {
@@ -75,6 +89,10 @@ a:hover {
 
 /* Wer Bewegung reduziert haben will, bekommt keine (WCAG 2.3.3 AAA). */
 @media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
   *,
   *::before,
   *::after {
@@ -121,6 +139,19 @@ a:hover {
 }
 
 /* ===============================================================
+ * Akzentleiste (BrandAccentBar.swift)
+ * Die violette Kapsel unter der Statusleiste, die in der App über jedem
+ * Screen ohne Navigationsleiste steht. Rein dekorativ.
+ * =============================================================== */
+
+.brand-bar {
+  height: 4px;
+  margin: var(--space-s) var(--space-l) 0;
+  background: var(--violet-500);
+  border-radius: var(--radius-pill);
+}
+
+/* ===============================================================
  * Buttons (§4.1) – Portierung von AppButtonStyles.swift
  * =============================================================== */
 
@@ -139,9 +170,10 @@ a:hover {
   transition: background-color 120ms ease-out;
 }
 
+/* Inaktiv wird nichts ausgegraut: die Primäraktion steht gedämpft in
+   AccentMuted mit dunkler Schrift, wie im Entwurf. */
 .btn:disabled {
   cursor: not-allowed;
-  opacity: 0.5;
 }
 
 .btn--full {
@@ -159,16 +191,21 @@ a:hover {
   background: var(--accent-pressed);
 }
 
-/* Sekundäraktion: Umriss (2 px) auf transparentem Grund. */
+.btn--primary:disabled {
+  color: var(--text-brand);
+  background: var(--accent-muted);
+}
+
+/* Sekundäraktion: Umriss im Markenviolett auf transparentem Grund. */
 .btn--secondary {
-  color: var(--accent-primary);
+  color: var(--text-brand);
   background: transparent;
-  box-shadow: inset 0 0 0 2px var(--accent-primary);
+  box-shadow: inset 0 0 0 1.5px var(--text-brand);
 }
 
 .btn--secondary:hover:not(:disabled),
 .btn--secondary:active:not(:disabled) {
-  background: color-mix(in srgb, var(--accent-primary) 10%, transparent);
+  background: var(--surface-tinted);
 }
 
 /* Zurückhaltende Aktion: getönte Fläche. */
@@ -182,16 +219,21 @@ a:hover {
   background: var(--quiet-fill-pressed);
 }
 
-/* Kompakte Variante für Werkzeugleisten – bleibt auf dem 44-px-Minimum. */
+/* Kompakte Variante für Werkzeugleisten – Kapsel wie die Kategorie-Chips
+   der App (CategoryPill), auf dem 44-px-Minimum. */
 .btn--compact {
   min-height: var(--touch-minimum);
-  padding: 0 var(--space-m);
+  padding: 0 var(--space-l);
   font: var(--font-subheadline);
   font-weight: 600;
+  border-radius: var(--radius-pill);
 }
 
 /* ===============================================================
- * Formularelemente
+ * Formularelemente – AppTextField.swift
+ * Felder stehen randlos auf ihrer getönten Fläche; ihre Grenze trägt
+ * allein die Tönung. Sie dürfen deshalb nie auf gleich getöntem Grund
+ * stehen – innerhalb von .card schaltet die Regel weiter unten um.
  * =============================================================== */
 
 .field {
@@ -203,7 +245,7 @@ a:hover {
 .field__label {
   font: var(--font-subheadline);
   font-weight: 600;
-  color: var(--text-secondary);
+  color: var(--text-brand);
 }
 
 .field__hint {
@@ -214,14 +256,28 @@ a:hover {
 
 .input,
 .select {
-  min-height: var(--touch-minimum);
-  padding: var(--space-s) var(--space-m);
+  min-height: var(--field-height);
+  padding: var(--space-s) calc(var(--space-m) + var(--space-xs));
   font: var(--font-body);
   color: var(--text-primary);
-  background: var(--background-primary);
-  border: 1px solid var(--border-functional);
-  border-radius: var(--radius-field);
+  background: var(--surface-tinted);
+  border: 0;
+  border-radius: var(--radius-button);
   width: 100%;
+}
+
+.input::placeholder {
+  /* Die Beschriftung steht im Feld selbst (Entwurf) – sie muss deshalb
+     lesbar sein, nicht ein blasser Hinweis. */
+  color: var(--text-brand);
+  opacity: 1;
+}
+
+/* Auf einer getönten Karte kehrt sich das Verhältnis um: dort trägt die
+   helle Feldfläche die Grenze (CompactFieldChrome.swift). */
+.card .input,
+.card .select {
+  background: var(--background-primary);
 }
 
 .select {
@@ -240,7 +296,49 @@ a:hover {
   background-repeat: no-repeat;
 }
 
-/* Fehlermeldung – nie allein über Farbe codiert, immer mit Text (WCAG 1.4.1). */
+/* Passwortfeld mit Auge-Schaltfläche: die Schaltfläche liegt im Feld,
+   der Text macht ihr Platz. */
+.field__control {
+  position: relative;
+  display: flex;
+}
+
+.field__control .input {
+  padding-right: calc(var(--touch-minimum) + var(--space-s));
+}
+
+/* Kleiner violetter Kreis, antippbar in voller Zielgrösse (WCAG 2.5.5). */
+.field__reveal {
+  position: absolute;
+  top: 50%;
+  right: var(--space-s);
+  transform: translateY(-50%);
+  width: var(--touch-minimum);
+  height: var(--touch-minimum);
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--on-accent);
+  cursor: pointer;
+}
+
+.field__reveal::before {
+  content: "";
+  position: absolute;
+  width: 26px;
+  height: 26px;
+  background: var(--accent-primary);
+  border-radius: var(--radius-pill);
+}
+
+.field__reveal .icon {
+  position: relative;
+}
+
+/* Fehlermeldung – nie allein über Farbe codiert, immer mit Symbol und
+   Text (WCAG 1.4.1). */
 .form-error {
   display: flex;
   align-items: flex-start;
@@ -249,7 +347,23 @@ a:hover {
   font: var(--font-subheadline);
   color: var(--status-blocked-text);
   background: var(--status-blocked-fill);
-  border-radius: var(--radius-field);
+  border-radius: var(--radius-button);
+}
+
+.form-error .icon {
+  flex: none;
+  margin-top: 0.15em;
+}
+
+/* Symbole stehen als Inline-SVG im Text und erben dessen Farbe. */
+.icon {
+  width: 1.25em;
+  height: 1.25em;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 /* ===============================================================
@@ -266,8 +380,10 @@ a:hover {
   border-bottom: 1px solid var(--border-decorative);
 }
 
+/* Screen-Titel im Markenviolett (AuthHeader.swift). */
 .app-header__titles h1 {
   font: var(--font-title-1);
+  color: var(--text-brand);
 }
 
 .app-header__subtitle {
@@ -283,9 +399,27 @@ a:hover {
   gap: var(--space-s);
 }
 
+/* Angemeldetes Konto als getönte Kapsel – dieselbe Form wie die Chips
+   der App. */
 .app-header__user {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--touch-minimum);
+  padding: 0 var(--space-m);
   font: var(--font-footnote);
-  color: var(--text-secondary);
+  color: var(--text-brand);
+  background: var(--surface-tinted);
+  border-radius: var(--radius-pill);
+}
+
+/* In der Kopfzeile steht das Auswahlfeld kompakt neben den Schaltflächen. */
+.app-header__actions .select {
+  min-height: var(--touch-minimum);
+  min-width: 8rem;
+  width: auto;
+  font: var(--font-subheadline);
+  border-radius: var(--radius-pill);
+  color: var(--text-brand);
 }
 
 /* ===============================================================
@@ -294,6 +428,9 @@ a:hover {
 
 .app-main {
   padding: var(--space-l);
+  /* Unten bleibt Platz für die schwebende Navigationskapsel
+     (AppMetrics.tabBarInset). */
+  padding-bottom: calc(var(--tab-bar-inset) + var(--space-l));
   display: flex;
   flex-direction: column;
   gap: var(--space-xl);
@@ -303,6 +440,8 @@ a:hover {
   display: flex;
   flex-direction: column;
   gap: var(--space-m);
+  /* Sprungziel der Navigationskapsel – der Titel klebt nicht am Rand. */
+  scroll-margin-top: var(--space-l);
 }
 
 .section__head {
@@ -313,8 +452,10 @@ a:hover {
   gap: var(--space-s);
 }
 
+/* Abschnittstitel im Markenviolett (SheetSection.swift). */
 .section__title {
   font: var(--font-title-2);
+  color: var(--text-brand);
 }
 
 .section__note {
@@ -322,41 +463,137 @@ a:hover {
   color: var(--text-secondary);
 }
 
+/* Getönte Karte ohne Rahmen und ohne Schatten – die Tönung trennt die
+   Fläche vom Grund, so wie in den Sheets der App. */
 .card {
   padding: var(--space-l);
-  background: var(--surface-raised);
-  border: 1px solid var(--border-decorative);
+  background: var(--surface-tinted);
   border-radius: var(--radius-card);
-  box-shadow: var(--shadow-card);
 }
 
 /* ===============================================================
- * Anmeldung
+ * Schwebende Navigationskapsel (OminaTabBar.swift)
+ * Violette Kapsel über dem Inhalt; der aktive Eintrag sitzt in einer
+ * hellen Fläche, zwischen den übrigen stehen feine Trennlinien.
+ * =============================================================== */
+
+.tabbar {
+  position: fixed;
+  bottom: var(--space-l);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 50;
+  max-width: calc(100% - 2 * var(--space-m));
+  padding: var(--space-s);
+  background: var(--accent-primary);
+  border-radius: var(--radius-pill);
+  box-shadow: var(--shadow-floating);
+}
+
+.tabbar__list {
+  display: flex;
+  align-items: center;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  /* Passen die Einträge auf schmalen Fenstern nicht nebeneinander, scrollt
+     die Kapsel für sich – die Seite selbst nie (WCAG 1.4.10). Der schmale
+     Balken bleibt sichtbar, sonst wäre nicht erkennbar, dass da noch etwas
+     kommt. */
+  overflow-x: auto;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--on-accent) 45%, transparent)
+    transparent;
+}
+
+.tabbar__list > li {
+  display: flex;
+  align-items: center;
+}
+
+/* Trennlinie zwischen zwei Einträgen. */
+.tabbar__list > li + li::before {
+  content: "";
+  flex: none;
+  width: 1px;
+  height: 24px;
+  background: color-mix(in srgb, var(--on-accent) 35%, transparent);
+}
+
+.tabbar__item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--touch-minimum);
+  padding: 0 var(--space-m);
+  font: var(--font-subheadline);
+  font-weight: 600;
+  color: var(--on-accent);
+  text-decoration: none;
+  white-space: nowrap;
+  border-radius: var(--radius-pill);
+}
+
+/* Aktiver Eintrag: helle Fläche mit violetter Schrift. */
+.tabbar__item[aria-current="true"] {
+  color: var(--accent-primary);
+  background: var(--on-accent);
+}
+
+/* Auf der violetten Kapsel wäre der violette Ring unsichtbar – und weil die
+   Liste seitlich scrollen kann, würde ein aussen liegender Ring oben und
+   unten abgeschnitten. Er läuft deshalb innen am Eintrag entlang. */
+.tabbar__item:focus-visible {
+  outline-color: var(--on-accent);
+  outline-offset: calc(-1 * var(--focus-ring-width));
+}
+
+/* Der aktive Eintrag steht auf heller Fläche: dort trägt der Ring die
+   Akzentfarbe. */
+.tabbar__item[aria-current="true"]:focus-visible {
+  outline-color: var(--accent-primary);
+}
+
+/* ===============================================================
+ * Anmeldung – Aufbau wie SignInView.swift: Akzentleiste, Titel im
+ * Markenviolett mit erklärender Zeile, die Felder ohne eigene
+ * Label-Zeile, darunter die Primäraktion.
  * =============================================================== */
 
 .login {
   min-height: 100dvh;
-  display: grid;
-  place-items: center;
-  padding: var(--space-l);
+  display: flex;
+  flex-direction: column;
+  background: var(--background-primary);
 }
 
 .login__card {
   width: 100%;
   max-width: 26rem;
+  margin: 0 auto;
+  padding: 0 var(--space-l) var(--space-xl);
   display: flex;
   flex-direction: column;
   gap: var(--space-m);
 }
 
-.login__title {
-  font: var(--font-title-1);
+/* AuthHeader.swift: der Titel beginnt rund 56 px unter der Akzentleiste. */
+.auth-header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-s);
+  padding: calc(var(--space-xxl) + var(--space-m)) 0 var(--space-s);
 }
 
-.login__intro {
-  font: var(--font-callout);
-  color: var(--text-secondary);
+.auth-header__title {
+  font: var(--font-large-title);
+  color: var(--text-brand);
+}
+
+.auth-header__subtitle {
   margin: 0;
+  font: var(--font-body);
+  color: var(--text-secondary);
 }
 
 /* ===============================================================
@@ -375,6 +612,18 @@ a:hover {
   flex-wrap: wrap;
   gap: var(--space-s);
   align-items: end;
+}
+
+/* Die Schaltflächen der Werkzeugleiste sitzen auf der getönten Karte –
+   dort trägt die helle Fläche die Form, wie bei den Feldern. */
+.card .btn--quiet {
+  color: var(--text-brand);
+  background: var(--background-primary);
+}
+
+.card .btn--quiet:hover:not(:disabled),
+.card .btn--quiet:active:not(:disabled) {
+  background: var(--surface-overlay);
 }
 
 /* ===============================================================
@@ -398,8 +647,7 @@ a:hover {
   flex-direction: column;
   gap: var(--space-xs);
   padding: var(--space-m);
-  background: var(--surface-raised);
-  border: 1px solid var(--border-decorative);
+  background: var(--surface-tinted);
   border-radius: var(--radius-card);
 }
 
@@ -408,18 +656,15 @@ a:hover {
 .kpi__value {
   font: var(--font-title-1);
   font-variant-numeric: tabular-nums;
-  color: var(--accent-primary);
+  color: var(--text-brand);
   text-wrap: nowrap;
-}
-
-.kpi__label {
-  text-wrap: balance;
 }
 
 .kpi__label {
   font: var(--font-subheadline);
   font-weight: 600;
   color: var(--text-primary);
+  text-wrap: balance;
 }
 
 .kpi__hint {
@@ -428,9 +673,9 @@ a:hover {
 }
 
 /* ===============================================================
- * Balkendiagramm (eigenes SVG, keine Fremdbibliothek)
- * Die Daten stehen zusätzlich als Tabelle im DOM – das Diagramm ist
- * aria-hidden, gelesen wird die Tabelle (WCAG 1.1.1).
+ * Balkendiagramm (eigenes DOM, keine Fremdbibliothek)
+ * Beschriftung und Wert stehen als Text im DOM, der Balken ist nur die
+ * visuelle Zugabe (aria-hidden) – WCAG 1.1.1 / 1.4.1.
  * =============================================================== */
 
 .chart-grid {
@@ -446,12 +691,10 @@ a:hover {
 }
 
 .chart__title {
-  font: var(--font-headline);
+  font: var(--font-title-3);
+  color: var(--text-brand);
 }
 
-/* Liste statt Grafik: Beschriftung und Wert stehen als echter Text im DOM,
-   der Balken ist nur die visuelle Zugabe (aria-hidden). Damit braucht es
-   keine Textalternative für ein Bild – die Daten sind der Inhalt. */
 .chart__rows {
   display: flex;
   flex-direction: column;
@@ -474,17 +717,20 @@ a:hover {
   overflow-wrap: anywhere;
 }
 
+/* Die Spur liegt auf der getönten Karte und ist deshalb hell – wie die
+   Zahlenfelder in den Karten der App. Kapselform wie die Segmente der
+   Fortschrittsanzeige (OnboardingProgressBar.swift). */
 .chart__track {
   height: 1.25rem;
-  background: color-mix(in srgb, var(--border-decorative) 60%, transparent);
-  border-radius: var(--radius-chip);
+  background: var(--background-primary);
+  border-radius: var(--radius-pill);
   overflow: hidden;
 }
 
 .chart__bar {
   height: 100%;
   background: var(--accent-primary);
-  border-radius: var(--radius-chip);
+  border-radius: var(--radius-pill);
   /* Auch bei Wert 0 bleibt eine sichtbare Spur – sonst wirkt die Zeile leer. */
   min-width: 2px;
 }
@@ -499,15 +745,15 @@ a:hover {
 }
 
 /* ===============================================================
- * Tabellen
+ * Tabellen – getönte Karte mit feinen Trennlinien, wie die Zeilen der
+ * Sheets (SheetChrome.swift).
  * =============================================================== */
 
 /* Breite Tabellen scrollen in ihrem eigenen Container, nie die Seite. */
 .table-scroll {
   overflow-x: auto;
-  border: 1px solid var(--border-decorative);
   border-radius: var(--radius-card);
-  background: var(--surface-raised);
+  background: var(--surface-tinted);
 }
 
 .table {
@@ -536,10 +782,9 @@ a:hover {
   top: 0;
   z-index: 1;
   font-weight: 600;
-  color: var(--text-primary);
-  background: var(--surface-raised);
+  color: var(--text-brand);
+  background: var(--surface-overlay);
   white-space: nowrap;
-  border-bottom: 2px solid var(--border-functional);
 }
 
 .table tbody tr:last-child td {
@@ -570,11 +815,8 @@ a:hover {
   font-weight: 600;
   color: var(--accent-primary);
   cursor: pointer;
-}
-
-/* `display: flex` auf <summary> entfernt das Standarddreieck – ohne Ersatz
-   fehlt die Aufklapp-Andeutung ganz. */
-.details__summary {
+  /* `display: flex` auf <summary> entfernt das Standarddreieck – ohne
+     Ersatz fehlt die Aufklapp-Andeutung ganz. */
   list-style: none;
 }
 
@@ -631,7 +873,7 @@ a:hover {
   padding: var(--space-xs) var(--space-m);
   font: var(--font-footnote);
   font-weight: 600;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   white-space: nowrap;
 }
 
@@ -655,12 +897,13 @@ a:hover {
 }
 
 .badge--neutral {
-  color: var(--text-secondary);
-  background: color-mix(in srgb, var(--border-decorative) 50%, transparent);
+  color: var(--text-brand);
+  background: var(--surface-tinted);
 }
 
 /* ===============================================================
- * Zustände: Laden, leer, Fehler
+ * Zustände: Laden, leer, Fehler – AppStateScreen.swift: getönte Fläche,
+ * Titel im Markenviolett, darunter der erklärende Text.
  * =============================================================== */
 
 .state {
@@ -671,14 +914,13 @@ a:hover {
   padding: var(--space-xl) var(--space-l);
   text-align: left;
   color: var(--text-secondary);
-  background: var(--surface-raised);
-  border: 1px dashed var(--border-functional);
+  background: var(--surface-tinted);
   border-radius: var(--radius-card);
 }
 
 .state__title {
-  font: var(--font-headline);
-  color: var(--text-primary);
+  font: var(--font-title-3);
+  color: var(--text-brand);
 }
 
 .state p {
@@ -696,6 +938,14 @@ a:hover {
     padding-inline: var(--space-m);
   }
 
+  .brand-bar {
+    margin-inline: var(--space-m);
+  }
+
+  .login__card {
+    padding-inline: var(--space-m);
+  }
+
   .chart__row {
     /* Beschriftung über den Balken statt daneben – sonst bleibt für den
        Balken selbst zu wenig Platz. */
@@ -709,6 +959,15 @@ a:hover {
   .btn--compact {
     flex: 1 1 auto;
   }
+
+  /* Enger gesetzte Einträge, damit möglichst viele nebeneinander stehen.
+     Was dann noch nicht hineinpasst, holt die Kapsel beim Wechsel des
+     Abschnitts selbst nach vorn (app.ts). */
+  .tabbar__item {
+    padding: 0 var(--space-s);
+    font: var(--font-footnote);
+    font-weight: 600;
+  }
 }
 
 /* ===============================================================
@@ -718,13 +977,19 @@ a:hover {
 @media print {
   .app-header__actions,
   .toolbar,
-  .skip-link {
+  .skip-link,
+  .brand-bar,
+  .tabbar {
     display: none;
   }
 
   body {
     background: #fff;
     color: #000;
+  }
+
+  .app-main {
+    padding-bottom: var(--space-l);
   }
 
   .card,

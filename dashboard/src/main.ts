@@ -5,6 +5,7 @@ import "./styles/app.css";
 
 import { missingConfig, supabase } from "./lib/supabase.ts";
 import { el, must, render } from "./lib/dom.ts";
+import { authHeader, brandBar } from "./components/chrome.ts";
 import { initTheme } from "./components/theme.ts";
 import { loginView } from "./components/login.ts";
 import { mountDashboard, signOut } from "./app.ts";
@@ -18,10 +19,12 @@ function showConfigError(message: string): void {
   render(
     root,
     el("div", { class: "login" }, [
-      el("div", { class: "login__card card" }, [
-        el("h1", { class: "login__title" }, "Konfiguration fehlt"),
-        el("p", { class: "login__intro" }, message),
-      ]),
+      brandBar(),
+      el(
+        "div",
+        { class: "login__card" },
+        authHeader("Konfiguration fehlt", message),
+      ),
     ]),
   );
 }
@@ -41,7 +44,19 @@ async function route(): Promise<void> {
     return;
   }
 
-  render(root, el("div", { class: "state" }, "Dashboard wird geladen …"));
+  // Zustands-Screen wie in der App: getönte Fläche, Titel im Markenviolett.
+  render(root, [
+    brandBar(),
+    el(
+      "main",
+      { class: "app-main" },
+      el(
+        "div",
+        { class: "state" },
+        el("p", { class: "state__title" }, "Dashboard wird geladen …"),
+      ),
+    ),
+  ]);
 
   await mountDashboard(
     root,

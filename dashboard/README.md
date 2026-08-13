@@ -50,6 +50,28 @@ sichtbar sind, entscheidet Row Level Security. Einmalig einzurichten:
 Ohne Schritt 3 kommt man zwar durch die Anmeldung, sieht aber keine Daten –
 das Dashboard sagt das ausdrücklich, statt einen leeren Testtag zu zeigen.
 
+### Konto aus der App
+
+App und Dashboard hängen an derselben Supabase-Instanz und damit an
+derselben Benutzertabelle (`auth.users`). Ein Konto aus der App kommt
+deshalb mit E-Mail und Passwort auch hier durch die Anmeldung – ein zweites
+Konto braucht es nicht. Was es sieht, ist damit aber nicht entschieden:
+Ohne Eintrag in `dashboard_researchers` greift die RLS und das Dashboard
+zeigt «Dieses Konto ist nicht freigeschaltet».
+
+Umgekehrt gilt dasselbe: Das Auswertungskonto kann sich in der App
+anmelden, ist dort aber eine gewöhnliche Nutzerin ohne Sonderrechte. Die
+Rolle hängt an der Tabelle, nicht am Konto selbst.
+
+Zwei Unterschiede zur App bleiben:
+
+- Das Dashboard kennt nur die Anmeldung mit Passwort. Ein Konto, das in der
+  App ausschliesslich über den Einmalcode angelegt wurde und gar kein
+  Passwort hat, kommt hier nicht hinein – für solche Konten im Supabase
+  Dashboard unter Authentication → Users ein Passwort setzen.
+- Registrieren kann man sich hier nicht. Konten legt die Betreuung im
+  Supabase-Dashboard an.
+
 ## Befehle
 
 | Befehl              | Wirkung                                     |
@@ -133,7 +155,9 @@ dashboard/
 │   │   ├── csv.ts              Export nach RFC 4180
 │   │   └── dom.ts              DOM-Helfer ohne innerHTML
 │   ├── components/
+│   │   ├── chrome.ts           Akzentleiste und Titelblock der Screens
 │   │   ├── login.ts            Anmeldung
+│   │   ├── icons.ts            Auge und Warndreieck als Inline-SVG
 │   │   ├── theme.ts            Hell/Dunkel/System
 │   │   ├── kpi.ts              Kennzahlen-Kacheln
 │   │   ├── chart.ts            Balkendiagramm
@@ -152,6 +176,32 @@ dashboard/
 Hex-Werte stammen aus denselben Colorsets in `Assets.xcassets`, die Masse aus
 denselben Konstanten. Wie im iOS-Code gilt: Komponenten referenzieren nur
 Tokens, nie Hex-Werte.
+
+Nicht nur die Tokens sind portiert, sondern auch die Bausteine aus
+`DesignSystem/Components`. Das Dashboard sieht deshalb aus wie die App und
+nicht wie ein Verwaltungswerkzeug:
+
+| Web (`app.css`)      | App                                   | Merkmal                                                                |
+| -------------------- | ------------------------------------- | ---------------------------------------------------------------------- |
+| `.brand-bar`         | `BrandAccentBar.swift`                | violette Leiste über jedem Screen                                      |
+| `.auth-header`       | `AuthHeader.swift`                    | Grosstitel im Markenviolett mit erklärender Zeile                      |
+| `.input` / `.select` | `AppTextField.swift`                  | getönte Fläche ohne Rand, Beschriftung im Feld, Auge am Passwort       |
+| `.btn--*`            | `AppButtonStyles.swift`               | 56 px hoch, Radius 14; inaktiv gedämpft statt ausgegraut               |
+| `.card` / `.table`   | `SheetChrome.swift`                   | getönte Karten, violette Abschnittstitel, feine Trennlinien            |
+| `.btn--compact`      | `SearchChrome.swift` (`CategoryPill`) | Kapseln für kompakte Aktionen                                          |
+| `.tabbar`            | `OminaTabBar.swift`                   | schwebende violette Kapsel; der aktive Eintrag sitzt auf heller Fläche |
+| `.state`             | `AppStateScreen.swift`                | getönter Zustands-Screen mit Titel im Markenviolett                    |
+
+Die Flächen tragen die Gliederung, nicht Rahmen und Schatten: Karten,
+Felder und Chips stehen violett getönt auf hellem Grund – und dort, wo sie
+selbst auf einer getönten Karte sitzen, kehrt sich das Verhältnis um
+(helle Fläche auf getöntem Grund), wie in `CompactFieldChrome`.
+
+Die Navigationskapsel führt zu den vier Abschnitten der Seite. Welcher
+Abschnitt gerade oben steht, ermittelt ein `IntersectionObserver`; fehlt er,
+bleibt die Hervorhebung stehen und die Sprungmarken funktionieren weiter.
+Symbole gibt es nur zwei (Auge, Warndreieck) – SF Symbols stehen im Browser
+nicht zur Verfügung, und beide Stellen tragen ihre Aussage ohnehin als Text.
 
 ### Responsive Verhalten
 

@@ -27,6 +27,7 @@ import {
   wheelchairLabel,
 } from "./lib/format.ts";
 import { downloadCsv, toCsv } from "./lib/csv.ts";
+import { brandBar } from "./components/chrome.ts";
 import { themeToggle } from "./components/theme.ts";
 import { kpiGrid } from "./components/kpi.ts";
 import { barChart } from "./components/chart.ts";
@@ -61,6 +62,21 @@ const state: State = {
 let contentRoot: HTMLElement;
 let statusRegion: HTMLElement;
 
+/**
+ * Abschnitte des Dashboards – Reihenfolge wie auf der Seite. `label` steht
+ * in der Navigationskapsel, `title` als Überschrift über dem Abschnitt.
+ */
+const SECTIONS = [
+  { id: "abschnitt-ueberblick", label: "Überblick", title: "Überblick" },
+  { id: "abschnitt-nutzung", label: "Nutzung", title: "Nutzung" },
+  { id: "abschnitt-testpersonen", label: "Testpersonen", title: "Testpersonen" },
+  {
+    id: "abschnitt-protokoll",
+    label: "Protokoll",
+    title: "Interaktionsprotokoll",
+  },
+] as const;
+
 // ---------------------------------------------------------------
 // Kopfzeile
 // ---------------------------------------------------------------
@@ -88,6 +104,99 @@ function header(email: string, onSignOut: () => void): HTMLElement {
       signOut,
     ]),
   ]);
+}
+
+// ---------------------------------------------------------------
+// Schwebende Navigationskapsel (OminaTabBar.swift)
+// ---------------------------------------------------------------
+
+/** Beobachtet die Abschnitte; wird bei jedem Neuaufbau ersetzt. */
+let sectionObserver: IntersectionObserver | null = null;
+
+/** Erneuert die Hervorhebung in der Kapsel; renderShell setzt sie ein. */
+let trackSections: () => void = () => { };
+
+/**
+ * Die violette Kapsel am unteren Rand, mit der die App zwischen ihren
+ * Bereichen wechselt. Im Dashboard führt sie zu den Abschnitten der Seite;
+ * hervorgehoben ist der Abschnitt, der gerade oben im Fenster steht.
+ */
+function sectionNav(): { nav: HTMLElement; activate: () => void } {
+  const links = new Map<string, HTMLAnchorElement>();
+
+  const items = SECTIONS.map((entry) => {
+    const link = el(
+      "a",
+      { class: "tabbar__item", href: `#${entry.id}` },
+      entry.label,
+    );
+    links.set(entry.id, link);
+    return el("li", {}, link);
+  });
+
+  // Vor dem ersten Scrollen ist der oberste Abschnitt der aktuelle.
+  links.get(SECTIONS[0].id)?.setAttribute("aria-current", "true");
+
+  const nav = el(
+    "nav",
+    { class: "tabbar", "aria-label": "Abschnitte" },
+    el("ul", { class: "tabbar__list" }, items),
+  );
+
+  function activate(): void {
+    sectionObserver?.disconnect();
+    sectionObserver = null;
+
+    // Ohne IntersectionObserver bleibt die Hervorhebung beim ersten
+    // Abschnitt stehen – die Sprungmarken funktionieren trotzdem.
+    if (typeof IntersectionObserver === "undefined") return;
+
+    const targets = SECTIONS.map((entry) =>
+      document.getElementById(entry.id),
+    ).filter((node): node is HTMLElement => node !== null);
+    if (targets.length === 0) return;
+
+    const visible = new Set<string>();
+    let currentId: string = SECTIONS[0].id;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) visible.add(entry.target.id);
+          else visible.delete(entry.target.id);
+        }
+
+        // Steht mehr als ein Abschnitt im Band, gewinnt der obere. Ist gar
+        // keiner darin (ganz oben auf der Seite), bleibt die bisherige
+        // Hervorhebung stehen.
+        const active = SECTIONS.find((entry) => visible.has(entry.id));
+        if (active === undefined || active.id === currentId) return;
+        currentId = active.id;
+
+        for (const [id, link] of links) {
+          if (id === active.id) link.setAttribute("aria-current", "true");
+          else link.removeAttribute("aria-current");
+        }
+
+        // Auf schmalen Fenstern passen nicht alle Einträge nebeneinander:
+        // dann rückt der aktuelle in der Kapsel nach vorn. `nearest` rührt
+        // die Seite selbst nicht an, nur die Kapsel scrollt.
+        links
+          .get(active.id)
+          ?.scrollIntoView({ block: "nearest", inline: "nearest" });
+      },
+      // Gezählt wird ein schmales Band im oberen Fünftel des Fensters:
+      // dorthin rückt ein Abschnitt, den die Kapsel gerade angesprungen
+      // hat. Ein Band in der Fenstermitte würde bei kurzen Abschnitten den
+      // folgenden hervorheben.
+      { rootMargin: "-15% 0px -80% 0px" },
+    );
+
+    for (const target of targets) observer.observe(target);
+    sectionObserver = observer;
+  }
+
+  return { nav, activate };
 }
 
 // ---------------------------------------------------------------
@@ -264,21 +373,26 @@ function visibleParticipants(): ParticipantRow[] {
   );
 }
 
+/**
+ * Abschnitt mit Sprungziel für die Navigationskapsel. `tabindex="-1"` macht
+ * den Abschnitt fokussierbar, damit der Sprung auch die Tastaturposition
+ * mitnimmt – sonst springt nur die Ansicht (WCAG 2.4.3).
+ */
 function section(
-  title: string,
+  entry: (typeof SECTIONS)[number],
   content: HTMLElement,
   note?: string,
 ): HTMLElement {
-  return el("section", { class: "section" }, [
+  return el("section", { class: "section", id: entry.id, tabindex: "-1" }, [
     el("div", { class: "section__head" }, [
-      el("h2", { class: "section__title" }, title),
+      el("h2", { class: "section__title" }, entry.title),
       note === undefined ? null : el("p", { class: "section__note" }, note),
     ]),
     content,
   ]);
 }
 
-function renderContent(): void {
+function renderContentBody(): void {
   if (state.loading) {
     render(
       contentRoot,
@@ -368,10 +482,12 @@ function renderContent(): void {
       .sort((a, b) => b.value - a.value || a.label.localeCompare(b.label));
   })();
 
+  const [overview, usage, people, log] = SECTIONS;
+
   render(contentRoot, [
-    section("Überblick", kpis),
+    section(overview, kpis),
     section(
-      "Nutzung",
+      usage,
       el("div", { class: "chart-grid" }, [
         barChart("Screen-Aufrufe", screenRows, { unit: "×", limit: 12 }),
         barChart("Ereignisse nach Typ", eventRows, { unit: "×", limit: 12 }),
@@ -384,14 +500,23 @@ function renderContent(): void {
       ]),
       "Balken zeigen den Anteil am jeweiligen Höchstwert.",
     ),
-    section("Testpersonen", participantsTable(stats)),
-    section("Interaktionsprotokoll", eventLog(events, participants)),
+    section(people, participantsTable(stats)),
+    section(log, eventLog(events, participants)),
   ]);
 
   render(
     statusRegion,
     `${formatNumber(participants.length)} Testpersonen und ${formatNumber(events.length)} Ereignisse geladen.`,
   );
+}
+
+/**
+ * Baut den Inhalt neu auf. Die Abschnitte entstehen dabei jedes Mal neu –
+ * die Navigationskapsel muss ihre Beobachtung deshalb danach erneuern.
+ */
+function renderContent(): void {
+  renderContentBody();
+  trackSections();
 }
 
 // ---------------------------------------------------------------
@@ -437,14 +562,19 @@ let signOutHandler: () => void = () => { };
 let currentEmail = "";
 
 function renderShell(): void {
+  const { nav, activate } = sectionNav();
+  trackSections = activate;
+
   render(shellRoot, [
     el("a", { class: "skip-link", href: "#inhalt" }, "Zum Inhalt springen"),
+    brandBar(),
     header(currentEmail, signOutHandler),
     el("main", { class: "app-main", id: "inhalt", tabindex: "-1" }, [
       toolbar(),
       statusRegion,
       contentRoot,
     ]),
+    nav,
   ]);
   renderContent();
 }
@@ -475,6 +605,7 @@ export async function mountDashboard(
   const allowed = await isResearcher();
   if (!allowed) {
     render(root, [
+      brandBar(),
       header(email, onSignOut),
       el("main", { class: "app-main", id: "inhalt" }, [
         el("div", { class: "state" }, [

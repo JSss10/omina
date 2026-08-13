@@ -31,12 +31,27 @@
    * Kontrastwerte in den Kommentaren gegen BackgroundPrimary (#FFFFFF).
    * --------------------------------------------------------------- */
   --background-primary: #ffffff;
-  --surface-raised: #faf9fc;
+  /* Ganzflächig getönter Grund der Zustands-Screens (BackgroundMuted). */
+  --background-muted: #ede9fe;
+  /* Karten und Sheets (SurfaceRaised) – in der App Violett 100, nicht grau. */
+  --surface-raised: #ede9fe;
+  /* Grundfläche der Overlays (SurfaceOverlay). */
+  --surface-overlay: #f5f3ff;
+  /* Getönte Formen auf dem weissen Grund: Karten, Felder, Kapseln, Chips. */
+  --surface-tinted: #ede9fe;
+  /* Gedrückter Zustand einer getönten Fläche (iOS: Violett 100 bei 70 %). */
+  --surface-tinted-pressed: #ded7fb;
+
   --text-primary: #1a1523; /* 17,9:1 – AAA */
   --text-secondary: #524a5e; /*  8,4:1 – AAA */
+  /* Marken-Überschriften: Titel im dunklen Violett statt neutralem Schwarz. */
+  --text-brand: #2e1065; /* 13,9:1 – AAA */
 
   --accent-primary: #5b21b6; /*  9,0:1 – AAA */
   --accent-pressed: #4c1d95; /* 10,9:1 – AAA */
+  /* Gedämpfte Akzentfläche inaktiver Primäraktionen (heller Button,
+     dunkle Schrift) – ausgegraut wird nichts. */
+  --accent-muted: #c4b5fd;
   --on-accent: #ffffff;
   --focus-ring: #6d28d9; /*  7,1:1 – AAA */
   --scrim-ar: #2e1065;
@@ -44,12 +59,10 @@
   --border-functional: #8e8699; /* >= 3:1, WCAG 1.4.11 */
   --border-decorative: #ddd8e4;
 
-  /* Fläche der zurückhaltenden Aktion (QuietButtonStyle, §4.1).
-   * iOS setzt hier fix Violett 100; im Web bekommt der Dark Mode eine eigene
-   * Stufe, weil AccentPrimary dort aufhellt und auf Violett 100 sonst unter
-   * das Kontrastminimum fiele. */
-  --quiet-fill: var(--violet-100);
-  --quiet-fill-pressed: #ded7fb;
+  /* Fläche der zurückhaltenden Aktion (QuietButtonStyle, §4.1): dieselbe
+     getönte Fläche wie Chips und Felder. */
+  --quiet-fill: var(--surface-tinted);
+  --quiet-fill-pressed: var(--surface-tinted-pressed);
 
   /* §2.3 Status-Semantik – vierfach codiert: Farbe + Form + Symbol + Text */
   --status-open-text: #14532d;
@@ -76,6 +89,7 @@
   --font-large-title: 700 2.125rem / 1.21 var(--font-family); /* 34/41 Bold   */
   --font-title-1: 700 1.75rem / 1.21 var(--font-family); /* 28/34 Bold   */
   --font-title-2: 600 1.375rem / 1.27 var(--font-family); /* 22/28 Semib. */
+  --font-title-3: 600 1.25rem / 1.25 var(--font-family); /* 20/25 Semib. */
   --font-headline: 600 1.0625rem / 1.29 var(--font-family); /* 17/22 Semib. */
   --font-body: 400 1.0625rem / 1.53 var(--font-family); /* 17/26 Regular */
   --font-callout: 400 1rem / 1.5 var(--font-family); /* 16/24 Regular */
@@ -94,11 +108,19 @@
   --touch-primary: 56px; /* Primäraktionen          */
   --touch-spacing: 8px; /* Mindestabstand          */
 
+  /* Einheitliche Höhe aller Eingabefelder (AppMetrics.Field.height). */
+  --field-height: 56px;
+  /* Platz, den die schwebende Navigationskapsel unten freihält
+     (AppMetrics.tabBarInset). */
+  --tab-bar-inset: 84px;
+
   --radius-chip: 6px;
   --radius-field: 12px;
   --radius-button: 14px;
   --radius-card: 16px;
   --radius-sheet: 18px;
+  /* Kapsel (Capsule) – Chips, Plaketten, Navigationsleiste. */
+  --radius-pill: 999px;
 
   --space-xs: 4px; /* 4-pt-Raster */
   --space-s: 8px;
@@ -110,32 +132,38 @@
   --focus-ring-width: 3px; /* WCAG 2.4.13 AAA */
   --focus-ring-offset: 3px;
 
-  /* Schatten bleiben dezent – die Flächentrennung trägt SurfaceRaised */
-  --shadow-card: 0 1px 2px rgb(46 16 101 / 6%), 0 4px 12px rgb(46 16 101 / 4%);
+  /* Schatten trägt in der App nur die schwebende Navigationsleiste –
+     Flächen trennt die violette Tönung, nicht ein Schlagschatten. */
+  --shadow-floating: 0 4px 12px rgb(46 16 101 / 25%);
 }
 
 /* ---------------------------------------------------------------
- * §08 Dark Mode – nie reines Schwarz (#141019 statt #000000).
+ * §08 Dark Mode – nie reines Schwarz. Die Werte sind dieselben wie in
+ * den Colorsets der App (#1E1830 als Grund, #241D3A für getönte Formen).
  * Zwei Wege in den Dark Mode: Systemeinstellung oder der Umschalter
  * in der Kopfzeile (data-theme am <html>-Element).
  * --------------------------------------------------------------- */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --background-primary: #141019;
+    --background-primary: #1e1830;
+    --background-muted: #1e1830;
     --surface-raised: #1e1830;
+    --surface-overlay: #1e1830;
+    --surface-tinted: #241d3a;
+    --surface-tinted-pressed: #322754;
+
     --text-primary: #f4f1fa;
     --text-secondary: #b3acc4;
+    --text-brand: #ddd6fe;
 
     --accent-primary: #c4b5fd;
     --accent-pressed: #ddd6fe;
+    --accent-muted: #4c1d95;
     --on-accent: #2e1065;
     --focus-ring: #c4b5fd;
 
     --border-functional: #8a80a3;
     --border-decorative: #3d3552;
-
-    --quiet-fill: #2e1065;
-    --quiet-fill-pressed: #3d1a7a;
 
     --status-open-text: #bbf7d0;
     --status-open-fill: #14532d;
@@ -144,26 +172,30 @@
     --status-blocked-text: #fee2e2;
     --status-blocked-fill: #7f1d1d;
 
-    --shadow-card: 0 1px 2px rgb(0 0 0 / 32%), 0 4px 12px rgb(0 0 0 / 24%);
+    --shadow-floating: 0 4px 12px rgb(0 0 0 / 45%);
   }
 }
 
 :root[data-theme="dark"] {
-  --background-primary: #141019;
+  --background-primary: #1e1830;
+  --background-muted: #1e1830;
   --surface-raised: #1e1830;
+  --surface-overlay: #1e1830;
+  --surface-tinted: #241d3a;
+  --surface-tinted-pressed: #322754;
+
   --text-primary: #f4f1fa;
   --text-secondary: #b3acc4;
+  --text-brand: #ddd6fe;
 
   --accent-primary: #c4b5fd;
   --accent-pressed: #ddd6fe;
+  --accent-muted: #4c1d95;
   --on-accent: #2e1065;
   --focus-ring: #c4b5fd;
 
   --border-functional: #8a80a3;
   --border-decorative: #3d3552;
-
-  --quiet-fill: #2e1065;
-  --quiet-fill-pressed: #3d1a7a;
 
   --status-open-text: #bbf7d0;
   --status-open-fill: #14532d;
@@ -172,5 +204,5 @@
   --status-blocked-text: #fee2e2;
   --status-blocked-fill: #7f1d1d;
 
-  --shadow-card: 0 1px 2px rgb(0 0 0 / 32%), 0 4px 12px rgb(0 0 0 / 24%);
+  --shadow-floating: 0 4px 12px rgb(0 0 0 / 45%);
 }
