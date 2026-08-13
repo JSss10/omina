@@ -45,38 +45,15 @@ struct CircleImageCluster: View {
                     .frame(width: size * diameter, height: size * diameter)
             }
 
-            ZStack {
-                ForEach(Array(items.enumerated()), id: \.offset) { _, item in
-                    circle(item)
-                        .frame(width: size * item.diameter, height: size * item.diameter)
-                        .offset(x: size * item.offset.width, y: size * item.offset.height)
-                }
+            ForEach(Array(items.enumerated()), id: \.offset) { _, item in
+                circle(item)
+                    .frame(width: size * item.diameter, height: size * item.diameter)
+                    .offset(x: size * item.offset.width, y: size * item.offset.height)
             }
-            // Bilder als Gruppe auf die Mitte der Ringe rücken (s. unten).
-            .offset(x: -size * itemsCenter.width, y: -size * itemsCenter.height)
         }
         .frame(width: size, height: size)
         // Rein dekorativ: Die Aussage des Screens steht im Titel darüber.
         .accessibilityHidden(true)
-    }
-
-    /// Mitte der Bildkreise als Gruppe, gemessen an ihrer gemeinsamen Hülle.
-    ///
-    /// Die Kreise sind bewusst unregelmässig verteilt, deshalb liegt ihre
-    /// Hülle nicht von selbst auf der Mitte der Ringe – die Gruppe kippt
-    /// sonst sichtbar nach links oben. Die Differenz wird hier einmal
-    /// gemessen und die Bildebene darum verschoben: Ringe und Bilder stehen
-    /// als ein Ganzes mittig auf der Fläche, auch wenn später einzelne
-    /// Kreise anders gesetzt werden.
-    private var itemsCenter: CGSize {
-        guard !items.isEmpty else { return .zero }
-
-        let minX = items.map { $0.offset.width - $0.diameter / 2 }.min() ?? 0
-        let maxX = items.map { $0.offset.width + $0.diameter / 2 }.max() ?? 0
-        let minY = items.map { $0.offset.height - $0.diameter / 2 }.min() ?? 0
-        let maxY = items.map { $0.offset.height + $0.diameter / 2 }.max() ?? 0
-
-        return CGSize(width: (minX + maxX) / 2, height: (minY + maxY) / 2)
     }
 
     @ViewBuilder
@@ -118,6 +95,18 @@ extension CircleImageCluster {
     /// klein, dass nichts davon zu erkennen war. Der äusserste Kreis reicht
     /// bis knapp an den äusseren Ring – mehr Platz gibt die Fläche nicht her.
     ///
+    /// Drei Bedingungen halten die Anordnung zusammen; wer einen Kreis
+    /// verschiebt, prüft sie am besten nach:
+    ///
+    /// * Der grosse Kreis steht auf `.zero` – also genau auf der Mitte der
+    ///   Ringe und damit der ganzen Fläche.
+    /// * Die kleineren halten mindestens 0,075 Abstand zu seinem Rand
+    ///   (rund 27 pt bei einer Kantenlänge von 354 pt), damit er frei steht
+    ///   und nicht von den Nachbarn bedrängt wird.
+    /// * Ihre gemeinsame Hülle misst ±0,443 waagrecht und ±0,430 senkrecht,
+    ///   liegt also symmetrisch um dieselbe Mitte. Nur so steht die Gruppe
+    ///   aus Ringen und Bildern als Ganzes mittig, statt zu kippen.
+    ///
     /// Die Kreise haben eigene `Welcome…`-Assets und teilen sich bewusst
     /// keine Dateien mit Splash, Intro oder Onboarding: Dort stehen dieselben
     /// Motive 130 bis 400 pt breit, hier messen sie 32 bis 96 pt. Ein Bild,
@@ -138,26 +127,26 @@ extension CircleImageCluster {
                     imageName: "WelcomeImage2",
                     symbol: "figure.walk",
                     diameter: 0.17,
-                    offset: CGSize(width: -0.10, height: -0.30),
+                    offset: CGSize(width: -0.085, height: -0.303),
                     isAccented: true
                 ),
                 Item(
                     imageName: "WelcomeImage3",
                     symbol: "building.2.fill",
                     diameter: 0.20,
-                    offset: CGSize(width: 0.32, height: -0.34)
+                    offset: CGSize(width: 0.343, height: -0.33)
                 ),
                 Item(
                     imageName: "WelcomeImage4",
                     symbol: "exclamationmark.triangle.fill",
                     diameter: 0.13,
-                    offset: CGSize(width: 0.15, height: -0.22)
+                    offset: CGSize(width: 0.166, height: -0.244)
                 ),
                 Item(
                     imageName: "WelcomeImage5",
                     symbol: "eye.trianglebadge.exclamationmark",
                     diameter: 0.13,
-                    offset: CGSize(width: -0.40, height: -0.02)
+                    offset: CGSize(width: -0.378, height: -0.02)
                 ),
                 Item(
                     imageName: "WelcomeImage6",
@@ -169,7 +158,7 @@ extension CircleImageCluster {
                     imageName: "WelcomeImage7",
                     symbol: "person.fill",
                     diameter: 0.26,
-                    offset: CGSize(width: -0.21, height: 0.27)
+                    offset: CGSize(width: -0.19, height: 0.30)
                 ),
                 Item(
                     imageName: "WelcomeImage8",
@@ -187,7 +176,7 @@ extension CircleImageCluster {
                 Item(
                     imageName: "WelcomeImage10",
                     symbol: "figure.roll",
-                    diameter: 0.38,
+                    diameter: 0.30,
                     offset: .zero,
                     isAccented: true
                 )
