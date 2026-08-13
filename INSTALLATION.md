@@ -5,15 +5,34 @@ anzuschauen – vom schnellsten zum vollständigsten. Für die reine Bewertung
 genügen die ersten beiden; der dritte zeigt, dass das Projekt aus dem
 Quellcode heraus baut.
 
-Die Zugangsdaten (Keys, Logins) stehen **nicht in diesem Repository**, sondern
-in der Datei `ZUGANGSDATEN.md` im Abgabeordner. Dieses Dokument sagt nur,
-welcher Wert wohin gehört.
+Die Zugangsdaten (Logins, Schlüssel) stehen **nicht in diesem Repository**,
+sondern in der Datei `ZUGANGSDATEN.md` im Abgabeordner. Dieses Dokument sagt
+nur, welcher Wert wohin gehört.
 
 | Weg                         | Aufwand | Braucht           | Zeigt                     |
 | --------------------------- | ------- | ----------------- | ------------------------- |
 | 1 · TestFlight              | 2 Min   | iPhone (iOS 17+)  | die fertige App, inkl. AR |
 | 2 · Dashboard im Browser    | 1 Min   | Browser + Login   | die Feldtest-Auswertung   |
 | 3 · Aus dem Quellcode bauen | 20 Min  | Mac mit Xcode 16+ | Build, Tests, Architektur |
+
+Der Abgabeordner ist so aufgebaut:
+
+```
+Medienprodukt/
+├── 00_START.md           Einstieg
+├── ZUGANGSDATEN.md       Adressen, Logins, Schlüssel
+├── INSTALLATION.md       dieses Dokument
+├── omina/                der vollständige Quellcode,
+│                         Konfiguration bereits eingesetzt
+├── Secrets.swift         → omina/Omina/Omina/Config/Secrets.swift
+├── dashboard.env         → omina/dashboard/.env
+├── Screencasts/          Aufzeichnungen der App und dem Dashboard im Gebrauch
+└── Quellen/              Belege und Rohmaterial
+```
+
+Die beiden Konfigurationsdateien liegen einzeln bei, weil sie im öffentlichen
+GitHub-Repository fehlen – dort sind sie per `.gitignore` ausgeschlossen. Im
+beigelegten Quellcode stecken sie bereits an ihrem Platz.
 
 ---
 
@@ -25,8 +44,8 @@ und Bewegungssensoren, der Simulator kann das nicht.
 1. Auf dem iPhone **TestFlight** aus dem App Store installieren.
 2. Den TestFlight-Link aus `ZUGANGSDATEN.md` auf dem iPhone öffnen.
 3. **Accept** → **Install** → Omina startet wie eine normale App.
-4. Anmelden mit dem Testkonto aus `ZUGANGSDATEN.md` (oder selbst
-   registrieren – der Bestätigungscode kommt per E-Mail).
+4. Anmelden mit dem Konto aus `ZUGANGSDATEN.md` (oder selbst registrieren –
+   der Bestätigungscode kommt per E-Mail).
 
 **Voraussetzungen:** iPhone 12 oder neuer (ARKit), iOS 17 oder neuer.
 Die App fragt nach Standort und Kamera; beides ist für Karte, Navigation und
@@ -46,7 +65,8 @@ Die Weboberfläche zu den drei Feldtesttagen: Kennzahlen, Nutzungsverteilung,
 Testpersonen-Profile und das vollständige Interaktionsprotokoll.
 
 1. Die Dashboard-URL aus `ZUGANGSDATEN.md` im Browser öffnen.
-2. Mit dem dort angegebenen Konto anmelden (E-Mail + Passwort).
+2. Mit dem dort angegebenen Konto anmelden (E-Mail + Passwort) – dasselbe
+   Konto wie in der App.
 
 Es gibt bewusst keine Registrierung: Wer Daten sehen darf, entscheidet die
 Tabelle `dashboard_researchers` in der Datenbank – das regelt Row Level
@@ -69,27 +89,29 @@ Hintergrund und Aufbau: [dashboard/README.md](dashboard/README.md).
 
 ### 3.2 iOS-App
 
+Der Quellcode liegt im Abgabeordner unter `omina/`. Die Konfiguration ist dort
+**bereits eingesetzt** – das Projekt lässt sich ohne Zwischenschritt öffnen:
+
+```bash
+cd omina
+open Omina/Omina.xcodeproj
+```
+
+Wer stattdessen frisch von GitHub klont, legt die Konfiguration selbst an –
+sie ist per `.gitignore` vom Repository ausgeschlossen:
+
 ```bash
 git clone https://github.com/JSss10/omina.git
 cd omina
-cp Omina/Omina/Config/Secrets.example.swift Omina/Omina/Config/Secrets.swift
-```
-
-Jetzt `Secrets.swift` öffnen und die vier Werte aus `ZUGANGSDATEN.md`
-eintragen. Im Abgabeordner liegt unter `konfiguration/Secrets.swift` eine
-bereits ausgefüllte Fassung – die lässt sich direkt an diese Stelle kopieren:
-
-```bash
-cp <Abgabeordner>/konfiguration/Secrets.swift Omina/Omina/Config/Secrets.swift
-```
-
-Wichtig: Die Vorlage `Secrets.example.swift` steht in einem `#if false`-Block,
-damit sie nicht mitkompiliert. Beim Ausfüllen der echten Datei muss dieser
-Block weg – die ausgefüllte Fassung im Abgabeordner hat ihn bereits nicht.
-
-```bash
+cp <Abgabeordner>/Secrets.swift Omina/Omina/Config/Secrets.swift
 open Omina/Omina.xcodeproj
 ```
+
+Ohne den Abgabeordner geht es auch von Hand: `Secrets.example.swift` nach
+`Secrets.swift` kopieren und die vier Werte aus `ZUGANGSDATEN.md` eintragen.
+Dabei muss der `#if false`-Block weg, in dem die Vorlage steht – er verhindert,
+dass die unausgefüllte Vorlage mitkompiliert. Die beigelegte Fassung hat ihn
+bereits nicht.
 
 Xcode löst die Abhängigkeit `supabase-swift` beim ersten Öffnen selbst über
 den Swift Package Manager auf (einmalig, braucht Internet). Danach:
@@ -99,9 +121,6 @@ Gerät, **▶︎**.
 Für den Build auf echter Hardware braucht es in Xcode unter
 **Signing & Capabilities** ein eigenes Entwicklerteam – die Bundle-ID muss
 dabei angepasst werden. Wer das umgehen will, nimmt Weg 1 (TestFlight).
-
-`Secrets.swift` ist per `.gitignore` ausgeschlossen und steht deshalb nicht
-im Repository. Das ist Absicht, kein fehlender Teil der Abgabe.
 
 ### 3.3 Tests
 
@@ -115,18 +134,19 @@ Anbindung.
 
 ### 3.4 Dashboard lokal
 
+Im Abgabeordner ist alles gesetzt – `omina/dashboard/.env` liegt bereit:
+
 ```bash
-cd dashboard
+cd omina/dashboard
 npm install
-cp .env.example .env      # Werte aus ZUGANGSDATEN.md eintragen
 npm run dev               # http://localhost:5173
 ```
 
-Auch hier liegt im Abgabeordner unter `konfiguration/dashboard.env` eine
-ausgefüllte Fassung; sie wird als `dashboard/.env` abgelegt:
+Im frisch geklonten Repository fehlt die Datei und wird ergänzt. Sie heisst im
+Abgabeordner `dashboard.env` und wird beim Kopieren zu `.env` – mit Punkt:
 
 ```bash
-cp <Abgabeordner>/konfiguration/dashboard.env dashboard/.env
+cp <Abgabeordner>/dashboard.env dashboard/.env
 ```
 
 Weitere Befehle (`npm test`, `npm run build`, `npm run typecheck`):
