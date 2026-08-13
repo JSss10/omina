@@ -70,6 +70,11 @@ garantiert dasselbe an.
 
 ## Getting Started
 
+> Für die Bewertung der Arbeit: [INSTALLATION.md](INSTALLATION.md) beschreibt
+> die drei Wege – App über TestFlight, Dashboard im Browser, Build aus dem
+> Quellcode – und sagt, welcher Konfigurationswert wohin gehört. Die Werte
+> selbst liegen dem Abgabeordner bei, nicht diesem Repository.
+
 ### Voraussetzungen
 
 - Xcode 16+ (iOS 17 SDK)
@@ -225,6 +230,7 @@ omina/
 ├── data/exports/                   # Je Import-Script der massgebliche Lauf
 │                                   # (Beleg für die Arbeit); das Ergebnis von
 │                                   # import_osm.py ist der Seed selbst
+├── INSTALLATION.md                 # Installation und Bewertung (drei Wege)
 ├── COMMITS.md                      # Commit- und Branch-Konvention
 ├── THIRD-PARTY-NOTICES.md          # Fremdkomponenten und Datenlizenzen
 └── LICENSE                         # proprietär, alle Rechte vorbehalten
