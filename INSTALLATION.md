@@ -26,7 +26,7 @@ Medienprodukt/
 │                         Konfiguration bereits eingesetzt
 ├── Secrets.swift         → omina/Omina/Omina/Config/Secrets.swift
 ├── dashboard.env         → omina/dashboard/.env
-├── Screencasts/          Aufzeichnungen der App und dem Dashboard im Gebrauch
+├── Screencasts/          Aufzeichnungen der App und des Dashboards im Gebrauch
 └── Quellen/              Belege und Rohmaterial
 ```
 
