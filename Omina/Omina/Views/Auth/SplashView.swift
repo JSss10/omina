@@ -98,7 +98,7 @@ struct SplashView: View {
     /// Wortmarke in Kleinbuchstaben (Marke), darunter der Claim.
     private var wordmark: some View {
         VStack(alignment: .leading, spacing: AppMetrics.Space.xs) {
-            Text("omina")
+            Text("Omina")
                 .font(.system(size: wordmarkSize, weight: .bold))
                 .foregroundStyle(AppColor.textBrand)
 
