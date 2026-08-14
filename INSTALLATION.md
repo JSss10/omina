@@ -128,6 +128,9 @@ dabei angepasst werden. Wer das umgehen will, nimmt Weg 1 (TestFlight).
 xcodebuild test -scheme Omina -destination 'platform=iOS Simulator,name=iPhone 16'
 ```
 
+Statt `iPhone 16` geht jeder installierte Simulator – welche verfügbar sind,
+zeigt `xcrun simctl list devicetypes`. In Xcode selbst genügt **⌘U**.
+
 Welche Suite was prüft, steht im [README](README.md#tests). Die Tests laufen
 ohne Netz und ohne gültige Keys – sie prüfen die Bewertungslogik, nicht die
 Anbindung.
